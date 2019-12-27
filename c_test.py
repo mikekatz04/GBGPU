@@ -12,7 +12,7 @@ import GBGPU
 
 def test():
     df = 1e-5
-    length = int(2 ** 20)
+    length = int(2 ** 11)
     data_length = int(2 * length)
 
     data = np.fft.rfft(np.sin(2 * np.pi * 1e-3 * np.arange(data_length) * 0.1))
@@ -64,12 +64,15 @@ def test():
     # AE_ASDinv = np.ones_like(data_freqs)
     # T_ASDinv = np.ones_like(data_freqs)
 
-    nwalkers = 5
+    nwalkers = 10000
     ndevices = 1
 
     Tobs = 4.0 * ct.Julian_year
+
+    df = 1.0 / Tobs
+    data_freqs = np.arange(0.0, 1e-2 + df, df)
     dt = 10.0
-    NP = 7
+    NP = 8
 
     # data_A, data_E, data_T = np.load('data_set.npy')
     data_A, data_E, data_T = data, data, data
@@ -86,6 +89,7 @@ def test():
         Tobs,
         dt,
         NP,
+        len(data_freqs),
     )
 
     f0 = 1e-3
@@ -97,7 +101,7 @@ def test():
     psi = np.pi / 3.0
     phi0 = np.pi
 
-    params = np.array([f0, fdot, beta, lam, amp, iota, psi, phi0])
+    params = np.tile(np.array([f0, fdot, beta, lam, amp, iota, psi, phi0]), nwalkers)
     gbGPU.FastGB(params)
 
     fastGB = FB.FastGB("Test", dt=dt, Tobs=Tobs, orbit="analytic")
@@ -107,7 +111,7 @@ def test():
     for i in range(num):
         fastGB.onefourier(
             simulator="synthlisa",
-            params=params,
+            params=params[:8],
             buffer=None,
             T=Tobs,
             dt=dt,

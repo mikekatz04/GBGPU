@@ -161,27 +161,27 @@ void spacecraft(double t, double *x, double *y, double *z, int n, int N)
 
 	sb = sin(beta1);
 	cb = cos(beta1);
-	x[0*N + n] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
-	y[0*N + n] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
-	z[0*N + n] = -SQ3*AU*ec*(ca*cb + sa*sb);
+	x[0] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
+	y[0] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
+	z[0] = -SQ3*AU*ec*(ca*cb + sa*sb);
 
 	sb = sin(beta2);
 	cb = cos(beta2);
-	x[1*N + n] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
-	y[1*N + n] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
-	z[1*N + n] = -SQ3*AU*ec*(ca*cb + sa*sb);
+	x[1] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
+	y[1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
+	z[1] = -SQ3*AU*ec*(ca*cb + sa*sb);
 
 	sb = sin(beta3);
 	cb = cos(beta3);
-	x[2*N + n] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
-	y[2*N + n] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
-	z[2*N + n] = -SQ3*AU*ec*(ca*cb + sa*sb);
+	x[2] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
+	y[2] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
+	z[2] = -SQ3*AU*ec*(ca*cb + sa*sb);
 
 	return;
 }
 
 __device__
-void calc_xi_f(Waveform *wfm, double t, int n, int N)
+void calc_xi_f(Waveform *wfm, double t, int n, int N, double *x, double *y, double *z)
 {
 	long i;
 
@@ -191,11 +191,11 @@ void calc_xi_f(Waveform *wfm, double t, int n, int N)
 	if (wfm->NP > 7) dfdt_0   = wfm->params[7]/wfm->T/wfm->T;
 	if (wfm->NP > 8) d2fdt2_0 = wfm->params[8]/wfm->T/wfm->T/wfm->T;
 
-	spacecraft(t, wfm->x, wfm->y, wfm->z, n, N); // Calculate position of each spacecraft at time t
+	spacecraft(t, x, y, z, n, N); // Calculate position of each spacecraft at time t
 
 	for(i=0; i<3; i++)
 	{
-		wfm->kdotx[i*N + n] = (wfm->x[i*N + n]*wfm->k[0*N + n] + wfm->y[i*N + n]*wfm->k[1*N + n] + wfm->z[i*N + n]*wfm->k[2*N + n])/C;
+		wfm->kdotx[i*N + n] = (x[i]*wfm->k[0*N + n] + y[i]*wfm->k[1*N + n] + z[i]*wfm->k[2*N + n])/C;
 		//Wave arrival time at spacecraft i
 		wfm->xi[i*N + n]    = t - wfm->kdotx[i*N + n];
 		//FIXME
@@ -213,20 +213,20 @@ void calc_xi_f(Waveform *wfm, double t, int n, int N)
 }
 
 __device__
-void calc_sep_vecs(Waveform *wfm, int n, int N)
+void calc_sep_vecs(Waveform *wfm, int n, int N, double *x, double *y, double *z)
 {
 	long i;
 
 	//Unit separation vector from spacecrafts i to j
-	wfm->r12[0*N + n] = (wfm->x[1*N + n] - wfm->x[0*N + n])/Larm;
-	wfm->r13[0*N + n] = (wfm->x[2*N + n] - wfm->x[0*N + n])/Larm;
-	wfm->r23[0*N + n] = (wfm->x[2*N + n] - wfm->x[1*N + n])/Larm;
-	wfm->r12[1*N + n] = (wfm->y[1*N + n] - wfm->y[0*N + n])/Larm;
-	wfm->r13[1*N + n] = (wfm->y[2*N + n] - wfm->y[0*N + n])/Larm;
-	wfm->r23[1*N + n] = (wfm->y[2*N + n] - wfm->y[1*N + n])/Larm;
-	wfm->r12[2*N + n] = (wfm->z[1*N + n] - wfm->z[0*N + n])/Larm;
-	wfm->r13[2*N + n] = (wfm->z[2*N + n] - wfm->z[0*N + n])/Larm;
-	wfm->r23[2*N + n] = (wfm->z[2*N + n] - wfm->z[1*N + n])/Larm;
+	wfm->r12[0*N + n] = (x[1] - x[0])/Larm;
+	wfm->r13[0*N + n] = (x[2] - x[0])/Larm;
+	wfm->r23[0*N + n] = (x[2] - x[1])/Larm;
+	wfm->r12[1*N + n] = (y[1] - y[0])/Larm;
+	wfm->r13[1*N + n] = (y[2] - y[0])/Larm;
+	wfm->r23[1*N + n] = (y[2] - y[1])/Larm;
+	wfm->r12[2*N + n] = (z[1] - z[0])/Larm;
+	wfm->r13[2*N + n] = (z[2] - z[0])/Larm;
+	wfm->r23[2*N + n] = (z[2] - z[1])/Larm;
 
 	//Make use of symmetry
 	for(i=0; i<3; i++)
@@ -239,66 +239,70 @@ void calc_sep_vecs(Waveform *wfm, int n, int N)
 }
 
 __device__
-void calc_d_matrices(Waveform *wfm, int n, int N)
+void calc_d_matrices(Waveform *wfm, int n, int N, double *dcross, double *dplus)
 {
 	long i, j;
 
 	//Zero arrays to be summed
-	wfm->dplus [(0*3 + 1)*N + n] = 0.0;
-	wfm->dplus [(0*3 + 2)*N + n] = 0.0;
-	wfm->dplus [(1*3 + 0)*N + n] = 0.;
-	wfm->dplus [(1*3 + 2)*N + n] = 0.0;
-	wfm->dplus [(2*3 + 0)*N + n] = 0.0;
-	wfm->dplus [(2*3 + 1)*N + n] = 0.;
-	wfm->dcross[(0*3 + 1)*N + n] = 0.0;
-	wfm->dcross[(0*3 + 2)*N + n] = 0.0;
-	wfm->dcross[(1*3 + 0)*N + n] = 0.;
-	wfm->dcross[(1*3 + 2)*N + n] = 0.0;
-	wfm->dcross[(2*3 + 0)*N + n] = 0.0;
-	wfm->dcross[(2*3 + 1)*N + n] = 0.;
+	dplus [(0*3 + 1)] = 0.0;
+	dplus [(0*3 + 2)] = 0.0;
+	dplus [(1*3 + 0)] = 0.;
+	dplus [(1*3 + 2)] = 0.0;
+	dplus [(2*3 + 0)] = 0.0;
+	dplus [(2*3 + 1)] = 0.;
+	dcross[(0*3 + 1)] = 0.0;
+	dcross[(0*3 + 2)] = 0.0;
+	dcross[(1*3 + 0)] = 0.;
+	dcross[(1*3 + 2)] = 0.0;
+	dcross[(2*3 + 0)] = 0.0;
+	dcross[(2*3 + 1)] = 0.;
 
 	//Convenient quantities d+ & dx
 	for(i=0; i<3; i++)
 	{
 		for(j=0; j<3; j++)
 		{
-			wfm->dplus [(0*3 + 1)*N + n] += wfm->r12[i*N + n]*wfm->r12[j*N + n]*wfm->eplus[i*3 + j];
-			wfm->dcross[(0*3 + 1)*N + n] += wfm->r12[i*N + n]*wfm->r12[j*N + n]*wfm->ecross[i*3 + j];
-			wfm->dplus [(1*3 + 2)*N + n] += wfm->r23[i*N + n]*wfm->r23[j*N + n]*wfm->eplus[i*3 + j];
-			wfm->dcross[(1*3 + 2)*N + n] += wfm->r23[i*N + n]*wfm->r23[j*N + n]*wfm->ecross[i*3 + j];
-			wfm->dplus [(0*3 + 2)*N + n] += wfm->r13[i*N + n]*wfm->r13[j*N + n]*wfm->eplus[i*3 + j];
-			wfm->dcross[(0*3 + 2)*N + n] += wfm->r13[i*N + n]*wfm->r13[j*N + n]*wfm->ecross[i*3 + j];
+			dplus [(0*3 + 1)] += wfm->r12[i*N + n]*wfm->r12[j*N + n]*wfm->eplus[i*3 + j];
+			dcross[(0*3 + 1)] += wfm->r12[i*N + n]*wfm->r12[j*N + n]*wfm->ecross[i*3 + j];
+			dplus [(1*3 + 2)] += wfm->r23[i*N + n]*wfm->r23[j*N + n]*wfm->eplus[i*3 + j];
+			dcross[(1*3 + 2)] += wfm->r23[i*N + n]*wfm->r23[j*N + n]*wfm->ecross[i*3 + j];
+			dplus [(0*3 + 2)] += wfm->r13[i*N + n]*wfm->r13[j*N + n]*wfm->eplus[i*3 + j];
+			dcross[(0*3 + 2)] += wfm->r13[i*N + n]*wfm->r13[j*N + n]*wfm->ecross[i*3 + j];
 		}
 	}
 	//Makng use of symmetry
-	wfm->dplus[(1*3 + 0)*N + n] = wfm->dplus[(0*3 + 1)*N + n];  wfm->dcross[(1*3 + 0)*N + n] = wfm->dcross[(0*3 + 1)*N + n];
-	wfm->dplus[(2*3 + 1)*N + n] = wfm->dplus[(1*3 + 2)*N + n];  wfm->dcross[(2*3 + 1)*N + n] = wfm->dcross[(1*3 + 2)*N + n];
-	wfm->dplus[(2*3 + 0)*N + n] = wfm->dplus[(0*3 + 2)*N + n];  wfm->dcross[(2*3 + 0)*N + n] = wfm->dcross[(0*3 + 2)*N + n];
+	dplus[(1*3 + 0)] = dplus[(0*3 + 1)];  dcross[(1*3 + 0)] = dcross[(0*3 + 1)];
+	dplus[(2*3 + 1)] = dplus[(1*3 + 2)];  dcross[(2*3 + 1)] = dcross[(1*3 + 2)];
+	dplus[(2*3 + 0)] = dplus[(0*3 + 2)];  dcross[(2*3 + 0)] = dcross[(0*3 + 2)];
 
 	return;
 }
 
 
 __device__
-void calc_kdotr(Waveform *wfm, int n, int N)
+void calc_kdotr(Waveform *wfm, int n, int N, double *kdotr)
 {
 	long i;
 
 	//Zero arrays to be summed
-	wfm->kdotr[(0*3 + 1)*N + n] = wfm->kdotr[(0*3 + 2)*N + n] = wfm->kdotr[(1*3 + 0)*N + n] = 0.;
-	wfm->kdotr[(1*3 + 2)*N + n] = wfm->kdotr[(2*3 + 0)*N + n] = wfm->kdotr[(2*3 + 1)*N + n] = 0.;
+	kdotr[(0*3 + 1)] = 0.0;
+	kdotr[(0*3 + 2)] = 0.0;
+	kdotr[(1*3 + 0)] = 0.;
+	kdotr[(1*3 + 2)] = 0.0;
+	kdotr[(2*3 + 0)] = 0.0;
+	kdotr[(2*3 + 1)] = 0.;
 
 	for(i=0; i<3; i++)
 	{
-		wfm->kdotr[(0*3 + 1)*N + n] += wfm->k[i*N + n]*wfm->r12[i*N + n];
-		wfm->kdotr[(0*3 + 2)*N + n] += wfm->k[i*N + n]*wfm->r13[i*N + n];
-		wfm->kdotr[(1*3 + 2)*N + n] += wfm->k[i*N + n]*wfm->r23[i*N + n];
+		kdotr[(0*3 + 1)] += wfm->k[i*N + n]*wfm->r12[i*N + n];
+		kdotr[(0*3 + 2)] += wfm->k[i*N + n]*wfm->r13[i*N + n];
+		kdotr[(1*3 + 2)] += wfm->k[i*N + n]*wfm->r23[i*N + n];
 	}
 
 	//Making use of antisymmetry
-	wfm->kdotr[(1*3 + 0)*N + n] = -wfm->kdotr[(0*3 + 1)*N + n];
-	wfm->kdotr[(2*3 + 0)*N + n] = -wfm->kdotr[(0*3 + 2)*N + n];
-	wfm->kdotr[(2*3 + 1)*N + n] = -wfm->kdotr[(1*3 + 2)*N + n];
+	kdotr[(1*3 + 0)] = -kdotr[(0*3 + 1)];
+	kdotr[(2*3 + 0)] = -kdotr[(0*3 + 2)];
+	kdotr[(2*3 + 1)] = -kdotr[(1*3 + 2)];
 
 	return;
 }
@@ -306,7 +310,7 @@ void calc_kdotr(Waveform *wfm, int n, int N)
 
 __device__
 
-void get_transfer(Waveform *wfm, double t, int n, int N)
+void get_transfer(Waveform *wfm, double t, int n, int N, double *kdotr, double *TR, double *TI, double *dplus, double *dcross)
 {
 	long i, j;
 	long q;
@@ -335,8 +339,8 @@ void get_transfer(Waveform *wfm, double t, int n, int N)
 			{
 				//Argument of transfer function
 				// FIXME
-				//arg1 = 0.5*wfm->fonfs[i]*(1. - wfm->kdotr[i][j]);
-				arg1 = 0.5*wfm->fonfs[i*N + n]*(1. + wfm->kdotr[(i*3 + j)*N + n]);
+				//arg1 = 0.5*wfm->fonfs[i]*(1. - kdotr[i][j]);
+				arg1 = 0.5*wfm->fonfs[i*N + n]*(1. + kdotr[(i*3 + j)]);
 
 				//Argument of complex exponentials
 				arg2 = PI2*f0*wfm->xi[i*N + n] + phi0 - df*t;
@@ -352,16 +356,16 @@ void get_transfer(Waveform *wfm, double t, int n, int N)
 				if (wfm->NP > 7) aevol += 0.66666666666666666666*dfdt_0/f0*wfm->xi[i*N + n];
 
 				///Real and imaginary pieces of time series (no complex exponential)
-				tran1r = aevol*(wfm->dplus[(i*3 + j)*N + n]*wfm->DPr + wfm->dcross[(i*3 + j)*N + n]*wfm->DCr);
-				tran1i = aevol*(wfm->dplus[(i*3 + j)*N + n]*wfm->DPi + wfm->dcross[(i*3 + j)*N + n]*wfm->DCi);
+				tran1r = aevol*(dplus[(i*3 + j)]*wfm->DPr + dcross[(i*3 + j)]*wfm->DCr);
+				tran1i = aevol*(dplus[(i*3 + j)]*wfm->DPi + dcross[(i*3 + j)]*wfm->DCi);
 
 				//Real and imaginry components of complex exponential
 				tran2r = cos(arg1 + arg2);
 				tran2i = sin(arg1 + arg2);
 
 				//Real & Imaginary part of the slowly evolving signal
-				wfm->TR[(i*3 + j)*N + n] = sinc*(tran1r*tran2r - tran1i*tran2i);
-				wfm->TI[(i*3 + j)*N + n] = sinc*(tran1r*tran2i + tran1i*tran2r);
+				TR[(i*3 + j)] = sinc*(tran1r*tran2r - tran1i*tran2i);
+				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
 			}
 		}
 	}
@@ -372,20 +376,20 @@ void get_transfer(Waveform *wfm, double t, int n, int N)
 
 __device__
 
-void fill_time_series(Waveform *wfm, int n, int N)
+void fill_time_series(Waveform *wfm, int n, int N, double *TR, double *TI)
 {
-	wfm->data12[2*n]   = wfm->TR[(0*3 + 1)*N + n];
-	wfm->data21[2*n]   = wfm->TR[(1*3 + 0)*N + n];
-	wfm->data31[2*n]   = wfm->TR[(2*3 + 0)*N + n];
-	wfm->data12[2*n+1] = wfm->TI[(0*3 + 1)*N + n];
-	wfm->data21[2*n+1] = wfm->TI[(1*3 + 0)*N + n];
-	wfm->data31[2*n+1] = wfm->TI[(2*3 + 0)*N + n];
-	wfm->data13[2*n]   = wfm->TR[(0*3 + 2)*N + n];
-	wfm->data23[2*n]   = wfm->TR[(1*3 + 2)*N + n];
-	wfm->data32[2*n]   = wfm->TR[(2*3 + 1)*N + n];
-	wfm->data13[2*n+1] = wfm->TI[(0*3 + 2)*N + n];
-	wfm->data23[2*n+1] = wfm->TI[(1*3 + 2)*N + n];
-	wfm->data32[2*n+1] = wfm->TI[(2*3 + 1)*N + n];
+	wfm->data12[2*n]   = TR[(0*3 + 1)];
+	wfm->data21[2*n]   = TR[(1*3 + 0)];
+	wfm->data31[2*n]   = TR[(2*3 + 0)];
+	wfm->data12[2*n+1] = TI[(0*3 + 1)];
+	wfm->data21[2*n+1] = TI[(1*3 + 0)];
+	wfm->data31[2*n+1] = TI[(2*3 + 0)];
+	wfm->data13[2*n]   = TR[(0*3 + 2)];
+	wfm->data23[2*n]   = TR[(1*3 + 2)];
+	wfm->data32[2*n]   = TR[(2*3 + 1)];
+	wfm->data13[2*n+1] = TI[(0*3 + 2)];
+	wfm->data23[2*n+1] = TI[(1*3 + 2)];
+	wfm->data32[2*n+1] = TI[(2*3 + 1)];
 
 	return;
 }
@@ -395,6 +399,14 @@ __global__
 void GenWave(Waveform *wfm_trans, int N, int nwalkers){
 	double t=0.0;
 	Waveform *wfm;
+	int tid = (int)threadIdx.x;
+
+	__shared__ double kdotr[9*256];
+	double TR[9];
+	double TI[9];
+	double dplus[9];
+	double dcross[9];
+	double x[3], y[3], z[3];
 	for (int walker_i = blockIdx.y * blockDim.y + threadIdx.y;
 			 walker_i < nwalkers;
 			 walker_i += blockDim.y * gridDim.y){
@@ -406,14 +418,15 @@ void GenWave(Waveform *wfm_trans, int N, int nwalkers){
 			 n += blockDim.x * gridDim.x){
 
 				 t = wfm->T*(double)(n)/(double)N;
-				 calc_xi_f(wfm ,t, n, N);		  // calc frequency and time variables
-				 calc_sep_vecs(wfm, n, N);       // calculate the S/C separation vectors
-				 calc_d_matrices(wfm, n, N);     // calculate pieces of waveform
-				 calc_kdotr(wfm, n, N);		  // calculate dot product
-				 get_transfer(wfm, t, n, N);     // Calculating Transfer function
-				 fill_time_series(wfm, n, N); // Fill  time series data arrays with slowly evolving signal.
+				 calc_xi_f(wfm ,t, n, N, x, y, z);		  // calc frequency and time variables
+				 calc_sep_vecs(wfm, n, N, x, y, z);       // calculate the S/C separation vectors
+				 calc_d_matrices(wfm, n, N, dplus, dcross);     // calculate pieces of waveform
+				 calc_kdotr(wfm, n, N, &kdotr[tid*9]);		  // calculate dot product
+				 get_transfer(wfm, t, n, N, &kdotr[tid*9], TR, TI, dplus, dcross);     // Calculating Transfer function
+				 fill_time_series(wfm, n, N, TR, TI); // Fill  time series data arrays with slowly evolving signal.
 		}
 }
+
 }
 
 void fft_data(Waveform *wfm_trans, cufftHandle plan, int nwalkers)
@@ -480,22 +493,23 @@ void unpack_data_1(Waveform *wfm_trans, int nwalkers)
 			 i < N;
 			 i += blockDim.x * gridDim.x){
 		// populate from most negative (Nyquist) to most positive (Nyquist-1)
-		wfm->a12[i]   = wfm->data12[N+i]/(double)N;
-		wfm->a21[i]   = wfm->data21[N+i]/(double)N;
-		wfm->a31[i]   = wfm->data31[N+i]/(double)N;
-		wfm->a12[i+N] = wfm->data12[i]/(double)N;
-		wfm->a21[i+N] = wfm->data21[i]/(double)N;
-		wfm->a31[i+N] = wfm->data31[i]/(double)N;
-		wfm->a13[i]   = wfm->data13[N+i]/(double)N;
-		wfm->a23[i]   = wfm->data23[N+i]/(double)N;
-		wfm->a32[i]   = wfm->data32[N+i]/(double)N;
-		wfm->a13[i+N] = wfm->data13[i]/(double)N;
-		wfm->a23[i+N] = wfm->data23[i]/(double)N;
-		wfm->a32[i+N] = wfm->data32[i]/(double)N;
+		wfm->a12[i]   = 0.5*wfm->data12[N+i]/(double)N;  // moved the 0.5
+		wfm->a21[i]   = 0.5*wfm->data21[N+i]/(double)N;
+		wfm->a31[i]   = 0.5*wfm->data31[N+i]/(double)N;
+		wfm->a12[i+N] = 0.5*wfm->data12[i]/(double)N;
+		wfm->a21[i+N] = 0.5*wfm->data21[i]/(double)N;
+		wfm->a31[i+N] = 0.5*wfm->data31[i]/(double)N;
+		wfm->a13[i]   = 0.5*wfm->data13[N+i]/(double)N;
+		wfm->a23[i]   = 0.5*wfm->data23[N+i]/(double)N;
+		wfm->a32[i]   = 0.5*wfm->data32[N+i]/(double)N;
+		wfm->a13[i+N] = 0.5*wfm->data13[i]/(double)N;
+		wfm->a23[i+N] = 0.5*wfm->data23[i]/(double)N;
+		wfm->a32[i+N] = 0.5*wfm->data32[i]/(double)N;
 	}
 }
 }
 
+/*
 __global__
 void unpack_data_2(Waveform *wfm_trans, int nwalkers)
 {
@@ -512,24 +526,27 @@ void unpack_data_2(Waveform *wfm_trans, int nwalkers)
 			 i < 2*N;
 			 i += blockDim.x * gridDim.x)
 	{
-		wfm->d[0 *3*2*N + 1 *2*N + i] = 0.5*wfm->a12[i];
+		wfm->d[0*3*2*N + 1*2*N + i] = 0.5*wfm->a12[i];
 		wfm->d[1 *3*2*N + 0 *2*N + i] = 0.5*wfm->a21[i];
 		wfm->d[2 *3*2*N + 0 *2*N + i] = 0.5*wfm->a31[i];
-		wfm->d[0 *3*2*N + 2 *2*N + i] = 0.5*wfm->a13[i];
+		wfm->d[0*3*2*N + 2*2*N + i] = 0.5*wfm->a13[i];
 		wfm->d[1 *3*2*N + 2 *2*N + i] = 0.5*wfm->a23[i];
 		wfm->d[2 *3*2*N + 1 *2*N + i] = 0.5*wfm->a32[i];
 	}
 }
 }
+*/
 
 __device__
-void XYZ(int i, double *d, double f0, long q, long M, double dt, double Tobs, double *XLS, double *YLS, double *ZLS,
-					double* XSL, double* YSL, double* ZSL, double *X, double *Y, double *Z)
+void XYZ(int i, double *a12, double *a21, double *a13, double *a31, double *a23, double *a32, double f0, long q, long M, double dt, double Tobs, double *XLS_r, double *YLS_r, double *ZLS_r,
+					double* XSL_r, double* YSL_r, double* ZSL_r, double *XLS_i, double *YLS_i, double *ZLS_i, double *XSL_i, double *YSL_i, double *ZSL_i)
 {
 	double fonfs;
 	double c3, s3, c2, s2, c1, s1;
 	double f;
 	double phiLS, cLS, sLS, phiSL, cSL, sSL;
+
+	double X_1, X_2, Y_1, Y_2, Z_1, Z_2;
 
 	// YLS = malloc(2*M*sizeof(double));
 	// ZLS = malloc(2*M*sizeof(double));
@@ -549,69 +566,74 @@ void XYZ(int i, double *d, double f0, long q, long M, double dt, double Tobs, do
   //printf("Stas, q=%ld, f0=%f, check: %f, %f \n", q, f0, q/Tobs, Tobs);
 
 		f = ((double)(q + i - M/2))/Tobs;
+		//if (i == 0){
+		//		double f1 = ((double)(q + i -1 - M/2))/Tobs;
+		//		double f2 = ((double)(q + i - M/2))/Tobs;
+				//printf("%e, %e, %ld, %ld, %ld\n", f, f2 - f1, q, i, M/2);
+		//}
 		fonfs = f/fstar;
 		//printf("Stas fonfs = %f, %f, %f, %f \n", fonfs, f, fstar, Tobs);
 		c3 = cos(3.*fonfs);  c2 = cos(2.*fonfs);  c1 = cos(1.*fonfs);
 		s3 = sin(3.*fonfs);  s2 = sin(2.*fonfs);  s1 = sin(1.*fonfs);
 
-		X[2*i]   = (d[0*3*2*M + 1*2*M + 2*i]-d[0*3*2*M + 2*2*M + 2*i])*c3 + (d[0*3*2*M + 1*2*M + 2*i+1]-d[0*3*2*M + 2*2*M + 2*i+1])*s3 +
-		           (d[1*3*2*M + 0*2*M + 2*i]-d[2*3*2*M + 0*2*M + 2*i])*c2 + (d[1*3*2*M + 0*2*M + 2*i+1]-d[2*3*2*M + 0*2*M + 2*i+1])*s2 +
-		           (d[0*3*2*M + 2*2*M + 2*i]-d[0*3*2*M + 1*2*M + 2*i])*c1 + (d[0*3*2*M + 2*2*M + 2*i+1]-d[0*3*2*M + 1*2*M + 2*i+1])*s1 +
-		           (d[2*3*2*M + 0*2*M + 2*i]-d[1*3*2*M + 0*2*M + 2*i]);
+		X_1   = (a12[2*i]-a13[2*i])*c3 + (a12[2*i+1]-a13[2*i+1])*s3 +
+		           (a21[2*i]-a31[2*i])*c2 + (a21[2*i+1]-a31[2*i+1])*s2 +
+		           (a13[2*i]-a12[2*i])*c1 + (a13[2*i+1]-a12[2*i+1])*s1 +
+		           (a31[2*i]-a21[2*i]);
 
-		X[2*i+1] = (d[0*3*2*M + 1*2*M + 2*i+1]-d[0*3*2*M + 2*2*M + 2*i+1])*c3 - (d[0*3*2*M + 1*2*M + 2*i]-d[0*3*2*M + 2*2*M + 2*i])*s3 +
-		           (d[1*3*2*M + 0*2*M + 2*i+1]-d[2*3*2*M + 0*2*M + 2*i+1])*c2 - (d[1*3*2*M + 0*2*M + 2*i]-d[2*3*2*M + 0*2*M + 2*i])*s2 +
-		           (d[0*3*2*M + 2*2*M + 2*i+1]-d[0*3*2*M + 1*2*M + 2*i+1])*c1 - (d[0*3*2*M + 2*2*M + 2*i]-d[0*3*2*M + 1*2*M + 2*i])*s1 +
-		           (d[2*3*2*M + 0*2*M + 2*i+1]-d[1*3*2*M + 0*2*M + 2*i+1]);
+		X_2 = (a12[2*i+1]-a13[2*i+1])*c3 - (a12[2*i]-a13[2*i])*s3 +
+		           (a21[2*i+1]-a31[2*i+1])*c2 - (a21[2*i]-a31[2*i])*s2 +
+		           (a13[2*i+1]-a12[2*i+1])*c1 - (a13[2*i]-a12[2*i])*s1 +
+		           (a31[2*i+1]-a21[2*i+1]);
 
-		Y[2*i]   = (d[1*3*2*M + 2*2*M + 2*i]-d[1*3*2*M + 0*2*M + 2*i])*c3 + (d[1*3*2*M + 2*2*M + 2*i+1]-d[1*3*2*M + 0*2*M + 2*i+1])*s3 +
-		           (d[2*3*2*M + 1*2*M + 2*i]-d[0*3*2*M + 1*2*M + 2*i])*c2 + (d[2*3*2*M + 1*2*M + 2*i+1]-d[0*3*2*M + 1*2*M + 2*i+1])*s2+
-		           (d[1*3*2*M + 0*2*M + 2*i]-d[1*3*2*M + 2*2*M + 2*i])*c1 + (d[1*3*2*M + 0*2*M + 2*i+1]-d[1*3*2*M + 2*2*M + 2*i+1])*s1+
-		           (d[0*3*2*M + 1*2*M + 2*i]-d[2*3*2*M + 1*2*M + 2*i]);
+		Y_1   = (a23[2*i]-a21[2*i])*c3 + (a23[2*i+1]-a21[2*i+1])*s3 +
+		           (a32[2*i]-a12[2*i])*c2 + (a32[2*i+1]-a12[2*i+1])*s2+
+		           (a21[2*i]-a23[2*i])*c1 + (a21[2*i+1]-a23[2*i+1])*s1+
+		           (a12[2*i]-a32[2*i]);
 
-		Y[2*i+1] = (d[1*3*2*M + 2*2*M + 2*i+1]-d[1*3*2*M + 0*2*M + 2*i+1])*c3 - (d[1*3*2*M + 2*2*M + 2*i]-d[1*3*2*M + 0*2*M + 2*i])*s3+
-		           (d[2*3*2*M + 1*2*M + 2*i+1]-d[0*3*2*M + 1*2*M + 2*i+1])*c2 - (d[2*3*2*M + 1*2*M + 2*i]-d[0*3*2*M + 1*2*M + 2*i])*s2+
-		           (d[1*3*2*M + 0*2*M + 2*i+1]-d[1*3*2*M + 2*2*M + 2*i+1])*c1 - (d[1*3*2*M + 0*2*M + 2*i]-d[1*3*2*M + 2*2*M + 2*i])*s1+
-		           (d[0*3*2*M + 1*2*M + 2*i+1]-d[2*3*2*M + 1*2*M + 2*i+1]);
+		Y_2 = (a23[2*i+1]-a21[2*i+1])*c3 - (a23[2*i]-a21[2*i])*s3+
+		           (a32[2*i+1]-a12[2*i+1])*c2 - (a32[2*i]-a12[2*i])*s2+
+		           (a21[2*i+1]-a23[2*i+1])*c1 - (a21[2*i]-a23[2*i])*s1+
+		           (a12[2*i+1]-a32[2*i+1]);
 
-		Z[2*i]   = (d[2*3*2*M + 0*2*M + 2*i]-d[2*3*2*M + 1*2*M + 2*i])*c3 + (d[2*3*2*M + 0*2*M + 2*i+1]-d[2*3*2*M + 1*2*M + 2*i+1])*s3+
-		           (d[0*3*2*M + 2*2*M + 2*i]-d[1*3*2*M + 2*2*M + 2*i])*c2 + (d[0*3*2*M + 2*2*M + 2*i+1]-d[1*3*2*M + 2*2*M + 2*i+1])*s2+
-		           (d[2*3*2*M + 1*2*M + 2*i]-d[2*3*2*M + 0*2*M + 2*i])*c1 + (d[2*3*2*M + 1*2*M + 2*i+1]-d[2*3*2*M + 0*2*M + 2*i+1])*s1+
-		           (d[1*3*2*M + 2*2*M + 2*i]-d[0*3*2*M + 2*2*M + 2*i]);
+		Z_1   = (a31[2*i]-a32[2*i])*c3 + (a31[2*i+1]-a32[2*i+1])*s3+
+		           (a13[2*i]-a23[2*i])*c2 + (a13[2*i+1]-a23[2*i+1])*s2+
+		           (a32[2*i]-a31[2*i])*c1 + (a32[2*i+1]-a31[2*i+1])*s1+
+		           (a23[2*i]-a13[2*i]);
 
-		Z[2*i+1] = (d[2*3*2*M + 0*2*M + 2*i+1]-d[2*3*2*M + 1*2*M + 2*i+1])*c3 - (d[2*3*2*M + 0*2*M + 2*i]-d[2*3*2*M + 1*2*M + 2*i])*s3+
-		           (d[0*3*2*M + 2*2*M + 2*i+1]-d[1*3*2*M + 2*2*M + 2*i+1])*c2 - (d[0*3*2*M + 2*2*M + 2*i]-d[1*3*2*M + 2*2*M + 2*i])*s2+
-		           (d[2*3*2*M + 1*2*M + 2*i+1]-d[2*3*2*M + 0*2*M + 2*i+1])*c1 - (d[2*3*2*M + 1*2*M + 2*i]-d[2*3*2*M + 0*2*M + 2*i])*s1+
-		           (d[1*3*2*M + 2*2*M + 2*i+1]-d[0*3*2*M + 2*2*M + 2*i+1]);
+		Z_2 = (a31[2*i+1]-a32[2*i+1])*c3 - (a31[2*i]-a32[2*i])*s3+
+		           (a13[2*i+1]-a23[2*i+1])*c2 - (a13[2*i]-a23[2*i])*s2+
+		           (a32[2*i+1]-a31[2*i+1])*c1 - (a32[2*i]-a31[2*i])*s1+
+		           (a23[2*i+1]-a13[2*i+1]);
 
-		// XLS[2*i]   =  (X[2*i]*cLS - X[2*i+1]*sLS);
-		// XLS[2*i+1] = -(X[2*i]*sLS + X[2*i+1]*cLS);
-		// YLS[2*i]   =  (Y[2*i]*cLS - Y[2*i+1]*sLS);
-		// YLS[2*i+1] = -(Y[2*i]*sLS + Y[2*i+1]*cLS);
-		// ZLS[2*i]   =  (Z[2*i]*cLS - Z[2*i+1]*sLS);
-		// ZLS[2*i+1] = -(Z[2*i]*sLS + Z[2*i+1]*cLS);
+		// XLS_r   =  (X_1*cLS - X_2*sLS);
+		// XLS_i = -(X_1*sLS + X_2*cLS);
+		// YLS_r   =  (Y_1*cLS - Y_2*sLS);
+		// YLS_i = -(Y_1*sLS + Y_2*cLS);
+		// ZLS_r   =  (Z_1*cLS - Z_2*sLS);
+		// ZLS_i = -(Z_1*sLS + Z_2*cLS);
     //
-		// XSL[2*i]   =  2.0*fonfs*(X[2*i]*cSL - X[2*i+1]*sSL);
-		// XSL[2*i+1] = -2.0*fonfs*(X[2*i]*sSL + X[2*i+1]*cSL);
-		// YSL[2*i]   =  2.0*fonfs*(Y[2*i]*cSL - Y[2*i+1]*sSL);
-		// YSL[2*i+1] = -2.0*fonfs*(Y[2*i]*sSL + Y[2*i+1]*cSL);
-		// ZSL[2*i]   =  2.0*fonfs*(Z[2*i]*cSL - Z[2*i+1]*sSL);
-		// ZSL[2*i+1] = -2.0*fonfs*(Z[2*i]*sSL + Z[2*i+1]*cSL);
+		// XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
+		// XSL_i = -2.0*fonfs*(X_1*sSL + X_2*cSL);
+		// YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
+		// YSL_i = -2.0*fonfs*(Y_1*sSL + Y_2*cSL);
+		// ZSL_r   =  2.0*fonfs*(Z_1*cSL - Z_2*sSL);
+		// ZSL_i = -2.0*fonfs*(Z_1*sSL + Z_2*cSL);
 
 		// Alternative polarization definition
-		XLS[2*i]   =  (X[2*i]*cLS - X[2*i+1]*sLS);
-		XLS[2*i+1] =  (X[2*i]*sLS + X[2*i+1]*cLS);
-		YLS[2*i]   =  (Y[2*i]*cLS - Y[2*i+1]*sLS);
-		YLS[2*i+1] =  (Y[2*i]*sLS + Y[2*i+1]*cLS);
-		ZLS[2*i]   =  (Z[2*i]*cLS - Z[2*i+1]*sLS);
-		ZLS[2*i+1] =  (Z[2*i]*sLS + Z[2*i+1]*cLS);
+		*XLS_r   =  (X_1*cLS - X_2*sLS);
+		*XLS_i =  (X_1*sLS + X_2*cLS);
+		*YLS_r   =  (Y_1*cLS - Y_2*sLS);
+		*YLS_i =  (Y_1*sLS + Y_2*cLS);
+		*ZLS_r   =  (Z_1*cLS - Z_2*sLS);
+		*ZLS_i =  (Z_1*sLS + Z_2*cLS);
 
-		XSL[2*i]   =  2.0*fonfs*(X[2*i]*cSL - X[2*i+1]*sSL);
-		XSL[2*i+1] =  2.0*fonfs*(X[2*i]*sSL + X[2*i+1]*cSL);
-		YSL[2*i]   =  2.0*fonfs*(Y[2*i]*cSL - Y[2*i+1]*sSL);
-		YSL[2*i+1] =  2.0*fonfs*(Y[2*i]*sSL + Y[2*i+1]*cSL);
-		ZSL[2*i]   =  2.0*fonfs*(Z[2*i]*cSL - Z[2*i+1]*sSL);
-		ZSL[2*i+1] =  2.0*fonfs*(Z[2*i]*sSL + Z[2*i+1]*cSL);
+		*XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
+		*XSL_i =  2.0*fonfs*(X_1*sSL + X_2*cSL);
+		*YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
+		*YSL_i =  2.0*fonfs*(Y_1*sSL + Y_2*cSL);
+		*ZSL_r   =  2.0*fonfs*(Z_1*cSL - Z_2*sSL);
+		*ZSL_i =  2.0*fonfs*(Z_1*sSL + Z_2*cSL);
 
 	// for(i=0; i<2*M; i++)
 	// {
@@ -630,7 +652,7 @@ void XYZ(int i, double *d, double f0, long q, long M, double dt, double Tobs, do
 
 __global__
 void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs, double *XLS, double *YLS, double *ZLS,
-					double* XSL, double* YSL, double* ZSL, double *X, double *Y, double *Z){
+					double* XSL, double* YSL, double *ZSL){
 
 		int N;
 		Waveform *wfm;
@@ -645,10 +667,10 @@ void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs,
 				 i += blockDim.x * gridDim.x)
 		{
 
-		XYZ(i, wfm->d, wfm->params[0]/wfm->T, wfm->q, N, dt, Tobs,
-				&XLS[M*walker_i], &YLS[M*walker_i], &ZLS[M*walker_i],
-				&XSL[M*walker_i], &YSL[M*walker_i], &ZSL[M*walker_i],
-				&X[M*walker_i], &Y[M*walker_i], &Z[M*walker_i]);
+		double XLS_r, YLS_r, ZLS_r, XSL_r, YSL_r, ZSL_r, XLS_i, YLS_i, ZLS_i, XSL_i, YSL_i, ZSL_i;
+
+		XYZ(i, wfm->a12, wfm->a21, wfm->a13, wfm->a31, wfm->a23, wfm->a32, wfm->params[0]/wfm->T, wfm->q, N, dt, Tobs,
+				&XLS_r, &YLS_r, &ZLS_r, &XSL_r, &YSL_r, &ZSL_r, &XLS_i, &YLS_i, &ZLS_i, &XSL_i, &YSL_i, &ZSL_i);
 }
 }
 }

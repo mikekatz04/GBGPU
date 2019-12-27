@@ -95,13 +95,14 @@ GBGPU::GBGPU (
     double *data_freqs_,
     cmplx *data_channel1_,
     cmplx *data_channel2_,
-    cmplx *data_channel3_, int data_stream_length_,
+    cmplx *data_channel3_, int N_,
     double *channel1_ASDinv_, double *channel2_ASDinv_, double *channel3_ASDinv_,
     int nwalkers_,
     int ndevices_,
     double Tobs_,
     double dt_,
-    int NP_){
+    int NP_,
+    int data_stream_length_){
 
       Tobs = Tobs_;
       dt = dt_;
@@ -116,6 +117,7 @@ GBGPU::GBGPU (
 
 
     data_freqs = data_freqs_;
+    N = N_;
     data_stream_length = data_stream_length_;
     channel1_ASDinv = channel1_ASDinv_;
     channel2_ASDinv = channel2_ASDinv_;
@@ -129,23 +131,23 @@ GBGPU::GBGPU (
     ndevices = ndevices_;
 
 
-      gpuErrchk(cudaMalloc(&d_template_channel1, data_stream_length*nwalkers*sizeof(agcmplx)));
-      gpuErrchk(cudaMalloc(&d_template_channel2, data_stream_length*nwalkers*sizeof(agcmplx)));
-      gpuErrchk(cudaMalloc(&d_template_channel3, data_stream_length*nwalkers*sizeof(agcmplx)));
+      gpuErrchk(cudaMalloc(&d_template_channel1, N*nwalkers*sizeof(agcmplx)));
+      gpuErrchk(cudaMalloc(&d_template_channel2, N*nwalkers*sizeof(agcmplx)));
+      gpuErrchk(cudaMalloc(&d_template_channel3, N*nwalkers*sizeof(agcmplx)));
 
-      gpuErrchk(cudaMalloc(&d_data_freqs, data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&d_data_freqs, N*sizeof(double)));
 
-      gpuErrchk(cudaMalloc(&d_data_channel1, data_stream_length*sizeof(agcmplx)));
+      gpuErrchk(cudaMalloc(&d_data_channel1, N*sizeof(agcmplx)));
 
-      gpuErrchk(cudaMalloc(&d_data_channel2, data_stream_length*sizeof(agcmplx)));
+      gpuErrchk(cudaMalloc(&d_data_channel2, N*sizeof(agcmplx)));
 
-      gpuErrchk(cudaMalloc(&d_data_channel3, data_stream_length*sizeof(agcmplx)));
+      gpuErrchk(cudaMalloc(&d_data_channel3, N*sizeof(agcmplx)));
 
-      gpuErrchk(cudaMalloc(&d_channel1_ASDinv, data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&d_channel1_ASDinv, N*sizeof(double)));
 
-      gpuErrchk(cudaMalloc(&d_channel2_ASDinv, data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&d_channel2_ASDinv, N*sizeof(double)));
 
-      gpuErrchk(cudaMalloc(&d_channel3_ASDinv, data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&d_channel3_ASDinv, N*sizeof(double)));
 
 
       h_wfm = new Waveform[nwalkers];
@@ -153,7 +155,7 @@ GBGPU::GBGPU (
       for (int i=0; i<nwalkers; i++){
           h_wfm[i].NP = NP;
           h_wfm[i].T = Tobs;
-          h_wfm[i].N = data_stream_length;
+          h_wfm[i].N = N;
           N = h_wfm[i].N;
           alloc_waveform(&h_wfm[i]);
       }
@@ -164,17 +166,20 @@ GBGPU::GBGPU (
       gpuErrchk(cudaMemcpy(wfm, h_wfm, nwalkers*sizeof(Waveform), cudaMemcpyHostToDevice));
 
 
-      gpuErrchk(cudaMalloc(&X_buffer, 2*N*nwalkers*sizeof(double)));
-      gpuErrchk(cudaMalloc(&Y_buffer, 2*N*nwalkers*sizeof(double)));
-      gpuErrchk(cudaMalloc(&Z_buffer, 2*N*nwalkers*sizeof(double)));
+      //gpuErrchk(cudaMalloc(&X_buffer, 2*N*nwalkers*sizeof(double)));
+      //gpuErrchk(cudaMalloc(&Y_buffer, 2*N*nwalkers*sizeof(double)));
+      //gpuErrchk(cudaMalloc(&Z_buffer, 2*N*nwalkers*sizeof(double)));
 
-      gpuErrchk(cudaMalloc(&XLS, 2*N*nwalkers*sizeof(double)));
-      gpuErrchk(cudaMalloc(&YLS, 2*N*nwalkers*sizeof(double)));
-      gpuErrchk(cudaMalloc(&ZLS, 2*N*nwalkers*sizeof(double)));
+      gpuErrchk(cudaMalloc(&XLS, 2*data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&YLS, 2*data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&ZLS, 2*data_stream_length*sizeof(double)));
 
-      gpuErrchk(cudaMalloc(&XSL, 2*N*nwalkers*sizeof(double)));
-      gpuErrchk(cudaMalloc(&YSL, 2*N*nwalkers*sizeof(double)));
-      gpuErrchk(cudaMalloc(&ZSL, 2*N*nwalkers*sizeof(double)));
+      gpuErrchk(cudaMalloc(&XSL, 2*data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&YSL, 2*data_stream_length*sizeof(double)));
+      gpuErrchk(cudaMalloc(&ZSL, 2*data_stream_length*sizeof(double)));
+
+      gpuErrchk(cudaMalloc(&d_params, NP*nwalkers*sizeof(double)));
+
 
       // for likelihood
       // --------------
@@ -193,7 +198,7 @@ GBGPU::GBGPU (
   GBGPU::input_data(data_freqs, data_channel1,
                         data_channel2, data_channel3,
                         channel1_ASDinv, channel2_ASDinv,
-                        channel3_ASDinv, data_stream_length);
+                        channel3_ASDinv, N);
 
 }
 
@@ -201,37 +206,54 @@ GBGPU::GBGPU (
 void GBGPU::input_data(double *data_freqs_, cmplx *data_channel1_,
                           cmplx *data_channel2_, cmplx *data_channel3_,
                           double *channel1_ASDinv_, double *channel2_ASDinv_,
-                          double *channel3_ASDinv_, int data_stream_length_){
+                          double *channel3_ASDinv_, int N_){
 
-    assert(data_stream_length_ == data_stream_length);
+    assert(N_ == N);
 
-        gpuErrchk(cudaMemcpy(d_data_freqs, data_freqs_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_data_freqs, data_freqs_, N*sizeof(double), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy(d_data_channel1, data_channel1_, data_stream_length*sizeof(agcmplx), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_data_channel1, data_channel1_, N*sizeof(agcmplx), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy(d_data_channel2, data_channel2_, data_stream_length*sizeof(agcmplx), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_data_channel2, data_channel2_, N*sizeof(agcmplx), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy(d_data_channel3, data_channel3_, data_stream_length*sizeof(agcmplx), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_data_channel3, data_channel3_, N*sizeof(agcmplx), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy(d_channel1_ASDinv, channel1_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_channel1_ASDinv, channel1_ASDinv_, N*sizeof(double), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy(d_channel2_ASDinv, channel2_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_channel2_ASDinv, channel2_ASDinv_, N*sizeof(double), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy(d_channel3_ASDinv, channel3_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_channel3_ASDinv, channel3_ASDinv_, N*sizeof(double), cudaMemcpyHostToDevice));
+}
+
+__global__
+void fill_params(Waveform *wfm_trans, double *params, int nwalkers, int NP)
+{
+    Waveform *wfm;
+  for (int walker_i = blockIdx.x * blockDim.x + threadIdx.x;
+       walker_i < nwalkers;
+       walker_i += blockDim.x * gridDim.x){
+         wfm = &wfm_trans[walker_i];
+
+         for (int i=0; i<NP; i++) wfm->params[0] = params[walker_i*NP + i];
+         wfm->q  = (long)(wfm->params[0]);
+
+  }
 }
 
 
 void GBGPU::Fast_GB(double *params_){//,double *XLS, double *YLS, double *ZLS,double* XSL, double* YSL, double* ZSL){
 
-    for (int i=0; i<nwalkers; i++){
-      gpuErrchk(cudaMemcpy((&h_wfm[i])->params, params_, NP*sizeof(double), cudaMemcpyHostToDevice));
-      (&h_wfm[i])->q  = (long)(params_[0]);
-    }
+    gpuErrchk(cudaMemcpy(d_params, params_, nwalkers*NP*sizeof(double), cudaMemcpyHostToDevice));
 
-      gpuErrchk(cudaMemcpy(wfm, h_wfm, nwalkers*sizeof(Waveform), cudaMemcpyHostToDevice));
+      //gpuErrchk(cudaMemcpy(wfm, h_wfm, nwalkers*sizeof(Waveform), cudaMemcpyHostToDevice));
 
       int NUM_THREADS = 256;
       int num_blocks_basis_tensors = std::ceil((nwalkers + NUM_THREADS -1)/NUM_THREADS);
+
+      fill_params<<<num_blocks_basis_tensors,NUM_THREADS>>>(wfm, d_params, nwalkers,NP);
+      cudaDeviceSynchronize();
+      gpuErrchk(cudaGetLastError());
+
     	get_basis_tensors<<<num_blocks_basis_tensors,NUM_THREADS>>>(wfm, nwalkers);      //  Tensor construction for building slowly evolving LISA response
       cudaDeviceSynchronize();
       gpuErrchk(cudaGetLastError());
@@ -248,11 +270,11 @@ void GBGPU::Fast_GB(double *params_){//,double *XLS, double *YLS, double *ZLS,do
       cudaDeviceSynchronize();
       gpuErrchk(cudaGetLastError());
 
-      unpack_data_2<<<gridDim, NUM_THREADS>>>(wfm, nwalkers);
+      /*unpack_data_2<<<gridDim, NUM_THREADS>>>(wfm, nwalkers);
       cudaDeviceSynchronize();
-      gpuErrchk(cudaGetLastError());
+      gpuErrchk(cudaGetLastError());*/
 
-      XYZ_wrap<<<gridDim, NUM_THREADS>>>(wfm, nwalkers, N, dt, Tobs, XLS, YLS, ZLS, XSL, YSL, ZSL, X_buffer, Y_buffer, Z_buffer);
+      XYZ_wrap<<<gridDim, NUM_THREADS>>>(wfm, nwalkers, N, dt, Tobs, XLS, YLS, ZLS, XSL, YSL, ZSL);
       cudaDeviceSynchronize();
       gpuErrchk(cudaGetLastError());
 }
@@ -262,8 +284,6 @@ Destructor
 */
 GBGPU::~GBGPU() {
 
-
-  printf("CHECK\n");
   gpuErrchk(cudaFree(d_data_freqs));
   gpuErrchk(cudaFree(d_data_channel1));
   gpuErrchk(cudaFree(d_data_channel2));
@@ -281,9 +301,11 @@ GBGPU::~GBGPU() {
   delete[] h_wfm;
   //cublasDestroy(handle);
 
-gpuErrchk(cudaFree(X_buffer));
-gpuErrchk(cudaFree(Y_buffer));
-gpuErrchk(cudaFree(Z_buffer));
+//gpuErrchk(cudaFree(X_buffer));
+//gpuErrchk(cudaFree(Y_buffer));
+//gpuErrchk(cudaFree(Z_buffer));
+
+gpuErrchk(cudaFree(d_params));
 
 gpuErrchk(cudaFree(XLS));
 gpuErrchk(cudaFree(YLS));

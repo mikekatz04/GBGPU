@@ -87,6 +87,7 @@ class GBGPU {
 
   cufftHandle plan;
 
+  double *d_params;
   double *X_buffer, *Y_buffer, *Z_buffer;
   double *XLS, *YLS, *ZLS, *XSL, *YSL, *ZSL;
   int N;
@@ -107,13 +108,14 @@ public:
         double *data_freqs_,
         cmplx *data_channel1_,
         cmplx *data_channel2_,
-        cmplx *data_channel3_, int data_stream_length_,
+        cmplx *data_channel3_, int N_,
         double *channel1_ASDinv_, double *channel2_ASDinv_, double *channel3_ASDinv_,
         int nwalkers_,
         int ndevices_,
         double Tobs_,
         double dt_,
-        int NP_); // constructor (copies to GPU)
+        int NP_,
+        int data_stream_length_); // constructor (copies to GPU)
 
   void Fast_GB(double *params);
 
