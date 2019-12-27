@@ -64,13 +64,13 @@ def test():
     # AE_ASDinv = np.ones_like(data_freqs)
     # T_ASDinv = np.ones_like(data_freqs)
 
-    nwalkers = 10000
+    nwalkers = 30000
     ndevices = 1
 
     Tobs = 4.0 * ct.Julian_year
 
     df = 1.0 / Tobs
-    data_freqs = np.arange(0.0, 1e-2 + df, df)
+    data_freqs = np.arange(0.0, 1e-1 + df, df)
     dt = 10.0
     NP = 8
 
@@ -121,7 +121,7 @@ def test():
     et = time.perf_counter()
     print("fastGB time per waveform:", (et - st) / num)
 
-    num = 100
+    num = 10
     st = time.perf_counter()
     for i in range(num):
         gbGPU.FastGB(params)

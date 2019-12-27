@@ -40,55 +40,55 @@ void alloc_waveform(Waveform *wfm)
 	N = wfm->N;
 
   gpuErrchk(cudaMalloc(&wfm->params, wfm->NP*sizeof(double)));
-  gpuErrchk(cudaMalloc(&wfm->k, 3*N*sizeof(double)));
+  gpuErrchk(cudaMalloc(&wfm->k, 3*sizeof(double)));
 
 
-  gpuErrchk(cudaMalloc(&wfm->kdotx, 3*N*sizeof(double))); // vec
+  //gpuErrchk(cudaMalloc(&wfm->kdotx, 3*N*sizeof(double))); // vec
   //gpuErrchk(cudaMalloc(&wfm->kdotr, 3*3*N*sizeof(double))); // 3x3 mat
 
 
-  double *trans_kdotx = new double[3*N];
+  //double *trans_kdotx = new double[3*N];
   //double *trans_kdotr = new double[3*3*N];
 
-  for (k=0; k<N; k++){
+  /*for (k=0; k<N; k++){
 
 	for (i=0; i<3; i++)
 	{
 		//for (j=0; j<3; j++) trans_kdotr[(i*3 + j)*N + k] = 0.;
-		trans_kdotx[i*N + k] = 0.;
+		//trans_kdotx[i*N + k] = 0.;
 	}
-  }
+}*/
 
-  gpuErrchk(cudaMemcpy(wfm->kdotx, trans_kdotx, 3*N*sizeof(double), cudaMemcpyHostToDevice));
+  //gpuErrchk(cudaMemcpy(wfm->kdotx, trans_kdotx, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   //gpuErrchk(cudaMemcpy(wfm->kdotr, trans_kdotr, 3*3*N*sizeof(double), cudaMemcpyHostToDevice));
 
   //delete[] trans_kdotr;
-  delete[] trans_kdotx;
+  //delete[] trans_kdotx;
 
-  gpuErrchk(cudaMalloc(&wfm->xi, 3*N*sizeof(double)));
-  gpuErrchk(cudaMalloc(&wfm->f, 3*N*sizeof(double)));
-  gpuErrchk(cudaMalloc(&wfm->fonfs, 3*N*sizeof(double)));
+  //gpuErrchk(cudaMalloc(&wfm->xi, 3*N*sizeof(double)));
+  //gpuErrchk(cudaMalloc(&wfm->f, 3*N*sizeof(double)));
+  //gpuErrchk(cudaMalloc(&wfm->fonfs, 3*N*sizeof(double)));
 
-  double *trans_xi = new double[3*N];
-  double *trans_f = new double[3*N];
-  double *trans_fonfs = new double[3*N];
+  //double *trans_xi = new double[3*N];
+  //double *trans_f = new double[3*N];
+  //double *trans_fonfs = new double[3*N];
 
-  for (k=0; k<N; k++){
+  /*for (k=0; k<N; k++){
 	for (i=0; i<3; i++)
 	{
-		trans_xi[i*N + k]    = 0.;
-		trans_f[i*N + k]     = 0.;
-		trans_fonfs[i*N + k] = 0.;
+		//trans_xi[i*N + k]    = 0.;
+		//trans_f[i*N + k]     = 0.;
+		//trans_fonfs[i*N + k] = 0.;
 	}
-}
+}*/
 
-  gpuErrchk(cudaMemcpy(wfm->xi, trans_xi, 3*N*sizeof(double), cudaMemcpyHostToDevice));
-  gpuErrchk(cudaMemcpy(wfm->f, trans_f, 3*N*sizeof(double), cudaMemcpyHostToDevice));
-  gpuErrchk(cudaMemcpy(wfm->fonfs, trans_fonfs, 3*N*sizeof(double), cudaMemcpyHostToDevice));
+  //gpuErrchk(cudaMemcpy(wfm->xi, trans_xi, 3*N*sizeof(double), cudaMemcpyHostToDevice));
+  //gpuErrchk(cudaMemcpy(wfm->f, trans_f, 3*N*sizeof(double), cudaMemcpyHostToDevice));
+  //gpuErrchk(cudaMemcpy(wfm->fonfs, trans_fonfs, 3*N*sizeof(double), cudaMemcpyHostToDevice));
 
-  delete[] trans_xi;
-  delete[] trans_f;
-  delete[] trans_fonfs;
+  //delete[] trans_xi;
+  //delete[] trans_f;
+  //delete[] trans_fonfs;
 
 	// Polarization basis tensors
   gpuErrchk(cudaMalloc(&wfm->eplus, 3*3*sizeof(double)));
@@ -96,12 +96,14 @@ void alloc_waveform(Waveform *wfm)
   //gpuErrchk(cudaMalloc(&wfm->dplus, 3*3*N*sizeof(double)));
   //gpuErrchk(cudaMalloc(&wfm->dcross, 3*3*N*sizeof(double)));
 
+  /*
   gpuErrchk(cudaMalloc(&wfm->r12, 3*N*sizeof(double)));
   gpuErrchk(cudaMalloc(&wfm->r21, 3*N*sizeof(double)));
   gpuErrchk(cudaMalloc(&wfm->r31, 3*N*sizeof(double)));
   gpuErrchk(cudaMalloc(&wfm->r13, 3*N*sizeof(double)));
   gpuErrchk(cudaMalloc(&wfm->r23, 3*N*sizeof(double)));
   gpuErrchk(cudaMalloc(&wfm->r32, 3*N*sizeof(double)));
+  */
 
   gpuErrchk(cudaMalloc(&wfm->data12, 2*N*sizeof(double)));
   gpuErrchk(cudaMalloc(&wfm->data21, 2*N*sizeof(double)));
@@ -196,13 +198,14 @@ void alloc_waveform(Waveform *wfm)
   //double *trans_x = new double[3*N];
   //double *trans_y = new double[3*N];
   //double *trans_z = new double[3*N];
+  /*
   double *trans_r12 = new double[3*N];
   double *trans_r21 = new double[3*N];
   double *trans_r31 = new double[3*N];
   double *trans_r13 = new double[3*N];
   double *trans_r23 = new double[3*N];
   double *trans_r32 = new double[3*N];
-
+  */
   for (k=0; k<N; k++){
 	for (i=0; i<3; i++)
 	{
@@ -218,12 +221,14 @@ void alloc_waveform(Waveform *wfm)
 		//trans_x[i*N + k]   = 0.;
 		//trans_y[i*N + k]   = 0.;
 		//trans_z[i*N + k]   = 0.;
+    /*
 		trans_r12[i*N + k] = 0.;
 		trans_r21[i*N + k] = 0.;
 		trans_r31[i*N + k] = 0.;
 		trans_r13[i*N + k] = 0.;
 		trans_r23[i*N + k] = 0.;
 		trans_r32[i*N + k] = 0.;
+    */
 	}
   }
 
@@ -237,12 +242,14 @@ void alloc_waveform(Waveform *wfm)
   //gpuErrchk(cudaMemcpy(wfm->x, trans_x, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   //gpuErrchk(cudaMemcpy(wfm->y, trans_y, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   //gpuErrchk(cudaMemcpy(wfm->z, trans_z, 3*N*sizeof(double), cudaMemcpyHostToDevice));
+  /*
   gpuErrchk(cudaMemcpy(wfm->r12, trans_r12, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   gpuErrchk(cudaMemcpy(wfm->r21, trans_r21, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   gpuErrchk(cudaMemcpy(wfm->r31, trans_r31, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   gpuErrchk(cudaMemcpy(wfm->r13, trans_r13, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   gpuErrchk(cudaMemcpy(wfm->r23, trans_r23, 3*N*sizeof(double), cudaMemcpyHostToDevice));
   gpuErrchk(cudaMemcpy(wfm->r32, trans_r32, 3*N*sizeof(double), cudaMemcpyHostToDevice));
+  */
 
   delete[] trans_eplus;
   delete[] trans_ecross;
@@ -254,13 +261,14 @@ void alloc_waveform(Waveform *wfm)
   //delete[] trans_x;
   //delete[] trans_y;
   //delete[] trans_z;
+  /*
   delete[] trans_r12;
   delete[] trans_r21;
   delete[] trans_r31;
   delete[] trans_r13;
   delete[] trans_r23;
   delete[] trans_r32;
-
+  */
 /*
   gpuErrchk(cudaMalloc(&wfm->d, 3*3*2*N*sizeof(double)));
 
@@ -296,20 +304,21 @@ void free_waveform(Waveform *wfm){
     //gpuErrchk(cudaFree(wfm->dcross));
 
 
-
+    /*
     gpuErrchk(cudaFree(wfm->r12));
     gpuErrchk(cudaFree(wfm->r21));
     gpuErrchk(cudaFree(wfm->r31));
     gpuErrchk(cudaFree(wfm->r13));
     gpuErrchk(cudaFree(wfm->r23));
     gpuErrchk(cudaFree(wfm->r32));
+    */
 
     //gpuErrchk(cudaFree(wfm->kdotr));
-    gpuErrchk(cudaFree(wfm->kdotx));
+    //gpuErrchk(cudaFree(wfm->kdotx));
 
-    gpuErrchk(cudaFree(wfm->xi));
-    gpuErrchk(cudaFree(wfm->f));
-    gpuErrchk(cudaFree(wfm->fonfs));
+    //gpuErrchk(cudaFree(wfm->xi));
+    //gpuErrchk(cudaFree(wfm->f));
+    //gpuErrchk(cudaFree(wfm->fonfs));
 
     gpuErrchk(cudaFree(wfm->data12));
     gpuErrchk(cudaFree(wfm->data21));

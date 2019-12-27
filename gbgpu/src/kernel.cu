@@ -112,8 +112,8 @@ void get_basis_tensors(Waveform *wfm_trans, int nwalkers)
 
 	 // GW basis vectors
 
-	double * u = new double[3];
-	double * v = new double[3];
+	double u[3];
+	double v[3];
 
 	for (int walker_i = blockIdx.x * blockDim.x + threadIdx.x;
 			 walker_i < nwalkers;
@@ -137,8 +137,6 @@ void get_basis_tensors(Waveform *wfm_trans, int nwalkers)
 		}
 	}
 }
-	delete[] u;
-	delete[] v;
 
 	return;
 }
@@ -181,11 +179,14 @@ void spacecraft(double t, double *x, double *y, double *z, int n, int N)
 }
 
 __device__
-void calc_xi_f(Waveform *wfm, double t, int n, int N, double *x, double *y, double *z)
+void calc_xi_f(Waveform *wfm, double t, int n, int N, double *x, double *y, double *z, double *xi, double *fonfs)
 {
 	long i;
 
 	double f0, dfdt_0, d2fdt2_0;
+
+	double kdotx[3];
+	double f[3];
 
 	f0       = wfm->params[0]/wfm->T;
 	if (wfm->NP > 7) dfdt_0   = wfm->params[7]/wfm->T/wfm->T;
@@ -195,51 +196,51 @@ void calc_xi_f(Waveform *wfm, double t, int n, int N, double *x, double *y, doub
 
 	for(i=0; i<3; i++)
 	{
-		wfm->kdotx[i*N + n] = (x[i]*wfm->k[0*N + n] + y[i]*wfm->k[1*N + n] + z[i]*wfm->k[2*N + n])/C;
+		kdotx[i] = (x[i]*wfm->k[0] + y[i]*wfm->k[1] + z[i]*wfm->k[2])/C;
 		//Wave arrival time at spacecraft i
-		wfm->xi[i*N + n]    = t - wfm->kdotx[i*N + n];
+		xi[i]    = t - kdotx[i];
 		//FIXME
-		//wfm->xi[i]    = t + wfm->kdotx[i];
+		//xi[i]    = t + kdotx[i];
 		//First order approximation to frequency at spacecraft i
-		wfm->f[i*N + n]     = f0;
-		if (wfm->NP > 7) wfm->f[i*N + n] += dfdt_0*wfm->xi[i*N + n];
-		if (wfm->NP > 8) wfm->f[i*N + n] += 0.5*d2fdt2_0*wfm->xi[i*N + n]*wfm->xi[i*N + n];
+		f[i]     = f0;
+		if (wfm->NP > 7) f[i] += dfdt_0*xi[i];
+		if (wfm->NP > 8) f[i] += 0.5*d2fdt2_0*xi[i]*xi[i];
 
 		//Ratio of true frequency to transfer frequency
-		wfm->fonfs[i*N + n] = wfm->f[i*N + n]/fstar;
+		fonfs[i] = f[i]/fstar;
 	}
 
 	return;
 }
 
 __device__
-void calc_sep_vecs(Waveform *wfm, int n, int N, double *x, double *y, double *z)
+void calc_sep_vecs(Waveform *wfm, int n, int N, double *x, double *y, double *z, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
 	long i;
 
 	//Unit separation vector from spacecrafts i to j
-	wfm->r12[0*N + n] = (x[1] - x[0])/Larm;
-	wfm->r13[0*N + n] = (x[2] - x[0])/Larm;
-	wfm->r23[0*N + n] = (x[2] - x[1])/Larm;
-	wfm->r12[1*N + n] = (y[1] - y[0])/Larm;
-	wfm->r13[1*N + n] = (y[2] - y[0])/Larm;
-	wfm->r23[1*N + n] = (y[2] - y[1])/Larm;
-	wfm->r12[2*N + n] = (z[1] - z[0])/Larm;
-	wfm->r13[2*N + n] = (z[2] - z[0])/Larm;
-	wfm->r23[2*N + n] = (z[2] - z[1])/Larm;
+	r12[0] = (x[1] - x[0])/Larm;
+	r13[0] = (x[2] - x[0])/Larm;
+	r23[0] = (x[2] - x[1])/Larm;
+	r12[1] = (y[1] - y[0])/Larm;
+	r13[1] = (y[2] - y[0])/Larm;
+	r23[1] = (y[2] - y[1])/Larm;
+	r12[2] = (z[1] - z[0])/Larm;
+	r13[2] = (z[2] - z[0])/Larm;
+	r23[2] = (z[2] - z[1])/Larm;
 
 	//Make use of symmetry
 	for(i=0; i<3; i++)
 	{
-		wfm->r21[i*N + n] = -wfm->r12[i*N + n];
-		wfm->r31[i*N + n] = -wfm->r13[i*N + n];
-		wfm->r32[i*N + n] = -wfm->r23[i*N + n];
+		r21[i] = -r12[i];
+		r31[i] = -r13[i];
+		r32[i] = -r23[i];
 	}
 	return;
 }
 
 __device__
-void calc_d_matrices(Waveform *wfm, int n, int N, double *dcross, double *dplus)
+void calc_d_matrices(Waveform *wfm, int n, int N, double *dcross, double *dplus, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
 	long i, j;
 
@@ -262,12 +263,12 @@ void calc_d_matrices(Waveform *wfm, int n, int N, double *dcross, double *dplus)
 	{
 		for(j=0; j<3; j++)
 		{
-			dplus [(0*3 + 1)] += wfm->r12[i*N + n]*wfm->r12[j*N + n]*wfm->eplus[i*3 + j];
-			dcross[(0*3 + 1)] += wfm->r12[i*N + n]*wfm->r12[j*N + n]*wfm->ecross[i*3 + j];
-			dplus [(1*3 + 2)] += wfm->r23[i*N + n]*wfm->r23[j*N + n]*wfm->eplus[i*3 + j];
-			dcross[(1*3 + 2)] += wfm->r23[i*N + n]*wfm->r23[j*N + n]*wfm->ecross[i*3 + j];
-			dplus [(0*3 + 2)] += wfm->r13[i*N + n]*wfm->r13[j*N + n]*wfm->eplus[i*3 + j];
-			dcross[(0*3 + 2)] += wfm->r13[i*N + n]*wfm->r13[j*N + n]*wfm->ecross[i*3 + j];
+			dplus [(0*3 + 1)] += r12[i]*r12[j]*wfm->eplus[i*3 + j];
+			dcross[(0*3 + 1)] += r12[i]*r12[j]*wfm->ecross[i*3 + j];
+			dplus [(1*3 + 2)] += r23[i]*r23[j]*wfm->eplus[i*3 + j];
+			dcross[(1*3 + 2)] += r23[i]*r23[j]*wfm->ecross[i*3 + j];
+			dplus [(0*3 + 2)] += r13[i]*r13[j]*wfm->eplus[i*3 + j];
+			dcross[(0*3 + 2)] += r13[i]*r13[j]*wfm->ecross[i*3 + j];
 		}
 	}
 	//Makng use of symmetry
@@ -280,7 +281,7 @@ void calc_d_matrices(Waveform *wfm, int n, int N, double *dcross, double *dplus)
 
 
 __device__
-void calc_kdotr(Waveform *wfm, int n, int N, double *kdotr)
+void calc_kdotr(Waveform *wfm, int n, int N, double *kdotr, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
 	long i;
 
@@ -294,9 +295,9 @@ void calc_kdotr(Waveform *wfm, int n, int N, double *kdotr)
 
 	for(i=0; i<3; i++)
 	{
-		kdotr[(0*3 + 1)] += wfm->k[i*N + n]*wfm->r12[i*N + n];
-		kdotr[(0*3 + 2)] += wfm->k[i*N + n]*wfm->r13[i*N + n];
-		kdotr[(1*3 + 2)] += wfm->k[i*N + n]*wfm->r23[i*N + n];
+		kdotr[(0*3 + 1)] += wfm->k[i]*r12[i];
+		kdotr[(0*3 + 2)] += wfm->k[i]*r13[i];
+		kdotr[(1*3 + 2)] += wfm->k[i]*r23[i];
 	}
 
 	//Making use of antisymmetry
@@ -310,7 +311,8 @@ void calc_kdotr(Waveform *wfm, int n, int N, double *kdotr)
 
 __device__
 
-void get_transfer(Waveform *wfm, double t, int n, int N, double *kdotr, double *TR, double *TI, double *dplus, double *dcross)
+void get_transfer(Waveform *wfm, double t, int n, int N, double *kdotr, double *TR, double *TI, double *dplus, double *dcross,
+									double *xi, double *fonfs)
 {
 	long i, j;
 	long q;
@@ -339,21 +341,21 @@ void get_transfer(Waveform *wfm, double t, int n, int N, double *kdotr, double *
 			{
 				//Argument of transfer function
 				// FIXME
-				//arg1 = 0.5*wfm->fonfs[i]*(1. - kdotr[i][j]);
-				arg1 = 0.5*wfm->fonfs[i*N + n]*(1. + kdotr[(i*3 + j)]);
+				//arg1 = 0.5*fonfs[i]*(1. - kdotr[i][j]);
+				arg1 = 0.5*fonfs[i]*(1. + kdotr[(i*3 + j)]);
 
 				//Argument of complex exponentials
-				arg2 = PI2*f0*wfm->xi[i*N + n] + phi0 - df*t;
+				arg2 = PI2*f0*xi[i] + phi0 - df*t;
 
-				if (wfm->NP > 7) arg2 += M_PI*dfdt_0*wfm->xi[i*N + n]*wfm->xi[i*N + n];
-				if (wfm->NP > 8) arg2 += M_PI*d2fdt2_0*wfm->xi[i*N + n]*wfm->xi[i*N + n]*wfm->xi[i*N + n]/3.0 ;
+				if (wfm->NP > 7) arg2 += M_PI*dfdt_0*xi[i]*xi[i];
+				if (wfm->NP > 8) arg2 += M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0 ;
 
 				//Transfer function
 				sinc = 0.25*sin(arg1)/arg1;
 
 				//Evolution of amplitude
 				aevol = 1.0;
-				if (wfm->NP > 7) aevol += 0.66666666666666666666*dfdt_0/f0*wfm->xi[i*N + n];
+				if (wfm->NP > 7) aevol += 0.66666666666666666666*dfdt_0/f0*xi[i];
 
 				///Real and imaginary pieces of time series (no complex exponential)
 				tran1r = aevol*(dplus[(i*3 + j)]*wfm->DPr + dcross[(i*3 + j)]*wfm->DCr);
@@ -407,6 +409,9 @@ void GenWave(Waveform *wfm_trans, int N, int nwalkers){
 	double dplus[9];
 	double dcross[9];
 	double x[3], y[3], z[3];
+	double xi[3], fonfs[3];
+	double r12[3], r21[3], r13[3], r31[3], r23[3], r32[3];
+
 	for (int walker_i = blockIdx.y * blockDim.y + threadIdx.y;
 			 walker_i < nwalkers;
 			 walker_i += blockDim.y * gridDim.y){
@@ -418,11 +423,11 @@ void GenWave(Waveform *wfm_trans, int N, int nwalkers){
 			 n += blockDim.x * gridDim.x){
 
 				 t = wfm->T*(double)(n)/(double)N;
-				 calc_xi_f(wfm ,t, n, N, x, y, z);		  // calc frequency and time variables
-				 calc_sep_vecs(wfm, n, N, x, y, z);       // calculate the S/C separation vectors
-				 calc_d_matrices(wfm, n, N, dplus, dcross);     // calculate pieces of waveform
-				 calc_kdotr(wfm, n, N, &kdotr[tid*9]);		  // calculate dot product
-				 get_transfer(wfm, t, n, N, &kdotr[tid*9], TR, TI, dplus, dcross);     // Calculating Transfer function
+				 calc_xi_f(wfm ,t, n, N, x, y, z, xi, fonfs);		  // calc frequency and time variables
+				 calc_sep_vecs(wfm, n, N, x, y, z, r12, r21, r13, r31, r23, r32);       // calculate the S/C separation vectors
+				 calc_d_matrices(wfm, n, N, dplus, dcross, r12, r21, r13, r31, r23, r32);     // calculate pieces of waveform
+				 calc_kdotr(wfm, n, N, &kdotr[tid*9], r12, r21, r13, r31, r23, r32);		  // calculate dot product
+				 get_transfer(wfm, t, n, N, &kdotr[tid*9], TR, TI, dplus, dcross, xi, fonfs);     // Calculating Transfer function
 				 fill_time_series(wfm, n, N, TR, TI); // Fill  time series data arrays with slowly evolving signal.
 		}
 }
