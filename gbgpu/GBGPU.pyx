@@ -7,17 +7,18 @@ cdef extern from "src/manager.hh":
     cdef int GetDeviceCount();
 
     cdef cppclass GBGPUwrap "GBGPU":
-        GBGPUwrap(np.float64_t*,
-        np.complex128_t *,
-        np.complex128_t *,
-        np.complex128_t *, int, np.float64_t*, np.float64_t*, np.float64_t*, int, int, np.float64_t, np.float64_t, int, int)
+        GBGPUwrap(int, np.float64_t*,
+        long,
+        long,
+        long, int, int, int, np.float64_t, np.float64_t, int)
 
         void input_data(np.float64_t *data_freqs, np.complex128_t *,
                           np.complex128_t *, np.complex128_t *,
-                          np.float64_t *, np.float64_t *,
-                          np.float64_t *, int)
+                          np.float64_t *, np.float64_t *, np.float64_t *, int)
 
         void Fast_GB(np.float64_t *params)
+
+        void Likelihood(np.float64_t *likelihood)
 
 cdef class GBGPU:
     cdef GBGPUwrap* g
@@ -30,34 +31,35 @@ cdef class GBGPU:
     cdef int NP
 
     def __cinit__(self,
+     max_length_init,
      np.ndarray[ndim=1, dtype=np.float64_t] data_freqs,
-     np.ndarray[ndim=1, dtype=np.complex128_t] data_channel1,
-     np.ndarray[ndim=1, dtype=np.complex128_t] data_channel2,
-     np.ndarray[ndim=1, dtype=np.complex128_t] data_channel3,
-     np.ndarray[ndim=1, dtype=np.float64_t] channel1_ASDinv,
-     np.ndarray[ndim=1, dtype=np.float64_t] channel2_ASDinv,
-     np.ndarray[ndim=1, dtype=np.float64_t] channel3_ASDinv,
+     data_channel1,
+     data_channel2,
+     data_channel3,
      nwalkers,
      ndevices,
      Tobs,
      dt,
-     NP,
-     data_stream_length):
+     NP):
 
         self.NP = NP
         self.Tobs = Tobs
         self.dt = dt
         self.nwalkers = nwalkers
         self.ndevices = ndevices
-        self.N = len(data_channel1)
-        self.data_stream_length = data_stream_length
-        self.g = new GBGPUwrap(&data_freqs[0],
-        &data_channel1[0],
-        &data_channel2[0],
-        &data_channel3[0], self.N, &channel1_ASDinv[0], &channel2_ASDinv[0], &channel3_ASDinv[0],
-        nwalkers, ndevices, Tobs, dt, NP, data_stream_length)
+        self.N = max_length_init
+        self.data_stream_length = len(data_freqs)
 
+        ptr_data_channel1 = data_channel1.data.mem.ptr
+        ptr_data_channel2 = data_channel2.data.mem.ptr
+        ptr_data_channel3 = data_channel3.data.mem.ptr
 
+        self.g = new GBGPUwrap(self.data_stream_length, &data_freqs[0],
+        ptr_data_channel1, ptr_data_channel2, ptr_data_channel3,
+        self.N,
+        nwalkers, ndevices, Tobs, dt, NP)
+
+    """
     def input_data(self, np.ndarray[ndim=1, dtype=np.float64_t] data_freqs,
                             np.ndarray[ndim=1, dtype=np.complex128_t] data_channel1,
                             np.ndarray[ndim=1, dtype=np.complex128_t] data_channel2,
@@ -68,8 +70,8 @@ cdef class GBGPU:
 
         self.g.input_data(&data_freqs[0], &data_channel1[0],
                             &data_channel2[0], &data_channel3[0],
-                            &channel1_ASDinv[0], &channel2_ASDinv[0],
-                            &channel3_ASDinv[0], len(data_freqs))
+                            &channel1_ASDinv[0], &channel2_ASDinv[0], &channel3_ASDinv[0], len(data_freqs))
+    """
 
     def FastGB(self, np.ndarray[ndim=1, dtype=np.float64_t] params):
         cdef np.ndarray[ndim=1, dtype=np.float64_t] pars = np.zeros(self.NP*self.nwalkers, dtype=np.float64)
@@ -94,6 +96,11 @@ cdef class GBGPU:
 
         self.g.Fast_GB(&pars[0])
         return
+
+    def Likelihood(self):
+        cdef np.ndarray[ndim=1, dtype=np.float64_t] like_ = np.zeros(2, dtype=np.float64)
+        self.g.Likelihood(&like_[0])
+        return like_
 
 def getDeviceCount():
     return GetDeviceCount()

@@ -32,6 +32,7 @@
 #include "cuda_complex.hpp"
 #include "Constants.h"
 #include "LISA.h"
+#include <assert.h>
 
 #include "global.h"
 
@@ -378,27 +379,31 @@ void get_transfer(Waveform *wfm, double t, int n, int N, double *kdotr, double *
 
 __device__
 
-void fill_time_series(Waveform *wfm, int n, int N, double *TR, double *TI)
+void fill_time_series(int walker_i, int n, int N, double *TR, double *TI,
+											double *data12, double *data21, double *data13,
+										  double *data31, double *data23, double *data32)
 {
-	wfm->data12[2*n]   = TR[(0*3 + 1)];
-	wfm->data21[2*n]   = TR[(1*3 + 0)];
-	wfm->data31[2*n]   = TR[(2*3 + 0)];
-	wfm->data12[2*n+1] = TI[(0*3 + 1)];
-	wfm->data21[2*n+1] = TI[(1*3 + 0)];
-	wfm->data31[2*n+1] = TI[(2*3 + 0)];
-	wfm->data13[2*n]   = TR[(0*3 + 2)];
-	wfm->data23[2*n]   = TR[(1*3 + 2)];
-	wfm->data32[2*n]   = TR[(2*3 + 1)];
-	wfm->data13[2*n+1] = TI[(0*3 + 2)];
-	wfm->data23[2*n+1] = TI[(1*3 + 2)];
-	wfm->data32[2*n+1] = TI[(2*3 + 1)];
+	data12[(walker_i*2*N) + 2*n]   = TR[(0*3 + 1)];
+	data21[(walker_i*2*N) + 2*n]   = TR[(1*3 + 0)];
+	data31[(walker_i*2*N) + 2*n]   = TR[(2*3 + 0)];
+	data12[(walker_i*2*N) + 2*n+1] = TI[(0*3 + 1)];
+	data21[(walker_i*2*N) + 2*n+1] = TI[(1*3 + 0)];
+	data31[(walker_i*2*N) + 2*n+1] = TI[(2*3 + 0)];
+	data13[(walker_i*2*N) + 2*n]   = TR[(0*3 + 2)];
+	data23[(walker_i*2*N) + 2*n]   = TR[(1*3 + 2)];
+	data32[(walker_i*2*N) + 2*n]   = TR[(2*3 + 1)];
+	data13[(walker_i*2*N) + 2*n+1] = TI[(0*3 + 2)];
+	data23[(walker_i*2*N) + 2*n+1] = TI[(1*3 + 2)];
+	data32[(walker_i*2*N) + 2*n+1] = TI[(2*3 + 1)];
 
 	return;
 }
 
 
 __global__
-void GenWave(Waveform *wfm_trans, int N, int nwalkers){
+void GenWave(Waveform *wfm_trans, int N, int nwalkers,
+						 double *data12, double *data21, double *data13,
+						 double *data31, double *data23, double *data32){
 	double t=0.0;
 	Waveform *wfm;
 	int tid = (int)threadIdx.x;
@@ -428,63 +433,105 @@ void GenWave(Waveform *wfm_trans, int N, int nwalkers){
 				 calc_d_matrices(wfm, n, N, dplus, dcross, r12, r21, r13, r31, r23, r32);     // calculate pieces of waveform
 				 calc_kdotr(wfm, n, N, &kdotr[tid*9], r12, r21, r13, r31, r23, r32);		  // calculate dot product
 				 get_transfer(wfm, t, n, N, &kdotr[tid*9], TR, TI, dplus, dcross, xi, fonfs);     // Calculating Transfer function
-				 fill_time_series(wfm, n, N, TR, TI); // Fill  time series data arrays with slowly evolving signal.
+				 fill_time_series(walker_i, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
 		}
 }
 
 }
 
-void fft_data(Waveform *wfm_trans, cufftHandle plan, int nwalkers)
+// cuFFT API errors
+static const char *_cudaGetErrorEnum(cufftResult error)
+{
+    switch (error)
+    {
+        case CUFFT_SUCCESS:
+            return "CUFFT_SUCCESS";
+
+        case CUFFT_INVALID_PLAN:
+            return "CUFFT_INVALID_PLAN";
+
+        case CUFFT_ALLOC_FAILED:
+            return "CUFFT_ALLOC_FAILED";
+
+        case CUFFT_INVALID_TYPE:
+            return "CUFFT_INVALID_TYPE";
+
+        case CUFFT_INVALID_VALUE:
+            return "CUFFT_INVALID_VALUE";
+
+        case CUFFT_INTERNAL_ERROR:
+            return "CUFFT_INTERNAL_ERROR";
+
+        case CUFFT_EXEC_FAILED:
+            return "CUFFT_EXEC_FAILED";
+
+        case CUFFT_SETUP_FAILED:
+            return "CUFFT_SETUP_FAILED";
+
+        case CUFFT_INVALID_SIZE:
+            return "CUFFT_INVALID_SIZE";
+
+        case CUFFT_UNALIGNED_DATA:
+            return "CUFFT_UNALIGNED_DATA";
+    }
+
+    return "<unknown>";
+}
+
+#define cufftSafeCall(err)      __cufftSafeCall(err, __FILE__, __LINE__)
+inline void __cufftSafeCall(cufftResult err, const char *file, const int line)
+{
+    if( CUFFT_SUCCESS != err) {
+    fprintf(stderr, "CUFFT error in file '%s', line %d\n %s\nerror %d: %s\nterminating!\n",__FILE__, __LINE__,err,
+                                _cudaGetErrorEnum(err));
+    cudaDeviceReset(); assert(0);
+	}
+}
+
+
+void fft_data(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32, cufftHandle plan, int nwalkers)
 {
 
-	Waveform *wfm;
+	cufftSafeCall(cufftExecZ2Z(plan, (cufftDoubleComplex*)data12, (cufftDoubleComplex*)data12, -1));
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
 
-	for (int walker_i=0; walker_i<nwalkers; walker_i++){
-
-		wfm = &wfm_trans[walker_i];
-		long N = wfm->N;
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)wfm->data12, (cufftDoubleComplex*)wfm->data12, -1) != CUFFT_SUCCESS){
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data21, (cufftDoubleComplex*)data21, -1) != CUFFT_SUCCESS){
 	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
 	return;}
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)wfm->data21, (cufftDoubleComplex*)wfm->data21, -1) != CUFFT_SUCCESS){
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data31, (cufftDoubleComplex*)data31, -1) != CUFFT_SUCCESS){
 	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
 	return;}
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)wfm->data31, (cufftDoubleComplex*)wfm->data31, -1) != CUFFT_SUCCESS){
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data13, (cufftDoubleComplex*)data13, -1) != CUFFT_SUCCESS){
 	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
 	return;}
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)wfm->data13, (cufftDoubleComplex*)wfm->data13, -1) != CUFFT_SUCCESS){
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data23, (cufftDoubleComplex*)data23, -1) != CUFFT_SUCCESS){
 	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
 	return;}
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)wfm->data23, (cufftDoubleComplex*)wfm->data23, -1) != CUFFT_SUCCESS){
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data32, (cufftDoubleComplex*)data32, -1) != CUFFT_SUCCESS){
 	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
 	return;}
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)wfm->data32, (cufftDoubleComplex*)wfm->data32, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-	}
 	return;
 }
 
 __global__
-void unpack_data_1(Waveform *wfm_trans, int nwalkers)
+void unpack_data_1(Waveform *wfm_trans, double *data12, double *data21, double *data13,
+double *data31, double *data23, double *data32, int nwalkers)
 {
 
 	Waveform *wfm;
@@ -498,18 +545,18 @@ void unpack_data_1(Waveform *wfm_trans, int nwalkers)
 			 i < N;
 			 i += blockDim.x * gridDim.x){
 		// populate from most negative (Nyquist) to most positive (Nyquist-1)
-		wfm->a12[i]   = 0.5*wfm->data12[N+i]/(double)N;  // moved the 0.5
-		wfm->a21[i]   = 0.5*wfm->data21[N+i]/(double)N;
-		wfm->a31[i]   = 0.5*wfm->data31[N+i]/(double)N;
-		wfm->a12[i+N] = 0.5*wfm->data12[i]/(double)N;
-		wfm->a21[i+N] = 0.5*wfm->data21[i]/(double)N;
-		wfm->a31[i+N] = 0.5*wfm->data31[i]/(double)N;
-		wfm->a13[i]   = 0.5*wfm->data13[N+i]/(double)N;
-		wfm->a23[i]   = 0.5*wfm->data23[N+i]/(double)N;
-		wfm->a32[i]   = 0.5*wfm->data32[N+i]/(double)N;
-		wfm->a13[i+N] = 0.5*wfm->data13[i]/(double)N;
-		wfm->a23[i+N] = 0.5*wfm->data23[i]/(double)N;
-		wfm->a32[i+N] = 0.5*wfm->data32[i]/(double)N;
+		wfm->a12[i]   = 0.5*data12[(walker_i*2*N) + N+i]/(double)N;  // moved the 0.5
+		wfm->a21[i]   = 0.5*data21[(walker_i*2*N) + N+i]/(double)N;
+		wfm->a31[i]   = 0.5*data31[(walker_i*2*N) + N+i]/(double)N;
+		wfm->a12[i+N] = 0.5*data12[(walker_i*2*N) + i]/(double)N;
+		wfm->a21[i+N] = 0.5*data21[(walker_i*2*N) + i]/(double)N;
+		wfm->a31[i+N] = 0.5*data31[(walker_i*2*N) + i]/(double)N;
+		wfm->a13[i]   = 0.5*data13[(walker_i*2*N) + N+i]/(double)N;
+		wfm->a23[i]   = 0.5*data23[(walker_i*2*N) + N+i]/(double)N;
+		wfm->a32[i]   = 0.5*data32[(walker_i*2*N) + N+i]/(double)N;
+		wfm->a13[i+N] = 0.5*data13[(walker_i*2*N) + i]/(double)N;
+		wfm->a23[i+N] = 0.5*data23[(walker_i*2*N) + i]/(double)N;
+		wfm->a32[i+N] = 0.5*data32[(walker_i*2*N) + i]/(double)N;
 	}
 }
 }
@@ -541,6 +588,26 @@ void unpack_data_2(Waveform *wfm_trans, int nwalkers)
 }
 }
 */
+
+
+__device__ double atomicAddDouble(double* address, double val)
+{
+    unsigned long long* address_as_ull =
+                              (unsigned long long*)address;
+    unsigned long long old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(val +
+                               __longlong_as_double(assumed)));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+
 
 __device__
 void XYZ(int i, double *a12, double *a21, double *a13, double *a31, double *a23, double *a32, double f0, long q, long M, double dt, double Tobs, double *XLS_r, double *YLS_r, double *ZLS_r,
@@ -660,6 +727,9 @@ void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs,
 					double* XSL, double* YSL, double *ZSL){
 
 		int N;
+			long add_ind;
+		double asd1, asd2, asd3;
+
 		Waveform *wfm;
 		for (int walker_i = blockIdx.y * blockDim.y + threadIdx.y;
 				 walker_i < nwalkers;
@@ -672,10 +742,57 @@ void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs,
 				 i += blockDim.x * gridDim.x)
 		{
 
+
 		double XLS_r, YLS_r, ZLS_r, XSL_r, YSL_r, ZSL_r, XLS_i, YLS_i, ZLS_i, XSL_i, YSL_i, ZSL_i;
 
 		XYZ(i, wfm->a12, wfm->a21, wfm->a13, wfm->a31, wfm->a23, wfm->a32, wfm->params[0]/wfm->T, wfm->q, N, dt, Tobs,
 				&XLS_r, &YLS_r, &ZLS_r, &XSL_r, &YSL_r, &ZSL_r, &XLS_i, &YLS_i, &ZLS_i, &XSL_i, &YSL_i, &ZSL_i);
+
+		add_ind = (wfm->q + i - M/2);
+
+		atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
+		atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);
+
+		atomicAddDouble(&YLS[2*add_ind], YLS_r/asd2);
+		atomicAddDouble(&YLS[2*add_ind+1], YLS_i/asd2);
+
+		atomicAddDouble(&YLS[2*add_ind], ZLS_r/asd3);
+		atomicAddDouble(&ZLS[2*add_ind+1], ZLS_i/asd3);
+
+		atomicAddDouble(&XSL[2*add_ind], XSL_r/asd1);
+		atomicAddDouble(&XSL[2*add_ind+1], XSL_i)/asd1;
+
+		atomicAddDouble(&YSL[2*add_ind], YSL_r/asd2);
+		atomicAddDouble(&YSL[2*add_ind+1], YSL_i/asd2);
+
+		atomicAddDouble(&YSL[2*add_ind], ZSL_r/asd3);
+		atomicAddDouble(&ZSL[2*add_ind+1], ZSL_i/asd3);
+
+
 }
 }
 }
+
+/*
+__global__
+void prep_with_ASD(double *XLS, double *YLS, double *ZLS, double *channel1_ASDinv, double *channel2_ASDinv, double *channel3_ASDinv, int data_stream_length){
+	double asd1, asd2, asd3;
+	for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+			 i < data_stream_length;
+			 i += blockDim.x * gridDim.x)
+	{
+			asd1 = channel1_ASDinv[i];
+			asd2 = channel2_ASDinv[i];
+			asd3 = channel3_ASDinv[i];
+
+			XLS[2*i] = XLS[2*i]/asd1;
+			XLS[2*i+1] = XLS[2*i+1]/asd1;
+
+			YLS[2*i] = YLS[2*i]/asd2;
+			YLS[2*i+1] = YLS[2*i+1]/asd2;
+
+			ZLS[2*i] = ZLS[2*i]/asd3;
+			ZLS[2*i+1] = ZLS[2*i+1]/asd3;
+	}
+}
+*/

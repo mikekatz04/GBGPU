@@ -30,10 +30,8 @@
 #ifndef __MANAGER_H__
 #define __MANAGER_H__
 
-#ifdef __CUDACC__
 #include "cuComplex.h"
 #include "cublas_v2.h"
-#endif
 
 #include "global.h"
 #include <complex>
@@ -50,14 +48,9 @@ class GBGPU {
   double dt;
   int NP;
 
-  /*#ifdef __CUDACC__
-  dim3 gridDim;
-  int NUM_THREADS;
-  int num_blocks;
-
   cublasHandle_t handle;
   cublasStatus_t stat;
-  #endif*/
+
 
   int ndevices;
 
@@ -75,9 +68,6 @@ class GBGPU {
   agcmplx *d_data_channel2;
   agcmplx *d_data_channel3;
 
-  agcmplx *d_template_channel1;
-  agcmplx *d_template_channel2;
-  agcmplx *d_template_channel3;
   double *d_channel1_ASDinv;
   double *d_channel2_ASDinv;
   double *d_channel3_ASDinv;
@@ -90,6 +80,7 @@ class GBGPU {
   double *d_params;
   double *X_buffer, *Y_buffer, *Z_buffer;
   double *XLS, *YLS, *ZLS, *XSL, *YSL, *ZSL;
+  double *data12, *data21, *data13, *data31, *data23, *data32;
   int N;
 
 public:
@@ -105,26 +96,22 @@ public:
    */
 
   GBGPU(
-        double *data_freqs_,
-        cmplx *data_channel1_,
-        cmplx *data_channel2_,
-        cmplx *data_channel3_, int N_,
-        double *channel1_ASDinv_, double *channel2_ASDinv_, double *channel3_ASDinv_,
-        int nwalkers_,
-        int ndevices_,
-        double Tobs_,
-        double dt_,
-        int NP_,
-        int data_stream_length_); // constructor (copies to GPU)
+    int data_stream_length_,
+    double *data_freqs_,
+    long ptr_data_channel1_,
+    long ptr_data_channel2_,
+    long ptr_data_channel3_, int N_,
+    int nwalkers_,
+    int ndevices_,
+    double Tobs_,
+    double dt_,
+    int NP_); // constructor (copies to GPU)
 
   void Fast_GB(double *params);
 
   ~GBGPU(); // destructor
 
-  void input_data(double *data_freqs, cmplx *data_channel1,
-                            cmplx *data_channel2, cmplx *data_channel3,
-                            double *channel1_ASDinv, double *channel2_ASDinv,
-                            double *channel3_ASDinv, int data_stream_length_);
+  void Likelihood(double *likelihood);
 
 };
 
