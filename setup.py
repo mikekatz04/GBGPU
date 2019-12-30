@@ -156,6 +156,40 @@ if run_cuda_install:
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/src"],
     )
 
+    ext_gpu2 = Extension(
+        "GlobalFitUtils",
+        sources=["gbgpu/src/likelihood.cu", "gbgpu/Utils.pyx"],
+        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
+        libraries=["cudart", "cublas", "gsl", "gslcblas", "gomp"],
+        language="c++",
+        runtime_library_dirs=[CUDA["lib64"]],
+        # This syntax is specific to this build system
+        # we're only going to use certain compiler args with nvcc
+        # and not with gcc the implementation of this trick is in
+        # customize_compiler()
+        extra_compile_args={
+            "gcc": ["-std=c99"],  # '-g'],
+            "nvcc": [
+                "-arch=sm_70",
+                "-gencode=arch=compute_35,code=sm_35",
+                "-gencode=arch=compute_50,code=sm_50",
+                "-gencode=arch=compute_52,code=sm_52",
+                "-gencode=arch=compute_60,code=sm_60",
+                "-gencode=arch=compute_61,code=sm_61",
+                "-gencode=arch=compute_70,code=sm_70",
+                "--default-stream=per-thread",
+                "--ptxas-options=-v",
+                "-c",
+                "--compiler-options",
+                "'-fPIC'",
+                "-lineinfo",
+                "-Xcompiler",
+                "-fopenmp",
+            ],  # ,"-G", "-g"] # for debugging
+        },
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/src"],
+    )
+
 """
 src_folder = "gbgpu/src/"
 for file in os.listdir(src_folder):
@@ -203,7 +237,7 @@ else:
     extensions = [ext_cpu]
 
 """
-extensions = [ext_gpu]
+extensions = [ext_gpu, ext_gpu2]
 
 setup(
     name="gbgpu",
