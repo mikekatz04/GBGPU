@@ -177,8 +177,30 @@ void Likelihood::input_data(double *data_freqs_, cmplx *data_channel1_,
         gpuErrchk(cudaMemcpy(d_channel3_ASDinv, channel3_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
 }
 
+__global__
+void apply_noise_weighting(agcmplx *template_channel1, agcmplx *template_channel2, agcmplx *template_channel3,
+                      double *channel1_ASDinv, double *channel2_ASDinv, double *channel3_ASDinv, int N){
+
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < N;
+       i += blockDim.x * gridDim.x){
+
+         template_channel1[i] = template_channel1[i]/channel1_ASDinv[i];
+         template_channel2[i] = template_channel2[i]/channel2_ASDinv[i];
+         template_channel3[i] = template_channel3[i]/channel3_ASDinv[i];
+
+  }
+}
+
 
 void Likelihood::GetLikelihood(double *likelihood){
+
+  int NUM_THREADS = 256;
+  int num_blocks = std::ceil((data_stream_length + NUM_THREADS -1)/NUM_THREADS);
+  apply_noise_weighting<<<num_blocks, NUM_THREADS>>>(d_template_channel1, d_template_channel2, d_template_channel3,
+                                                     d_channel1_ASDinv, d_channel2_ASDinv, d_channel3_ASDinv, data_stream_length);
+  cudaDeviceSynchronize();
+  gpuErrchk(cudaGetLastError());
 
   double d_h = 0.0;
   double h_h = 0.0;
@@ -232,6 +254,28 @@ void Likelihood::GetLikelihood(double *likelihood){
 
            likelihood[0] = 4*d_h;
            likelihood[1] = 4*h_h;
+}
+
+__global__
+void reset_arrays(agcmplx *template_channel1, agcmplx *template_channel2, agcmplx *template_channel3, int N){
+
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < N;
+       i += blockDim.x * gridDim.x){
+
+         template_channel1[i] = 0.0;
+         template_channel2[i] = 0.0;
+         template_channel3[i] = 0.0;
+
+  }
+}
+
+void Likelihood::ResetArrays(){
+  int NUM_THREADS = 256;
+  int num_blocks = std::ceil((data_stream_length + NUM_THREADS -1)/NUM_THREADS);
+  reset_arrays<<<num_blocks, NUM_THREADS>>>(d_template_channel1, d_template_channel2, d_template_channel3, data_stream_length);
+  cudaDeviceSynchronize();
+  gpuErrchk(cudaGetLastError());
 }
 
 /*

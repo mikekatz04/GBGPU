@@ -109,6 +109,8 @@ public:
                             double *channel1_ASDinv_, double *channel2_ASDinv_,
                             double *channel3_ASDinv_, int data_stream_length_);
 
+  void ResetArrays();
+
   ~Likelihood(); // destructor
 
 

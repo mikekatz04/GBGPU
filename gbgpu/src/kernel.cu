@@ -723,8 +723,7 @@ void XYZ(int i, double *a12, double *a21, double *a13, double *a31, double *a23,
 }
 
 __global__
-void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs, double *XLS, double *YLS, double *ZLS,
-					double* XSL, double* YSL, double *ZSL){
+void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs, double *XLS, double *YLS, double *ZLS){
 
 		int N;
 			long add_ind;
@@ -756,17 +755,17 @@ void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs,
 		atomicAddDouble(&YLS[2*add_ind], YLS_r/asd2);
 		atomicAddDouble(&YLS[2*add_ind+1], YLS_i/asd2);
 
-		atomicAddDouble(&YLS[2*add_ind], ZLS_r/asd3);
+		atomicAddDouble(&ZLS[2*add_ind], ZLS_r/asd3);
 		atomicAddDouble(&ZLS[2*add_ind+1], ZLS_i/asd3);
 
-		atomicAddDouble(&XSL[2*add_ind], XSL_r/asd1);
+		/*atomicAddDouble(&XSL[2*add_ind], XSL_r/asd1);
 		atomicAddDouble(&XSL[2*add_ind+1], XSL_i)/asd1;
 
 		atomicAddDouble(&YSL[2*add_ind], YSL_r/asd2);
 		atomicAddDouble(&YSL[2*add_ind+1], YSL_i/asd2);
 
 		atomicAddDouble(&YSL[2*add_ind], ZSL_r/asd3);
-		atomicAddDouble(&ZSL[2*add_ind+1], ZSL_i/asd3);
+		atomicAddDouble(&ZSL[2*add_ind+1], ZSL_i/asd3);*/
 
 
 }

@@ -18,6 +18,8 @@ cdef extern from "src/likelihood.hh":
 
         void GetLikelihood(np.float64_t *likelihood)
 
+        void ResetArrays()
+
 cdef class Likelihood:
     cdef Likelihoodwrap* g
     cdef int N
@@ -76,6 +78,10 @@ cdef class Likelihood:
         cdef np.ndarray[ndim=1, dtype=np.float64_t] like_ = np.zeros(2, dtype=np.float64)
         self.g.GetLikelihood(&like_[0])
         return like_
+
+    def ResetArrays(self):
+        self.g.ResetArrays()
+        return
 
 def getDeviceCount():
     return GetDeviceCount()
