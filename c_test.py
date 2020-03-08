@@ -234,7 +234,7 @@ def test():
     et = time.perf_counter()
     print("fastGB time per waveform:", (et - st) / num)"""
 
-    num = 100
+    num = 300
     st = time.perf_counter()
     for i in range(num):
         like_class.ResetArrays()
