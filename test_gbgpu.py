@@ -1,7 +1,10 @@
-from phenomhm.phenomhm import pyPhenomHM
+from gbgpu.gbgpu import pyGBGPU
 import numpy as np
 import argparse
 import time
+import scipy.constants as ct
+
+from katzsamplertools.utils.constants import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process some integers.")
@@ -10,112 +13,87 @@ if __name__ == "__main__":
 
     prop_defaults = {
         "TDItag": "AET",  # AET or XYZ
-        "max_dimensionless_freq": 0.5,
-        "min_dimensionless_freq": 1e-4,
         "data_stream_whitened": True,
         "data_params": {},
-        "log_scaled_likelihood": True,
         "eps": 1e-6,
-        "test_inds": None,
-        "num_params": 11,
-        "num_data_points": int(2 ** 19),
-        "df": None,
-        "tLtoSSB": True,
-        "noise_kwargs": {"model": "SciRDv1", "includewd": 1},
+        "NP": 8,
+        "noise_kwargs": {"model": "SciRDv1", "includewd": None},
+        "add_noise": None,  # if added should be dict with fs
+        "oversample": 4,
     }
 
-    max_length_init = 2 ** 12
-    nwalkers, ndevices = 24, 1
-    l_vals = np.array([2, 3, 4, 2, 3, 4], dtype=np.uint32)
-    m_vals = np.array([2, 3, 4, 1, 2, 3], dtype=np.uint32)
-    data_freqs, data_stream = None, None
-    t0 = 1.0
-    t_obs_start = 0.9
-    t_obs_end = 0.0
-
-    data_params = {
-        "ln_mT": np.log(4e7),
-        "mr": 0.2,
-        "a1": 0.0,
-        "a2": 0.0,
-        "ln_distance": np.log(15.93461637),  # Gpc z=2
-        "phiRef": 3.09823412789,
-        "cos_inc": np.cos(2.98553920),
-        "lam": 5.900332547,
-        "sin_beta": np.sin(-1.3748820938),
-        "psi": 0.139820023,
-        "ln_tRef": np.log(2.39284219993e1),
-    }
-
-    """data_params = {
-        "ln_mT": np.log(2.00000000e06),
-        "mr": 1 / 3.00000000e00,
-        "a1": 0.0,
-        "a2": 0.0,
-        "ln_distance": np.log(3.65943000e01),  # Gpc z=2
-        "phiRef": 2.13954125e00,
-        "cos_inc": np.cos(1.04719755e00),
-        "lam": -2.43647481e-02,
-        "sin_beta": np.sin(6.24341583e-01),
-        "psi": 2.02958790e00,
-        "ln_tRef": np.log(5.02462348e01),
-    }"""
-
-    prop_defaults["data_params"] = data_params
-
+    max_length_init = 2 ** 11
+    nWD = 2
+    ndevices = 1
+    data_freqs = None
+    data_stream = None
     key_order = [
-        "ln_mT",
-        "mr",
-        "a1",
-        "a2",
-        "ln_distance",  # Gpc z=2
-        "phiRef",
-        "cos_inc",
-        "lam",
+        "milli_f0",
+        "log10_fdot",
         "sin_beta",
+        "lam",
+        "log10_amp",
+        "cos_iota",
         "psi",
-        "ln_tRef",
+        "phi0",
+    ]
+    Tobs = 4.0 * YRSID_SI
+    dt = 10.0
+
+    injection = [
+        {
+            "milli_f0": 1.35962000e-03 / 1e-3,
+            "log10_fdot": np.log10(8.94581279e-19),
+            "sin_beta": np.sin(3.12414000e-01),
+            "lam": -2.75291000e00,
+            "log10_amp": np.log10(1.07345000e-22),
+            "cos_iota": np.cos(5.23599000e-01),
+            "psi": 0.42057295,
+            "phi0": 3.05815650e00,
+        },
+        {
+            "milli_f0": 2e-3 / 1e-3,
+            "log10_fdot": np.log10(2e-18),
+            "sin_beta": np.sin(0.4),
+            "lam": 2.0,
+            "log10_amp": np.log10(1e-21),
+            "cos_iota": np.cos(1.0),
+            "psi": 1.0,
+            "phi0": np.pi / 2,
+        },
     ]
 
-    phenomhm = pyPhenomHM(
+    pygbgpu = pyGBGPU(
+        injection,
         max_length_init,
-        nwalkers,
+        nWD,
         ndevices,
-        l_vals,
-        m_vals,
         data_freqs,
         data_stream,
-        t0,
         key_order,
-        t_obs_start,
-        t_obs_end=t_obs_end,
+        Tobs,
+        dt,
         **prop_defaults
     )
 
-    waveform_params = np.tile(
-        np.array([data_params[key] for key in key_order]), (nwalkers, 1)
+    waveform_params = np.zeros((nWD, 8))
+
+    waveform_params[: len(injection)] = np.asarray(
+        [[injection_i[key] for key in key_order] for injection_i in injection]
     )
 
-    waveform_params = np.tile(
-        np.array([data_params[key] for key in key_order]), (nwalkers * ndevices, 1)
-    )
+    waveform_params[len(injection) :] = waveform_params[0]
 
-    waveform_params[0 : ndevices * nwalkers : 2, 6] *= -1
-    waveform_params[0 : ndevices * nwalkers : 2, 8] *= -1
-    waveform_params[0 : ndevices * nwalkers : 2, 9] = (
-        np.pi - waveform_params[0 : ndevices * nwalkers : 2, 9]
-    )
+    import pdb
 
-    for i in range(4):
-        waveform_params[
-            (i) * int(ndevices * nwalkers / 4) : (i + 1) * int(ndevices * nwalkers / 4),
-            7,
-        ] += (i * np.pi / 2)
-        waveform_params[
-            (i) * int(ndevices * nwalkers / 4) : (i + 1) * int(ndevices * nwalkers / 4),
-            9,
-        ] += (i * np.pi / 2)
+    pdb.set_trace()
+    like = pygbgpu.getNLL(waveform_params.T)
+    snr = pygbgpu.getNLL(waveform_params.T, return_snr=True)
+    import pdb
 
+    pdb.set_trace()
+
+    """
     check = phenomhm.getNLL(waveform_params.T)
 
     if args.time:
@@ -140,3 +118,4 @@ if __name__ == "__main__":
     import pdb
 
     pdb.set_trace()
+    """

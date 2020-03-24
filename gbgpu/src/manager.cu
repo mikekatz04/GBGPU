@@ -94,9 +94,7 @@ void print_mem_info(){
 GBGPU::GBGPU (
     int data_stream_length_,
     double *data_freqs_,
-    long ptr_data_channel1_,
-    long ptr_data_channel2_,
-    long ptr_data_channel3_, int N_,
+    int N_,
     int nwalkers_,
     int ndevices_,
     double Tobs_,
@@ -127,6 +125,8 @@ GBGPU::GBGPU (
     ndevices = ndevices_;
 
     ndevices = ndevices_;
+
+    df = data_freqs[2] - data_freqs[1];
 
       gpuErrchk(cudaMalloc(&d_data_freqs, data_stream_length*sizeof(double)));
 
@@ -174,9 +174,7 @@ GBGPU::GBGPU (
       //gpuErrchk(cudaMalloc(&YLS, 2*data_stream_length*sizeof(double)));
       //gpuErrchk(cudaMalloc(&ZLS, 2*data_stream_length*sizeof(double)));
 
-      XLS = (double *)ptr_data_channel1_;
-      YLS = (double *)ptr_data_channel2_;
-      ZLS = (double *)ptr_data_channel3_;
+      gpuErrchk(cudaMalloc(&d_like_out, nwalkers*2*sizeof(double)));
 
       //gpuErrchk(cudaMalloc(&XSL, 2*data_stream_length*sizeof(double)));
       //gpuErrchk(cudaMalloc(&YSL, 2*data_stream_length*sizeof(double)));
@@ -203,29 +201,35 @@ GBGPU::GBGPU (
 
 }
 
-/*
-void GBGPU::input_data(double *data_freqs_, cmplx *data_channel1_,
-                          cmplx *data_channel2_, cmplx *data_channel3_,
-                          double *channel1_ASDinv_, double *channel2_ASDinv_,
-                          double *channel3_ASDinv_, int data_stream_length_){
+
+void GBGPU::input_data(
+    int data_stream_length_,
+    long ptr_template_channel1_,
+    long ptr_template_channel2_,
+    long ptr_template_channel3_,
+    long ptr_data_channel1_,
+    long ptr_data_channel2_,
+    long ptr_data_channel3_,
+    long ptr_ASD_inv1_,
+    long ptr_ASD_inv2_,
+    long ptr_ASD_inv3_
+){
 
     assert(data_stream_length_ == data_stream_length);
+    XLS = (double *)ptr_template_channel1_;
+    YLS = (double *)ptr_template_channel2_;
+    ZLS = (double *)ptr_template_channel3_;
 
-        gpuErrchk(cudaMemcpy(d_data_freqs, data_freqs_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
+    d_data_channel1 = (agcmplx*)ptr_data_channel1_;
+    d_data_channel2 = (agcmplx*)ptr_data_channel2_;
+    d_data_channel3 = (agcmplx*)ptr_data_channel3_;
 
-        gpuErrchk(cudaMemcpy(d_data_channel1, data_channel1_, data_stream_length*sizeof(agcmplx), cudaMemcpyHostToDevice));
+    d_channel1_ASDinv = (double*) ptr_ASD_inv1_;
+    d_channel2_ASDinv = (double*) ptr_ASD_inv2_;
+    d_channel3_ASDinv = (double*) ptr_ASD_inv3_;
 
-        gpuErrchk(cudaMemcpy(d_data_channel2, data_channel2_, data_stream_length*sizeof(agcmplx), cudaMemcpyHostToDevice));
-
-        gpuErrchk(cudaMemcpy(d_data_channel3, data_channel3_, data_stream_length*sizeof(agcmplx), cudaMemcpyHostToDevice));
-
-        gpuErrchk(cudaMemcpy(d_channel1_ASDinv, channel1_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
-
-        gpuErrchk(cudaMemcpy(d_channel2_ASDinv, channel2_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
-
-        gpuErrchk(cudaMemcpy(d_channel3_ASDinv, channel3_ASDinv_, data_stream_length*sizeof(double), cudaMemcpyHostToDevice));
 }
-*/
+
 
 __global__
 void fill_params(Waveform *wfm_trans, double *params, int nwalkers, int NP)
@@ -236,7 +240,7 @@ void fill_params(Waveform *wfm_trans, double *params, int nwalkers, int NP)
        walker_i += blockDim.x * gridDim.x){
          wfm = &wfm_trans[walker_i];
 
-         for (int i=0; i<NP; i++) wfm->params[0] = params[walker_i*NP + i];
+         for (int i=0; i<NP; i++) wfm->params[i] = params[walker_i*NP + i];
          wfm->q  = (long)(wfm->params[0]);
 
   }
@@ -261,7 +265,7 @@ void GBGPU::Fast_GB(double *params_){//,double *XLS, double *YLS, double *ZLS,do
       gpuErrchk(cudaGetLastError());
 
       int num_blocks = std::ceil((h_wfm->N + NUM_THREADS -1)/NUM_THREADS);
-      dim3 gridDim(num_blocks, nwalkers);
+      dim3 gridDim(num_blocks, 1); //nwalkers);
       GenWave<<<gridDim, NUM_THREADS>>>(wfm, h_wfm->N, nwalkers,
                                          data12, data21, data13, data31, data23, data32);
       cudaDeviceSynchronize();
@@ -277,109 +281,83 @@ void GBGPU::Fast_GB(double *params_){//,double *XLS, double *YLS, double *ZLS,do
       cudaDeviceSynchronize();
       gpuErrchk(cudaGetLastError());*/
 
-      XYZ_wrap<<<gridDim, NUM_THREADS>>>(wfm, nwalkers, N, dt, Tobs, XLS, YLS, ZLS);
+      XYZ_wrap<<<gridDim, NUM_THREADS>>>(wfm, nwalkers, N, dt, Tobs, XLS, YLS, ZLS, df);
       cudaDeviceSynchronize();
       gpuErrchk(cudaGetLastError());
 }
 
 
+__global__ void calc_like(double *like_out, Waveform *wfm_trans, agcmplx *Xarr, agcmplx *Yarr, agcmplx *Zarr,
+                          double *channel1_ASDinv, double *channel2_ASDinv, double *channel3_ASDinv,
+                          agcmplx *data_channel1, agcmplx *data_channel2, agcmplx *data_channel3,
+                          int nwalkers, int M)
+{
+
+    agcmplx A, E, T, X, Y, Z, Ainv, Einv, Tinv, A_data, E_data, T_data, A_temp, E_temp, T_temp;
+    int add_ind;
+
+    for (int walker_i = blockIdx.x * blockDim.x + threadIdx.x;
+             walker_i < nwalkers;
+             walker_i += blockDim.x * gridDim.x){
+
+    Waveform * wfm = &wfm_trans[walker_i];
+    int N = wfm->N;
+    int mid_ind = wfm->q;
+
+    double temp_h_h = 0.0;
+    double temp_d_h = 0.0;
+    for (int i = 0;
+             i < M;
+             i += 1)
+    {
+
+        add_ind = (mid_ind + i - M/2);
+
+        A = Xarr[i];
+        E = Yarr[i];
+        T = Zarr[i];
+
+        Ainv = channel1_ASDinv[add_ind];
+        Einv = channel2_ASDinv[add_ind];
+        Tinv = channel3_ASDinv[add_ind];
+
+        A_data = data_channel1[add_ind];
+        E_data = data_channel2[add_ind];
+        T_data = data_channel3[add_ind];
+
+        A_temp = A*Ainv;
+        E_temp = E*Einv;
+        T_temp = T*Tinv;
+
+        temp_h_h += gcmplx::real(gcmplx::conj(A_temp)*A_temp);
+        temp_h_h += gcmplx::real(gcmplx::conj(E_temp)*E_temp);
+        temp_h_h += gcmplx::real(gcmplx::conj(T_temp)*T_temp);
+
+        temp_d_h += gcmplx::real(gcmplx::conj(A_data)*A_temp);
+        temp_d_h += gcmplx::real(gcmplx::conj(E_data)*E_temp);
+        temp_d_h += gcmplx::real(gcmplx::conj(T_data)*T_temp);
+
+   }
+
+   like_out[2*walker_i] = 4.0*temp_d_h;
+   like_out[2*walker_i + 1] = 4.0*temp_h_h;
+ }
+}
+
+
 void GBGPU::Likelihood(double *likelihood){
+    dim3 likeDim(nwalkers);
+    int NUM_THREADS = 256;
 
-  double d_h = 0.0;
-  double h_h = 0.0;
-  char * status;
-  double res;
-  cuDoubleComplex result;
-  cublasStatus_t stat;
+    calc_like<<<likeDim, NUM_THREADS>>>(d_like_out, wfm, (agcmplx*)XLS, (agcmplx*)YLS, (agcmplx*)ZLS,
+                              d_channel1_ASDinv, d_channel2_ASDinv, d_channel3_ASDinv,
+                              d_data_channel1, d_data_channel2, d_data_channel3,
+                              nwalkers, N);
 
-          // get data - template terms
-           stat = cublasZdotc(handle, data_stream_length,
-                   (cuDoubleComplex*)XLS, 1,
-                   (cuDoubleComplex*)d_data_channel1, 1,
-                   &result);
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaGetLastError());
 
-            d_h += cuCreal(result);
-
-            stat = cublasZdotc(handle, data_stream_length,
-                    (cuDoubleComplex*)YLS, 1,
-                    (cuDoubleComplex*)d_data_channel2, 1,
-                    &result);
-             d_h += cuCreal(result);
-
-             stat = cublasZdotc(handle, data_stream_length,
-                     (cuDoubleComplex*)ZLS, 1,
-                     (cuDoubleComplex*)d_data_channel3, 1,
-                     &result);
-
-           d_h += cuCreal(result);
-
-           //<h|h>
-           stat = cublasZdotc(handle, data_stream_length,
-                   (cuDoubleComplex*)XLS, 1,
-                   (cuDoubleComplex*)XLS, 1,
-                   &result);
-
-            h_h += cuCreal(result);
-
-            stat = cublasZdotc(handle, data_stream_length,
-                    (cuDoubleComplex*)YLS, 1,
-                    (cuDoubleComplex*)YLS, 1,
-                    &result);
-
-             h_h += cuCreal(result);
-
-             stat = cublasZdotc(handle, data_stream_length,
-                     (cuDoubleComplex*)ZLS, 1,
-                     (cuDoubleComplex*)ZLS, 1,
-                     &result);
-
-           h_h += cuCreal(result);
-
-           // reverse TODO: do I need it?
-            stat = cublasZdotc(handle, data_stream_length,
-                    (cuDoubleComplex*)XSL, 1,
-                    (cuDoubleComplex*)d_data_channel1, 1,
-                    &result);
-
-             d_h += cuCreal(result);
-
-             stat = cublasZdotc(handle, data_stream_length,
-                     (cuDoubleComplex*)YSL, 1,
-                     (cuDoubleComplex*)d_data_channel2, 1,
-                     &result);
-              d_h += cuCreal(result);
-
-              stat = cublasZdotc(handle, data_stream_length,
-                      (cuDoubleComplex*)ZSL, 1,
-                      (cuDoubleComplex*)d_data_channel3, 1,
-                      &result);
-
-            d_h += cuCreal(result);
-
-            //<h|h>
-            stat = cublasZdotc(handle, data_stream_length,
-                    (cuDoubleComplex*)XSL, 1,
-                    (cuDoubleComplex*)XSL, 1,
-                    &result);
-
-             h_h += cuCreal(result);
-
-             stat = cublasZdotc(handle, data_stream_length,
-                     (cuDoubleComplex*)YSL, 1,
-                     (cuDoubleComplex*)YSL, 1,
-                     &result);
-
-              h_h += cuCreal(result);
-
-              stat = cublasZdotc(handle, data_stream_length,
-                      (cuDoubleComplex*)ZSL, 1,
-                      (cuDoubleComplex*)ZSL, 1,
-                      &result);
-
-            h_h += cuCreal(result);
-               //printf("channel3 h_h: %e\n", cuCreal(result));
-           likelihood[0] = 4*d_h;
-           likelihood[1] = 4*h_h;
+    gpuErrchk(cudaMemcpy(likelihood, d_like_out, nwalkers*2*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
 /*
@@ -409,6 +387,7 @@ gpuErrchk(cudaFree(d_params));
 //gpuErrchk(cudaFree(XLS));
 //gpuErrchk(cudaFree(YLS));
 //gpuErrchk(cudaFree(ZLS));
+gpuErrchk(cudaFree(d_like_out));
 
 gpuErrchk(cudaFree(XSL));
 gpuErrchk(cudaFree(YSL));

@@ -42,7 +42,8 @@ cdef class Likelihood:
      nwalkers,
      ndevices,
      Tobs,
-     dt):
+     dt,
+     template_length):
 
         self.Tobs = Tobs
         self.dt = dt
@@ -58,7 +59,7 @@ cdef class Likelihood:
         &data_channel1[0], &data_channel2[0], &data_channel3[0],
         ptr_data_channel1, ptr_data_channel2, ptr_data_channel3,
         &channel1_ASDinv[0], &channel2_ASDinv[0], &channel3_ASDinv[0],
-        nwalkers, ndevices, Tobs, dt)
+        nwalkers, ndevices, Tobs, dt, template_length)
 
 
     def input_data(self, np.ndarray[ndim=1, dtype=np.float64_t] data_freqs,

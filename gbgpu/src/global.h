@@ -44,6 +44,10 @@
 typedef std::complex<double> cmplx;
 typedef gcmplx::complex<double> agcmplx;
 
+#define invsqrt2 0.7071067811865475
+#define invsqrt3 0.5773502691896258
+#define invsqrt6 0.4082482904638631
+
 
 typedef struct tagGB
 {

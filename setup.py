@@ -237,7 +237,7 @@ else:
     extensions = [ext_cpu]
 
 """
-extensions = [ext_gpu, ext_gpu2]
+extensions = [ext_gpu]  # , ext_gpu2]
 
 setup(
     name="gbgpu",

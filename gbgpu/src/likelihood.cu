@@ -97,10 +97,12 @@ Likelihood::Likelihood (
     int nwalkers_,
     int ndevices_,
     double Tobs_,
-    double dt_){
+    double dt_,
+    int template_length_){
 
       Tobs = Tobs_;
       dt = dt_;
+      template_length = template_length_;
 
 
     #pragma omp parallel
@@ -179,8 +181,11 @@ void Likelihood::input_data(double *data_freqs_, cmplx *data_channel1_,
 
 __global__
 void apply_noise_weighting(agcmplx *template_channel1, agcmplx *template_channel2, agcmplx *template_channel3,
-                      double *channel1_ASDinv, double *channel2_ASDinv, double *channel3_ASDinv, int N){
+                      double *channel1_ASDinv, double *channel2_ASDinv, double *channel3_ASDinv, int N, int nwalkers){
 
+for (int walker_i=blockIdx.y*blockDim.y + threadIdx.y;
+     walker_i<nwalkers;
+     walker_i+=blockDim.y*gridDim.y){
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
        i < N;
        i += blockDim.x * gridDim.x){
@@ -189,6 +194,7 @@ void apply_noise_weighting(agcmplx *template_channel1, agcmplx *template_channel
          template_channel2[i] = template_channel2[i]/channel2_ASDinv[i];
          template_channel3[i] = template_channel3[i]/channel3_ASDinv[i];
 
+   }
   }
 }
 

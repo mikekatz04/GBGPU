@@ -209,6 +209,7 @@ void calc_xi_f(Waveform *wfm, double t, int n, int N, double *x, double *y, doub
 
 		//Ratio of true frequency to transfer frequency
 		fonfs[i] = f[i]/fstar;
+
 	}
 
 	return;
@@ -236,12 +237,13 @@ void calc_sep_vecs(Waveform *wfm, int n, int N, double *x, double *y, double *z,
 		r21[i] = -r12[i];
 		r31[i] = -r13[i];
 		r32[i] = -r23[i];
+
 	}
 	return;
 }
 
 __device__
-void calc_d_matrices(Waveform *wfm, int n, int N, double *dcross, double *dplus, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
+void calc_d_matrices(Waveform *wfm, int n, int N, double *dplus, double *dcross, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
 	long i, j;
 
@@ -545,6 +547,7 @@ double *data31, double *data23, double *data32, int nwalkers)
 			 i < N;
 			 i += blockDim.x * gridDim.x){
 		// populate from most negative (Nyquist) to most positive (Nyquist-1)
+
 		wfm->a12[i]   = 0.5*data12[(walker_i*2*N) + N+i]/(double)N;  // moved the 0.5
 		wfm->a21[i]   = 0.5*data21[(walker_i*2*N) + N+i]/(double)N;
 		wfm->a31[i]   = 0.5*data31[(walker_i*2*N) + N+i]/(double)N;
@@ -723,11 +726,13 @@ void XYZ(int i, double *a12, double *a21, double *a13, double *a31, double *a23,
 }
 
 __global__
-void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs, double *XLS, double *YLS, double *ZLS){
+void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs, double *XLS, double *YLS, double *ZLS, double df){
 
 		int N;
 			long add_ind;
 		double asd1, asd2, asd3;
+
+        double *temp_XLS, *temp_YLS, *temp_ZLS;
 
 		Waveform *wfm;
 		for (int walker_i = blockIdx.y * blockDim.y + threadIdx.y;
@@ -736,6 +741,7 @@ void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs,
 
 		wfm = &wfm_trans[walker_i];
 		N = wfm->N;
+
 		for (int i = blockIdx.x * blockDim.x + threadIdx.x;
 				 i < M;
 				 i += blockDim.x * gridDim.x)
@@ -747,16 +753,41 @@ void XYZ_wrap(Waveform *wfm_trans, int nwalkers, long M, double dt, double Tobs,
 		XYZ(i, wfm->a12, wfm->a21, wfm->a13, wfm->a31, wfm->a23, wfm->a32, wfm->params[0]/wfm->T, wfm->q, N, dt, Tobs,
 				&XLS_r, &YLS_r, &ZLS_r, &XSL_r, &YSL_r, &ZSL_r, &XLS_i, &YLS_i, &ZLS_i, &XSL_i, &YSL_i, &ZSL_i);
 
-		add_ind = (wfm->q + i - M/2);
+		//add_ind = (wfm->q + i - M/2);
 
-		atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
-		atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);
+        /*XLS[walker_i*(2*M) + 2*i] = XLS_r;
+        XLS[walker_i*(2*M) + 2*i+1] = XLS_i;
+        YLS[walker_i*(2*M) + 2*i] = YLS_r;
+        YLS[walker_i*(2*M) + 2*i+1] = YLS_i;
+        ZLS[walker_i*(2*M) + 2*i] = ZLS_r;
+        ZLS[walker_i*(2*M) + 2*i+1] = ZLS_i;*/
 
-		atomicAddDouble(&YLS[2*add_ind], YLS_r/asd2);
-		atomicAddDouble(&YLS[2*add_ind+1], YLS_i/asd2);
+        double A_r, E_r, T_r, A_i, E_i, T_i;
+        A_r = invsqrt2*(ZSL_r-XSL_r)/df;
+        E_r = invsqrt6*(XSL_r-2.0*YSL_r+ZSL_r)/df;
+        T_r = invsqrt3*(XSL_r+YSL_r+ZSL_r)/df;
 
-		atomicAddDouble(&ZLS[2*add_ind], ZLS_r/asd3);
-		atomicAddDouble(&ZLS[2*add_ind+1], ZLS_i/asd3);
+        A_i = invsqrt2*(ZSL_i-XSL_i)/df;
+        E_i = invsqrt6*(XSL_i-2.0*YSL_i+ZSL_i)/df;
+        T_i = invsqrt3*(XSL_i+YSL_i+ZSL_i)/df;
+
+
+        XLS[walker_i*(2*M) + 2*i] = A_r;
+        XLS[walker_i*(2*M) + 2*i+1] = A_i;
+        YLS[walker_i*(2*M) + 2*i] = E_r;
+        YLS[walker_i*(2*M) + 2*i+1] = E_i;
+        ZLS[walker_i*(2*M) + 2*i] = T_r;
+        ZLS[walker_i*(2*M) + 2*i+1] = T_i;
+
+
+		//atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
+		//atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);
+
+		//atomicAddDouble(&YLS[2*add_ind], YLS_r/asd2);
+		//atomicAddDouble(&YLS[2*add_ind+1], YLS_i/asd2);
+
+		//atomicAddDouble(&ZLS[2*add_ind], ZLS_r/asd3);
+		//atomicAddDouble(&ZLS[2*add_ind+1], ZLS_i/asd3);
 
 		/*atomicAddDouble(&XSL[2*add_ind], XSL_r/asd1);
 		atomicAddDouble(&XSL[2*add_ind+1], XSL_i)/asd1;

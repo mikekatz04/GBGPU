@@ -54,6 +54,8 @@ class GBGPU {
 
   int ndevices;
 
+  double *d_like_out;
+
   double *data_freqs;
   cmplx *data_channel1;
   cmplx *data_channel2;
@@ -64,6 +66,7 @@ class GBGPU {
   double *channel3_ASDinv;
 
   double *d_data_freqs;
+
   agcmplx *d_data_channel1;
   agcmplx *d_data_channel2;
   agcmplx *d_data_channel3;
@@ -74,6 +77,8 @@ class GBGPU {
 
   Waveform *h_wfm;
   Waveform *wfm;
+
+  double df;
 
   cufftHandle plan;
 
@@ -98,14 +103,25 @@ public:
   GBGPU(
     int data_stream_length_,
     double *data_freqs_,
-    long ptr_data_channel1_,
-    long ptr_data_channel2_,
-    long ptr_data_channel3_, int N_,
+    int N_,
     int nwalkers_,
     int ndevices_,
     double Tobs_,
     double dt_,
     int NP_); // constructor (copies to GPU)
+
+void input_data(
+        int data_stream_length_,
+        long ptr_template_channel1_,
+        long ptr_template_channel2_,
+        long ptr_template_channel3_,
+        long ptr_data_channel1_,
+        long ptr_data_channel2_,
+        long ptr_data_channel3_,
+        long ptr_ASD_inv1_,
+        long ptr_ASD_inv2_,
+        long ptr_ASD_inv3_
+    );
 
   void Fast_GB(double *params);
 

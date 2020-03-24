@@ -49,7 +49,7 @@ class Likelihood {
   cublasHandle_t handle;
   cublasStatus_t stat;
 
-
+  int template_length;
   int ndevices;
 
   double *data_freqs;
@@ -101,7 +101,8 @@ public:
        int nwalkers_,
        int ndevices_,
        double Tobs_,
-       double dt_); // constructor (copies to GPU)
+       double dt_,
+        int template_length_); // constructor (copies to GPU)
 
   void GetLikelihood(double *like);
   void input_data(double *data_freqs_, cmplx *data_channel1_,

@@ -423,6 +423,7 @@ void calc_sep_vecs(struct Waveform *wfm)
 		wfm->r31[i] = -wfm->r13[i];
 		wfm->r32[i] = -wfm->r23[i];
 	}
+
 	return;
 }
 
