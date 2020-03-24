@@ -19,11 +19,11 @@ if __name__ == "__main__":
         "NP": 8,
         "noise_kwargs": {"model": "SciRDv1", "includewd": None},
         "add_noise": None,  # if added should be dict with fs
-        "oversample": 4,
+        "oversample": 1,
     }
 
     max_length_init = 2 ** 11
-    nWD = 2
+    nWD = 4000
     ndevices = 1
     data_freqs = None
     data_stream = None
@@ -50,7 +50,9 @@ if __name__ == "__main__":
             "cos_iota": np.cos(5.23599000e-01),
             "psi": 0.42057295,
             "phi0": 3.05815650e00,
-        },
+        }
+    ]
+    """
         {
             "milli_f0": 2e-3 / 1e-3,
             "log10_fdot": np.log10(2e-18),
@@ -62,6 +64,7 @@ if __name__ == "__main__":
             "phi0": np.pi / 2,
         },
     ]
+    """
 
     pygbgpu = pyGBGPU(
         injection,
@@ -84,38 +87,27 @@ if __name__ == "__main__":
 
     waveform_params[len(injection) :] = waveform_params[0]
 
-    import pdb
-
-    pdb.set_trace()
     like = pygbgpu.getNLL(waveform_params.T)
     snr = pygbgpu.getNLL(waveform_params.T, return_snr=True)
-    import pdb
-
-    pdb.set_trace()
-
-    """
-    check = phenomhm.getNLL(waveform_params.T)
 
     if args.time:
         st = time.perf_counter()
-        check = phenomhm.getNLL(waveform_params.T)
+        check = pygbgpu.getNLL(waveform_params.T)
         for _ in range(args.time):
-            check = phenomhm.getNLL(waveform_params.T)
+            check = pygbgpu.getNLL(waveform_params.T)
         et = time.perf_counter()
 
         print("Number of evals:", args.time)
-        print("ndevices:", ndevices, "nwalkers:", nwalkers)
+        print("ndevices:", ndevices, "nWD:", nWD)
         print("total time:", et - st)
         print("time per group likelihood call:", (et - st) / args.time)
         print(
             "time per individual likelihood call:",
-            (et - st) / (args.time * nwalkers * ndevices),
+            (et - st) / (args.time * nWD * ndevices),
         )
 
-    check = phenomhm.getNLL(waveform_params.T)
-    fisher = phenomhm.get_Fisher(waveform_params[0])
-    print(check[0:3])
+    check = pygbgpu.getNLL(waveform_params.T)
+    fisher = pygbgpu.get_Fisher(waveform_params[0])
     import pdb
 
     pdb.set_trace()
-    """

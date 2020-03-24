@@ -239,10 +239,12 @@ class pyGBGPU:
 
             data_stream_out_temp.append(temp)
 
-        self.data_stream = {
-            key: val + an
-            for key, val, an in zip(self.TDItag, data_stream_out_temp, self.added_noise)
-        }
+        self.data_stream = {}
+        for key, val, an in zip(self.TDItag, data_stream_out_temp, self.added_noise):
+
+            if isinstance(an, np.ndarray):
+                an = xp.asarray(an)
+            self.data_stream[key] = val + an
 
     def determine_freqs_noise(self, **kwargs):
         self.added_noise = [0.0 for _ in range(3)]
@@ -299,7 +301,7 @@ class pyGBGPU:
                 self.template_channel3.get(),
             ]
             tdis_real = [tdis_i[0::2] for tdis_i in tdis]
-            tdis_imag = [tdis_i[0::2] for tdis_i in tdis]
+            tdis_imag = [tdis_i[1::2] for tdis_i in tdis]
 
             tdis_out = [
                 tdis_re + tdis_im * 1j for tdis_re, tdis_im in zip(tdis_real, tdis_imag)
@@ -311,14 +313,16 @@ class pyGBGPU:
             ]
             return tdis_out
 
-        d_h = out[0::2]
-        h_h = out[1::2]
+        d_h = out[0::3]
+        h_h = out[1::3]
+        d_minus_h = out[2::3]
 
         if return_snr:
             return np.sqrt(d_h), np.sqrt(h_h)
 
         # 1/2<d-h|d-h> = 1/2(<d|d> + <h|h> - 2<d|h>)
-        return 1.0 / 2.0 * (self.d_d + h_h - 2 * d_h)
+        # return 1.0 / 2.0 * (self.d_d + h_h - 2 * d_h)
+        return 1.0 / 2.0 * d_minus_h
 
     def getNLL(self, x, **kwargs):
         # changes parameters to in range in actual array (not copy)
@@ -333,9 +337,9 @@ class pyGBGPU:
 
     def get_Fisher(self, x):
         Mij = np.zeros((self.ndim, self.ndim), dtype=x.dtype)
-        if self.nwalkers * self.ndevices < 2 * self.ndim:
+        if self.nWD * self.ndevices < 2 * self.ndim:
             raise ValueError("num walkers must be greater than 2*ndim")
-        x_in = np.tile(x, (self.nwalkers * self.ndevices, 1))
+        x_in = np.tile(x, (self.nWD * self.ndevices, 1))
 
         for i in range(self.ndim):
             x_in[2 * i, i] += self.eps

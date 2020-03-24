@@ -174,7 +174,7 @@ GBGPU::GBGPU (
       //gpuErrchk(cudaMalloc(&YLS, 2*data_stream_length*sizeof(double)));
       //gpuErrchk(cudaMalloc(&ZLS, 2*data_stream_length*sizeof(double)));
 
-      gpuErrchk(cudaMalloc(&d_like_out, nwalkers*2*sizeof(double)));
+      gpuErrchk(cudaMalloc(&d_like_out, nwalkers*3*sizeof(double)));
 
       //gpuErrchk(cudaMalloc(&XSL, 2*data_stream_length*sizeof(double)));
       //gpuErrchk(cudaMalloc(&YSL, 2*data_stream_length*sizeof(double)));
@@ -287,7 +287,7 @@ void GBGPU::Fast_GB(double *params_){//,double *XLS, double *YLS, double *ZLS,do
 }
 
 
-__global__ void calc_like(double *like_out, Waveform *wfm_trans, agcmplx *Xarr, agcmplx *Yarr, agcmplx *Zarr,
+__global__ void calc_like(double *like_out, Waveform *wfm_trans, agcmplx *Xarr_all, agcmplx *Yarr_all, agcmplx *Zarr_all,
                           double *channel1_ASDinv, double *channel2_ASDinv, double *channel3_ASDinv,
                           agcmplx *data_channel1, agcmplx *data_channel2, agcmplx *data_channel3,
                           int nwalkers, int M)
@@ -303,9 +303,16 @@ __global__ void calc_like(double *like_out, Waveform *wfm_trans, agcmplx *Xarr, 
     Waveform * wfm = &wfm_trans[walker_i];
     int N = wfm->N;
     int mid_ind = wfm->q;
+    int start_ind = walker_i*M;
+
+    agcmplx *Xarr = &Xarr_all[start_ind];
+    agcmplx *Yarr = &Yarr_all[start_ind];
+    agcmplx *Zarr = &Zarr_all[start_ind];
 
     double temp_h_h = 0.0;
     double temp_d_h = 0.0;
+    double temp_d_minus_h = 0.0;
+
     for (int i = 0;
              i < M;
              i += 1)
@@ -329,6 +336,8 @@ __global__ void calc_like(double *like_out, Waveform *wfm_trans, agcmplx *Xarr, 
         E_temp = E*Einv;
         T_temp = T*Tinv;
 
+
+
         temp_h_h += gcmplx::real(gcmplx::conj(A_temp)*A_temp);
         temp_h_h += gcmplx::real(gcmplx::conj(E_temp)*E_temp);
         temp_h_h += gcmplx::real(gcmplx::conj(T_temp)*T_temp);
@@ -337,10 +346,19 @@ __global__ void calc_like(double *like_out, Waveform *wfm_trans, agcmplx *Xarr, 
         temp_d_h += gcmplx::real(gcmplx::conj(E_data)*E_temp);
         temp_d_h += gcmplx::real(gcmplx::conj(T_data)*T_temp);
 
+        agcmplx A_d_minus_h = A_data - A_temp;
+        agcmplx E_d_minus_h = E_data - E_temp;
+        agcmplx T_d_minus_h = T_data - T_temp;
+
+        temp_d_minus_h += gcmplx::real(gcmplx::conj(A_d_minus_h)*A_d_minus_h);
+        temp_d_minus_h += gcmplx::real(gcmplx::conj(E_d_minus_h)*E_d_minus_h);
+        temp_d_minus_h += gcmplx::real(gcmplx::conj(T_d_minus_h)*T_d_minus_h);
+
    }
 
-   like_out[2*walker_i] = 4.0*temp_d_h;
-   like_out[2*walker_i + 1] = 4.0*temp_h_h;
+   like_out[3*walker_i] = 4.0*temp_d_h;
+   like_out[3*walker_i + 1] = 4.0*temp_h_h;
+   like_out[3*walker_i + 2] = 4.0*temp_d_minus_h;
  }
 }
 
@@ -357,7 +375,7 @@ void GBGPU::Likelihood(double *likelihood){
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
 
-    gpuErrchk(cudaMemcpy(likelihood, d_like_out, nwalkers*2*sizeof(double), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(likelihood, d_like_out, nwalkers*3*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
 /*

@@ -116,7 +116,7 @@ cdef class GBGPU:
         return
 
     def Likelihood(self):
-        cdef np.ndarray[ndim=1, dtype=np.float64_t] like_ = np.zeros(2*self.nwalkers, dtype=np.float64)
+        cdef np.ndarray[ndim=1, dtype=np.float64_t] like_ = np.zeros(3*self.nwalkers, dtype=np.float64)
         self.g.Likelihood(&like_[0])
         return like_
 
