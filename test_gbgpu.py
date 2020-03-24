@@ -19,7 +19,7 @@ if __name__ == "__main__":
         "NP": 8,
         "noise_kwargs": {"model": "SciRDv1", "includewd": None},
         "add_noise": None,  # if added should be dict with fs
-        "oversample": 1,
+        "oversample": 4,
     }
 
     max_length_init = 2 ** 11

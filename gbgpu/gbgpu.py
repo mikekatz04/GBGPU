@@ -347,6 +347,36 @@ class pyGBGPU:
 
         A, E, T = self.getNLL(x_in.T, return_TDI=True)
 
+        start_inds = (x_in[:, 0] * 1e-3 / self.df).astype(int)[: 2 * self.ndim]
+
+        A = np.asarray(
+            [
+                A_i
+                * self.channel1_ASDinv.get()[
+                    ind_i : ind_i + self.oversample * self.max_length_init
+                ]
+                for A_i, ind_i in zip(A, start_inds)
+            ]
+        )
+        E = np.asarray(
+            [
+                E_i
+                * self.channel1_ASDinv.get()[
+                    ind_i : ind_i + self.oversample * self.max_length_init
+                ]
+                for E_i, ind_i in zip(E, start_inds)
+            ]
+        )
+        T = np.asarray(
+            [
+                T_i
+                * self.channel1_ASDinv.get()[
+                    ind_i : ind_i + self.oversample * self.max_length_init
+                ]
+                for T_i, ind_i in zip(T, start_inds)
+            ]
+        )
+
         for i in range(self.ndim):
             Ai_up, Ei_up, Ti_up = A[2 * i + 1], E[2 * i + 1], T[2 * i + 1]
             Ai_down, Ei_down, Ti_down = A[2 * i], E[2 * i], T[2 * i]
