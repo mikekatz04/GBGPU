@@ -55,9 +55,6 @@ def test():
     template_channel2 = cp.zeros(max_length_init * oversample * nWD * 2)
     template_channel3 = cp.zeros(max_length_init * oversample * nWD * 2)
 
-    import pdb
-
-    pdb.set_trace()
     gbGPU = GBGPU.GBGPU(
         max_length_init, data_freqs, nWD, ndevices, Tobs, dt, NP, oversample=oversample
     )

@@ -265,7 +265,7 @@ void GBGPU::Fast_GB(double *params_){//,double *XLS, double *YLS, double *ZLS,do
       gpuErrchk(cudaGetLastError());
 
       int num_blocks = std::ceil((h_wfm->N + NUM_THREADS -1)/NUM_THREADS);
-      dim3 gridDim(num_blocks, 1); //nwalkers);
+      dim3 gridDim(num_blocks, nwalkers);
       GenWave<<<gridDim, NUM_THREADS>>>(wfm, h_wfm->N, nwalkers,
                                          data12, data21, data13, data31, data23, data32);
       cudaDeviceSynchronize();
