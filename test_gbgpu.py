@@ -23,7 +23,7 @@ if __name__ == "__main__":
     }
 
     max_length_init = 2 ** 11
-    nWD = 4000
+    nWD = 1000
     ndevices = 1
     data_freqs = None
     data_stream = None

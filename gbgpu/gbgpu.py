@@ -63,6 +63,7 @@ class pyGBGPU:
             kwargs[prop] = kwargs.get(prop, default)
 
         self.ndim = self.NP
+        self.nwalkers = nWD
         self.nWD, self.ndevices = nWD, ndevices
         self.Tobs = Tobs
         self.dt = dt
