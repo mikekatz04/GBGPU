@@ -156,7 +156,29 @@ if run_cuda_install:
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
 
-extensions = [ext_gpu]  # , ext_gpu2]
+cu_files = ["new_fastGB"]
+pyx_files = ["GBGPU"]
+for fp in cu_files:
+    shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
+
+for fp in pyx_files:
+    shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
+
+ext_cpu = Extension(
+    "newfastgb_cpu",
+    sources=["src/new_fastGB.cpp", "src/GBGPU_cpu.pyx"],
+    library_dirs=[lib_gsl_dir],
+    libraries=["gsl", "gslcblas", "gomp"],
+    language="c++",
+    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp"],},  # '-g'],
+    include_dirs=[numpy_include, include_gsl_dir, "include"],
+)
+
+if run_cuda_install:
+    extensions = [ext_gpu, ext_cpu]
+
+else:
+    extensions = [ext_cpu]
 
 setup(
     name="gbgpu",
@@ -171,3 +193,9 @@ setup(
     # Since the package has c code, the egg cannot be zipped
     zip_safe=False,
 )
+
+for fp in cu_files:
+    os.remove("src/" + fp + ".cpp")
+
+for fp in pyx_files:
+    os.remove("src/" + fp + "_cpu.pyx")

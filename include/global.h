@@ -30,90 +30,14 @@
 #include <complex>
 #include "cuda_complex.hpp"
 #include "Constants.h"
-#include "cuda_runtime_api.h"
 
 #ifdef __CUDACC__
+#include "cuda_runtime_api.h"
+
 #define CUDA_CALLABLE_MEMBER __host__ __device__
 #define CUDA_KERNEL __global__
-#else
-#define CUDA_CALLABLE_MEMBER
-#define CUDA_KERNEL
-#endif
+#define CUDA_SHARED __shared__
 
-typedef gcmplx::complex<double> cmplx;
-
-#define invsqrt2 0.7071067811865475
-#define invsqrt3 0.5773502691896258
-#define invsqrt6 0.4082482904638631
-
-
-typedef struct tagGB
-{
-	double T;			// observation period
-	double f0;			// initial GW freq
-	double theta, phi;  // sky-location (spherical-polar)
-	double amp, iota;   // amplitude and inclination angle
-	double psi, phi0;   // polarization angle, initial phase
-
-	double cosiota;
-	double costheta;
-
-	double *params;		// vector to store parameters
-
-	long q, N;  		// carrier freq bin, number of samples
-
-	long NP;			// number of parameters
-} GB;
-
-typedef struct tagWaveform
-{
-	long N;
-	long q; // Fgw carrier bin
-
-	int NP;		// number of parameters in signal
-
-	double T; 		// observation period
-
-	double *params;
-
-	double *eplus, *ecross;
-	double *dplus, *dcross;
-
-	double DPr, DPi, DCr, DCi;
-
-	// direction vector of GW
-	double *k;
-
-	// separation unit vectors between S/C
-	double *r12, *r21;
-	double *r13, *r31;
-	double *r23, *r32;
-
-	double *kdotr;
-	double *kdotx;
-
-	double *xi, *f, *fonfs;
-
-	// Time series of slowly evolving terms at each vertex
-	// dataij corresponds to fractional arm length difference yij
-	double *data12, *data21;
-	double *data13, *data31;
-	double *data23, *data32;
-
-	// Fourier coefficients of slowly evolving terms (numerical)
-	double *a12, *a21;
-	double *a13, *a31;
-	double *a23, *a32;
-
-	// S/C position
-	double *x, *y, *z;
-
-	// Time varrying quantities (Re & Im) broken up into convenient segments
-	double *TR, *TI;
-
-	//Package cij's into proper form for TDI subroutines
-	double *d;
-} Waveform;
 
 /*
 Function for gpu Error checking.
@@ -128,6 +52,19 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+
+
+#else
+#define CUDA_CALLABLE_MEMBER
+#define CUDA_KERNEL
+#define CUDA_SHARED
+#endif
+
+typedef gcmplx::complex<double> cmplx;
+
+#define invsqrt2 0.7071067811865475
+#define invsqrt3 0.5773502691896258
+#define invsqrt6 0.4082482904638631
 
 
 #endif

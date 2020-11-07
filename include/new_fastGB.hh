@@ -10,5 +10,15 @@ void GenWave_wrap(double *data12, double *data21, double *data13, double *data31
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
              double* k_all, double T, int N, int num_bin);
 
+void fft_data_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32, int num_bin, int N);
+
+void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+                   double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+                   int N, int num_bin);
+
+void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+             double *XLS, double *YLS, double *ZLS,
+             double *f0_all,
+             int num_bin, int N, double dt, double T, double df);
 
 #endif // __NEW_FASTGB_HH__

@@ -1,10 +1,14 @@
 
+#ifdef __CUDACC__
+#include <cufft.h>
+#endif
+
 #include "new_fastGB.hh"
 #include "global.h"
 #include "LISA.h"
 
 
-__device__
+CUDA_CALLABLE_MEMBER
 void set_const_trans(double* DPr, double* DPi, double* DCr, double* DCi, double amp, double cosiota, double psi, int bin_i)
 {
 	double Aplus, Across;
@@ -29,7 +33,7 @@ void set_const_trans(double* DPr, double* DPi, double* DCr, double* DCi, double 
 
 
 
-__device__
+CUDA_CALLABLE_MEMBER
 void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, int bin_i, int num_bin)
 {
 	double costh, sinth, cosph, sinph;
@@ -46,19 +50,21 @@ void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, i
 }
 
 // TODO: check if this can be upped by reusing shared memory
-#define  NUM_THREADS 32
+#define  NUM_THREADS 256
 
-__global__
+CUDA_KERNEL
 void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
                        double* amp, double* cosiota, double* psi, double* lam, double* beta, int num_bin)
 {
 	 // GW basis vectors
 
-    __shared__ double u_all[3 * NUM_THREADS];
-	__shared__ double v_all[3 * NUM_THREADS];
+    #ifdef __CUDACC__
+    CUDA_SHARED double u_all[3 * NUM_THREADS];
+	CUDA_SHARED double v_all[3 * NUM_THREADS];
 
     double* u = &u_all[3 * threadIdx.x];
     double* v = &v_all[3 * threadIdx.x];
+    #endif
 
     int start, end, increment;
     #ifdef __CUDACC__
@@ -77,6 +83,17 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
     #endif
 	for (int bin_i = start; bin_i < end; bin_i += increment)
     {
+
+        #ifdef __CUDACC__
+        #else
+
+        double u_all[3];
+    	double v_all[3];
+
+        double* u = &u_all[0];
+        double* v = &v_all[0];
+
+        #endif
 
     	set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);  // set the constant pieces of transfer function
 
@@ -100,6 +117,9 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
 void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
                             double* amp, double* cosiota, double* psi, double* lam, double* beta, int num_bin)
 {
+
+    #ifdef __CUDACC__
+
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
     get_basis_tensors<<<num_blocks, NUM_THREADS>>>(
@@ -108,11 +128,20 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
+
+    #else
+
+    get_basis_tensors(
+        eplus, ecross, DPr, DPi, DCr, DCi, k,
+        amp, cosiota, psi, lam, beta, num_bin
+    );
+
+    #endif
 }
 
 
 
-__device__
+CUDA_CALLABLE_MEMBER
 void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 {
 	double alpha;
@@ -147,7 +176,7 @@ void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 	z[2] = -SQ3*AU*ec*(ca*cb + sa*sb);
 }
 
-__device__
+CUDA_CALLABLE_MEMBER
 void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* fonfs,
                double f0, double dfdt, double d2fdt2, double T, double t, int n, int N)
 {
@@ -178,7 +207,7 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
 }
 
 
-__device__
+CUDA_CALLABLE_MEMBER
 void calc_sep_vecs(double *r12, double *r21, double *r13, double *r31, double *r23, double *r32,
                    double *x, double *y, double *z,
                    int n, int N)
@@ -205,7 +234,7 @@ void calc_sep_vecs(double *r12, double *r21, double *r13, double *r31, double *r
 }
 
 
-__device__
+CUDA_CALLABLE_MEMBER
 void calc_kdotr(double* k, double *kdotr, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
 
@@ -228,11 +257,9 @@ void calc_kdotr(double* k, double *kdotr, double *r12, double *r21, double *r13,
 	kdotr[(1*3 + 0)] = -kdotr[(0*3 + 1)];
 	kdotr[(2*3 + 0)] = -kdotr[(0*3 + 2)];
 	kdotr[(2*3 + 1)] = -kdotr[(1*3 + 2)];
-
-	return;
 }
 
-__device__
+CUDA_CALLABLE_MEMBER
 void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecross,
                      double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
@@ -267,13 +294,11 @@ void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecros
 	dplus[(1*3 + 0)] = dplus[(0*3 + 1)];  dcross[(1*3 + 0)] = dcross[(0*3 + 1)];
 	dplus[(2*3 + 1)] = dplus[(1*3 + 2)];  dcross[(2*3 + 1)] = dcross[(1*3 + 2)];
 	dplus[(2*3 + 0)] = dplus[(0*3 + 2)];  dcross[(2*3 + 0)] = dcross[(0*3 + 2)];
-
-	return;
 }
 
 
-__device__
-void get_transfer(long q, double f0, double dfdt, double d2fdt2, double phi0,
+CUDA_CALLABLE_MEMBER
+void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double T, double t, int n, int N,
                  double *kdotr, double *TR, double *TI,
                  double *dplus, double *dcross,
@@ -331,7 +356,7 @@ void get_transfer(long q, double f0, double dfdt, double d2fdt2, double phi0,
 
 
 
-__device__
+CUDA_CALLABLE_MEMBER
 void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *TI,
 					  double *data12, double *data21, double *data13,
 					  double *data31, double *data23, double *data32)
@@ -349,12 +374,13 @@ void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *
 	data23[(2*n + 1) * num_bin + bin_i] = TI[(1*3 + 2)];
 	data32[(2*n + 1) * num_bin + bin_i] = TI[(2*3 + 1)];
 
-	return;
 }
 
 
+#define NUM_THREADS_2 32
 
-__global__
+
+CUDA_KERNEL
 void GenWave(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
@@ -362,25 +388,27 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
              double* k_in, double T, int N, int num_bin)
 {
 
-    __shared__ double x_all[3 * NUM_THREADS];
-    __shared__ double y_all[3 * NUM_THREADS];
-    __shared__ double z_all[3 * NUM_THREADS];
-    __shared__ double k_all[3 * NUM_THREADS];
-    __shared__ double xi_all[3 * NUM_THREADS];
-    __shared__ double fonfs_all[3 * NUM_THREADS];
-    __shared__ double r12_all[3 * NUM_THREADS];
-    __shared__ double r21_all[3 * NUM_THREADS];
-    __shared__ double r13_all[3 * NUM_THREADS];
-    __shared__ double r31_all[3 * NUM_THREADS];
-    __shared__ double r23_all[3 * NUM_THREADS];
-    __shared__ double r32_all[3 * NUM_THREADS];
-    __shared__ double dplus_all[9 * NUM_THREADS];
-    __shared__ double dcross_all[9 * NUM_THREADS];
-    __shared__ double eplus_all[9 * NUM_THREADS];
-    __shared__ double ecross_all[9 * NUM_THREADS];
-    __shared__ double kdotr_all[9 * NUM_THREADS];
-    __shared__ double TR_all[9 * NUM_THREADS];
-    __shared__ double TI_all[9 * NUM_THREADS];
+
+    #ifdef __CUDACC__
+    CUDA_SHARED double x_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double y_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double z_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double k_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double xi_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double fonfs_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double r12_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double r21_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double r13_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double r31_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double r23_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double r32_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double dplus_all[9 * NUM_THREADS_2];
+    CUDA_SHARED double dcross_all[9 * NUM_THREADS_2];
+    CUDA_SHARED double eplus_all[9 * NUM_THREADS_2];
+    CUDA_SHARED double ecross_all[9 * NUM_THREADS_2];
+    CUDA_SHARED double kdotr_all[9 * NUM_THREADS_2];
+    CUDA_SHARED double TR_all[9 * NUM_THREADS_2];
+    CUDA_SHARED double TI_all[9 * NUM_THREADS_2];
 
 
     double* x = &x_all[3 * threadIdx.x];
@@ -402,6 +430,8 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
     double* kdotr = &kdotr_all[9 * threadIdx.x];
     double* TR = &TR_all[9 * threadIdx.x];
     double* TI = &TI_all[9 * threadIdx.x];
+
+    #endif
 
     int start, end, increment;
     double t;
@@ -425,6 +455,52 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
 			 bin_i += increment)
     {
 
+        #ifdef __CUDACC__
+        #else
+
+        double x_all[3];
+        double y_all[3];
+        double z_all[3];
+        double k_all[3];
+        double xi_all[3];
+        double fonfs_all[3];
+        double r12_all[3];
+        double r21_all[3];
+        double r13_all[3];
+        double r31_all[3];
+        double r23_all[3];
+        double r32_all[3];
+        double dplus_all[9];
+        double dcross_all[9];
+        double eplus_all[9];
+        double ecross_all[9];
+        double kdotr_all[9];
+        double TR_all[9];
+        double TI_all[9];
+
+
+        double* x = &x_all[0];
+        double* y = &y_all[0];
+        double* z = &z_all[0];
+        double* k = &k_all[0];
+        double* xi= &xi_all[0];
+        double* fonfs = &fonfs_all[0];
+        double* r12 = &r12_all[0];
+        double* r21 = &r21_all[0];
+        double* r13 = &r13_all[0];
+        double* r31 = &r31_all[0];
+        double* r23 = &r23_all[0];
+        double* r32 = &r32_all[0];
+        double* dplus = &dplus_all[0];
+        double* dcross = &dcross_all[0];
+        double* eplus = &eplus_all[0];
+        double* ecross = &ecross_all[0];
+        double* kdotr = &kdotr_all[0];
+        double* TR = &TR_all[0];
+        double* TI = &TI_all[0];
+
+        #endif
+
         k[0] = k_in[0 * num_bin + bin_i];
         k[1] = k_in[1 * num_bin + bin_i];
         k[2] = k_in[2 * num_bin + bin_i];
@@ -439,7 +515,7 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
         double DCr = DCr_all[bin_i];
         double DCi = DCi_all[bin_i];
 
-        long q = (long) f0/T;
+        int q = (int) f0*T;
 
         for (int i = 0; i < 3; i ++)
         {
@@ -478,9 +554,12 @@ void GenWave_wrap(double *data12, double *data21, double *data13, double *data31
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
              double* k_all, double T, int N, int num_bin)
 {
-    int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
-    GenWave<<<num_blocks, NUM_THREADS>>>(
+    #ifdef __CUDACC__
+
+    int num_blocks = std::ceil((num_bin + NUM_THREADS_2 -1)/NUM_THREADS_2);
+
+    GenWave<<<num_blocks, NUM_THREADS_2>>>(
         data12, data21, data13, data31, data23, data32,
         eplus_in, ecross_in,
          f0_all, dfdt_all, d2fdt2_all, phi0_all,
@@ -489,4 +568,402 @@ void GenWave_wrap(double *data12, double *data21, double *data13, double *data31
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
+
+    #else
+
+    GenWave(
+        data12, data21, data13, data31, data23, data32,
+        eplus_in, ecross_in,
+         f0_all, dfdt_all, d2fdt2_all, phi0_all,
+         DPr_all, DPi_all, DCr_all, DCi_all,
+         k_all, T, N, num_bin
+    );
+
+    #endif
+}
+
+
+/*
+void fft_data_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32, int num_bin, int N)
+{
+
+    cufftHandle plan;
+
+    if (cufftPlan1d(&plan, N, CUFFT_Z2Z, num_bin) != CUFFT_SUCCESS){
+          	fprintf(stderr, "CUFFT error: Plan creation failed");
+          	return;	}
+
+    if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data12, (cufftDoubleComplex*)data12, -1) != CUFFT_SUCCESS){
+	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
+	return;}
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data21, (cufftDoubleComplex*)data21, -1) != CUFFT_SUCCESS){
+	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
+	return;}
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data31, (cufftDoubleComplex*)data31, -1) != CUFFT_SUCCESS){
+	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
+	return;}
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data13, (cufftDoubleComplex*)data13, -1) != CUFFT_SUCCESS){
+	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
+	return;}
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data23, (cufftDoubleComplex*)data23, -1) != CUFFT_SUCCESS){
+	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
+	return;}
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+
+	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data32, (cufftDoubleComplex*)data32, -1) != CUFFT_SUCCESS){
+	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
+	return;}
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+
+    cufftDestroy(plan);
+}
+*/
+
+
+CUDA_KERNEL
+void unpack_data_1(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+                   double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+                   int N, int num_bin)
+{
+
+
+    int start, end, increment;
+    #ifdef __CUDACC__
+
+    start = blockIdx.x * blockDim.x + threadIdx.x;
+    end = num_bin;
+    increment = blockDim.x * gridDim.x;
+
+    #else
+
+    start = 0;
+    end = num_bin;
+    increment = 1;
+
+    #pragma omp parallel for
+    #endif
+	for (int bin_i = start;
+			 bin_i < end;
+			 bin_i += increment)
+    {
+        for (int i = 0;
+    			 i < N;
+    			 i += 1)
+        {
+    		// populate from most negative (Nyquist) to most positive (Nyquist-1)
+    		a12[i * num_bin + bin_i]   = 0.5*data12[(N + i) * num_bin + bin_i]/(double)N;  // moved the 0.5
+    		a21[i * num_bin + bin_i]   = 0.5*data21[(N + i) * num_bin + bin_i]/(double)N;
+    		a31[i * num_bin + bin_i]   = 0.5*data31[(N + i) * num_bin + bin_i]/(double)N;
+    		a12[(i+N) * num_bin + bin_i] = 0.5*data12[(i) * num_bin + bin_i]/(double)N;
+    		a21[(i+N) * num_bin + bin_i] = 0.5*data21[(i) * num_bin + bin_i]/(double)N;
+    		a31[(i+N) * num_bin + bin_i] = 0.5*data31[(i) * num_bin + bin_i]/(double)N;
+    		a13[i * num_bin + bin_i]   = 0.5*data13[(N + i) * num_bin + bin_i]/(double)N;
+    		a23[i * num_bin + bin_i]   = 0.5*data23[(N + i) * num_bin + bin_i]/(double)N;
+    		a32[i * num_bin + bin_i]   = 0.5*data32[(N + i) * num_bin + bin_i]/(double)N;
+    		a13[(i+N) * num_bin + bin_i] = 0.5*data13[(i) * num_bin + bin_i]/(double)N;
+    		a23[(i+N) * num_bin + bin_i] = 0.5*data23[(i) * num_bin + bin_i]/(double)N;
+    		a32[(i+N) * num_bin + bin_i] = 0.5*data32[(i) * num_bin + bin_i]/(double)N;
+    	}
+    }
+}
+
+void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+                   double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+                   int N, int num_bin)
+{
+    #ifdef __CUDACC__
+    int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
+
+    unpack_data_1<<<num_blocks, NUM_THREADS>>>(
+        data12, data21, data13, data31, data23, data32,
+        a12, a21, a13, a31, a23, a32,
+        N, num_bin
+    );
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaGetLastError());
+    #else
+
+    unpack_data_1(
+        data12, data21, data13, data31, data23, data32,
+        a12, a21, a13, a31, a23, a32,
+        N, num_bin
+    );
+
+    #endif
+}
+
+
+
+CUDA_CALLABLE_MEMBER
+void XYZ_sub(int i, int bin_i, int num_bin, double *a12, double *a21, double *a13, double *a31, double *a23, double *a32, double f0, int q, int M, double dt, double Tobs, double *XLS_r, double *YLS_r, double *ZLS_r,
+					double* XSL_r, double* YSL_r, double* ZSL_r, double *XLS_i, double *YLS_i, double *ZLS_i, double *XSL_i, double *YSL_i, double *ZSL_i)
+{
+	double fonfs;
+	double c3, s3, c2, s2, c1, s1;
+	double f;
+	double phiLS, cLS, sLS, phiSL, cSL, sSL;
+
+	double X_1, X_2, Y_1, Y_2, Z_1, Z_2;
+
+	// YLS = malloc(2*M*sizeof(double));
+	// ZLS = malloc(2*M*sizeof(double));
+
+	phiLS = PI2*f0*(dt/2.0-Larm/C);
+
+	cLS = cos(phiLS);
+	sLS = sin(phiLS);
+
+	//double phiLS = 2.0*pi*f0*(dt/2.0-L/clight);
+	//double cLS = cos(phiLS); double sLS = sin(phiLS);
+
+	phiSL = M_PI/2.0-2.0*M_PI*f0*(Larm/C);
+	cSL = cos(phiSL);
+	sSL = sin(phiSL);
+
+  //printf("Stas, q=%ld, f0=%f, check: %f, %f \n", q, f0, q/Tobs, Tobs);
+
+		f = ((double)(q + i - M/2))/Tobs;
+		//if (i == 0){
+		//		double f1 = ((double)(q + i -1 - M/2))/Tobs;
+		//		double f2 = ((double)(q + i - M/2))/Tobs;
+				//printf("%e, %e, %ld, %ld, %ld\n", f, f2 - f1, q, i, M/2);
+		//}
+		fonfs = f/fstar;
+		//printf("Stas fonfs = %f, %f, %f, %f \n", fonfs, f, fstar, Tobs);
+		c3 = cos(3.*fonfs);  c2 = cos(2.*fonfs);  c1 = cos(1.*fonfs);
+		s3 = sin(3.*fonfs);  s2 = sin(2.*fonfs);  s1 = sin(1.*fonfs);
+
+        double a12_r = a12[(2*i) * num_bin + bin_i];
+        double a12_i = a12[(2*i + 1) * num_bin + bin_i];
+
+        double a21_r = a21[(2*i) * num_bin + bin_i];
+        double a21_i = a21[(2*i + 1) * num_bin + bin_i];
+
+        double a13_r = a13[(2*i) * num_bin + bin_i];
+        double a13_i = a13[(2*i + 1) * num_bin + bin_i];
+
+        double a31_r = a31[(2*i) * num_bin + bin_i];
+        double a31_i = a31[(2*i + 1) * num_bin + bin_i];
+
+        double a23_r = a23[(2*i) * num_bin + bin_i];
+        double a23_i = a23[(2*i + 1) * num_bin + bin_i];
+
+        double a32_r = a32[(2*i) * num_bin + bin_i];
+        double a32_i = a32[(2*i + 1) * num_bin + bin_i];
+
+		X_1   = (a12_r-a13_r)*c3 + (a12_i-a13_i)*s3 +
+		           (a21_r-a31_r)*c2 + (a21_i-a31_i)*s2 +
+		           (a13_r-a12_r)*c1 + (a13_i-a12_i)*s1 +
+		           (a31_r-a21_r);
+
+		X_2 = (a12_i-a13_i)*c3 - (a12_r-a13_r)*s3 +
+		           (a21_i-a31_i)*c2 - (a21_r-a31_r)*s2 +
+		           (a13_i-a12_i)*c1 - (a13_r-a12_r)*s1 +
+		           (a31_i-a21_i);
+
+		Y_1   = (a23_r-a21_r)*c3 + (a23_i-a21_i)*s3 +
+		           (a32_r-a12_r)*c2 + (a32_i-a12_i)*s2+
+		           (a21_r-a23_r)*c1 + (a21_i-a23_i)*s1+
+		           (a12_r-a32_r);
+
+		Y_2 = (a23_i-a21_i)*c3 - (a23_r-a21_r)*s3+
+		           (a32_i-a12_i)*c2 - (a32_r-a12_r)*s2+
+		           (a21_i-a23_i)*c1 - (a21_r-a23_r)*s1+
+		           (a12_i-a32_i);
+
+		Z_1   = (a31_r-a32_r)*c3 + (a31_i-a32_i)*s3+
+		           (a13_r-a23_r)*c2 + (a13_i-a23_i)*s2+
+		           (a32_r-a31_r)*c1 + (a32_i-a31_i)*s1+
+		           (a23_r-a13_r);
+
+		Z_2 = (a31_i-a32_i)*c3 - (a31_r-a32_r)*s3+
+		           (a13_i-a23_i)*c2 - (a13_r-a23_r)*s2+
+		           (a32_i-a31_i)*c1 - (a32_r-a31_r)*s1+
+		           (a23_i-a13_i);
+
+		// XLS_r   =  (X_1*cLS - X_2*sLS);
+		// XLS_i = -(X_1*sLS + X_2*cLS);
+		// YLS_r   =  (Y_1*cLS - Y_2*sLS);
+		// YLS_i = -(Y_1*sLS + Y_2*cLS);
+		// ZLS_r   =  (Z_1*cLS - Z_2*sLS);
+		// ZLS_i = -(Z_1*sLS + Z_2*cLS);
+    //
+		// XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
+		// XSL_i = -2.0*fonfs*(X_1*sSL + X_2*cSL);
+		// YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
+		// YSL_i = -2.0*fonfs*(Y_1*sSL + Y_2*cSL);
+		// ZSL_r   =  2.0*fonfs*(Z_1*cSL - Z_2*sSL);
+		// ZSL_i = -2.0*fonfs*(Z_1*sSL + Z_2*cSL);
+
+		// Alternative polarization definition
+		*XLS_r   =  (X_1*cLS - X_2*sLS);
+		*XLS_i =  (X_1*sLS + X_2*cLS);
+		*YLS_r   =  (Y_1*cLS - Y_2*sLS);
+		*YLS_i =  (Y_1*sLS + Y_2*cLS);
+		*ZLS_r   =  (Z_1*cLS - Z_2*sLS);
+		*ZLS_i =  (Z_1*sLS + Z_2*cLS);
+
+		*XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
+		*XSL_i =  2.0*fonfs*(X_1*sSL + X_2*cSL);
+		*YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
+		*YSL_i =  2.0*fonfs*(Y_1*sSL + Y_2*cSL);
+		*ZSL_r   =  2.0*fonfs*(Z_1*cSL - Z_2*sSL);
+		*ZSL_i =  2.0*fonfs*(Z_1*sSL + Z_2*cSL);
+
+	// for(i=0; i<2*M; i++)
+	// {
+	// 	// A channel
+	// 	ALS[i] = (2.0*XLS[i] - YLS[i] - ZLS[i])/3.0;
+	// 	// E channel
+	// 	ELS[i] = (ZLS[i]-YLS[i])/SQ3;
+	// }
+
+
+	//free(YLS);
+	//free(ZLS);
+
+	return;
+}
+
+CUDA_KERNEL
+void XYZ(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+              double *XLS, double *YLS, double *ZLS,
+              double *f0_all,
+              int num_bin, int N, double dt, double T, double df){
+
+	int add_ind;
+	double asd1, asd2, asd3;
+
+    double *temp_XLS, *temp_YLS, *temp_ZLS;
+
+    int M = (int) N;
+
+    int start, end, increment;
+    #ifdef __CUDACC__
+
+    start = blockIdx.x * blockDim.x + threadIdx.x;
+    end = num_bin;
+    increment = blockDim.x * gridDim.x;
+
+    #else
+
+    start = 0;
+    end = num_bin;
+    increment = 1;
+
+    #pragma omp parallel for
+    #endif
+	for (int bin_i = start;
+			 bin_i < end;
+			 bin_i += increment)
+    {
+
+        double f0 = f0_all[bin_i];
+        int q = (int) f0*T;
+
+		for (int i = 0;
+				 i < M;
+				 i += 1)
+		{
+
+
+	        double XLS_r, YLS_r, ZLS_r, XSL_r, YSL_r, ZSL_r, XLS_i, YLS_i, ZLS_i, XSL_i, YSL_i, ZSL_i;
+
+    		XYZ_sub(i, bin_i, num_bin, a12, a21, a13, a31, a23, a32, f0/T, q, N, dt, T,
+    				&XLS_r, &YLS_r, &ZLS_r, &XSL_r, &YSL_r, &ZSL_r, &XLS_i, &YLS_i, &ZLS_i, &XSL_i, &YSL_i, &ZSL_i);
+
+    		//add_ind = (wfm->q + i - M/2);
+
+            /*XLS[bin_i*(2*M) + 2*i] = XLS_r;
+            XLS[bin_i*(2*M) + 2*i+1] = XLS_i;
+            YLS[bin_i*(2*M) + 2*i] = YLS_r;
+            YLS[bin_i*(2*M) + 2*i+1] = YLS_i;
+            ZLS[bin_i*(2*M) + 2*i] = ZLS_r;
+            ZLS[bin_i*(2*M) + 2*i+1] = ZLS_i;*/
+
+            double A_r, E_r, T_r, A_i, E_i, T_i;
+            A_r = invsqrt2*(ZSL_r-XSL_r)/df;
+            E_r = invsqrt6*(XSL_r-2.0*YSL_r+ZSL_r)/df;
+            T_r = invsqrt3*(XSL_r+YSL_r+ZSL_r)/df;
+
+            A_i = invsqrt2*(ZSL_i-XSL_i)/df;
+            E_i = invsqrt6*(XSL_i-2.0*YSL_i+ZSL_i)/df;
+            T_i = invsqrt3*(XSL_i+YSL_i+ZSL_i)/df;
+
+
+            XLS[2 * i * num_bin + bin_i] = A_r;
+            XLS[(2 * i + 1) * num_bin + bin_i] = A_i;
+            YLS[2 * i * num_bin + bin_i] = E_r;
+            YLS[(2 * i + 1) * num_bin + bin_i] = E_i;
+            ZLS[2 * i * num_bin + bin_i] = T_r;
+            ZLS[(2 * i + 1) * num_bin + bin_i] = T_i;
+
+
+    		//atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
+    		//atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);
+
+    		//atomicAddDouble(&YLS[2*add_ind], YLS_r/asd2);
+    		//atomicAddDouble(&YLS[2*add_ind+1], YLS_i/asd2);
+
+    		//atomicAddDouble(&ZLS[2*add_ind], ZLS_r/asd3);
+    		//atomicAddDouble(&ZLS[2*add_ind+1], ZLS_i/asd3);
+
+    		/*atomicAddDouble(&XSL[2*add_ind], XSL_r/asd1);
+    		atomicAddDouble(&XSL[2*add_ind+1], XSL_i)/asd1;
+
+    		atomicAddDouble(&YSL[2*add_ind], YSL_r/asd2);
+    		atomicAddDouble(&YSL[2*add_ind+1], YSL_i/asd2);
+
+    		atomicAddDouble(&YSL[2*add_ind], ZSL_r/asd3);
+    		atomicAddDouble(&ZSL[2*add_ind+1], ZSL_i/asd3);*/
+
+
+        }
+    }
+}
+
+
+void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+              double *XLS, double *YLS, double *ZLS,
+              double *f0_all,
+              int num_bin, int N, double dt, double T, double df)
+{
+
+    #ifdef __CUDACC__
+
+    int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
+
+    XYZ<<<num_blocks, NUM_THREADS>>>(
+        a12, a21, a13, a31, a23, a32,
+        XLS, YLS, ZLS,
+        f0_all,
+        num_bin, N, dt, T, df
+    );
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaGetLastError());
+
+    #else
+
+    XYZ(
+        a12, a21, a13, a31, a23, a32,
+        XLS, YLS, ZLS,
+        f0_all,
+        num_bin, N, dt, T, df
+    );
+
+    #endif
 }

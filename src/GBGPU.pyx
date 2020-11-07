@@ -15,6 +15,16 @@ cdef extern from "new_fastGB.hh":
                  double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
                  double* k_in, double T, int N, int num_bin);
 
+    void fft_data_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32, int num_bin, int N);
+
+    void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+                       double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+                       int N, int num_bin);
+
+    void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+                 double *XLS, double *YLS, double *ZLS,
+                 double *f0_all,
+                 int num_bin, int N, double dt, double T, double df);
 
 @pointer_adjust
 def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, num_bin):
@@ -68,3 +78,66 @@ def GenWave(data12, data21, data13, data31, data23, data32,
                  <double*>f0_all_in, <double*>dfdt_all_in, <double*>d2fdt2_all_in, <double*> phi0_all_in,
                  <double*>DPr_all_in, <double*>DPi_all_in, <double*>DCr_all_in, <double*>DCi_all_in,
                  <double*>k_all_in, T, N, num_bin)
+
+"""
+@pointer_adjust
+def fft_data(data12, data21, data13, data31, data23, data32, num_bin, N):
+
+    cdef size_t data12_in = data12
+    cdef size_t data21_in = data21
+    cdef size_t data13_in = data13
+    cdef size_t data31_in = data31
+    cdef size_t data23_in = data23
+    cdef size_t data32_in = data32
+
+    fft_data_wrap(<double *>data12_in, <double *>data21_in,
+                  <double *>data13_in, <double *>data31_in,
+                  <double *>data23_in, <double *>data32_in,
+                  num_bin, N)
+"""
+
+@pointer_adjust
+def unpack_data_1(data12, data21, data13, data31, data23, data32,
+                  a12, a21, a13, a31, a23, a32,
+                  N, num_bin):
+
+    cdef size_t data12_in = data12
+    cdef size_t data21_in = data21
+    cdef size_t data13_in = data13
+    cdef size_t data31_in = data31
+    cdef size_t data23_in = data23
+    cdef size_t data32_in = data32
+
+    cdef size_t a12_in = a12
+    cdef size_t a21_in = a21
+    cdef size_t a13_in = a13
+    cdef size_t a31_in = a31
+    cdef size_t a23_in = a23
+    cdef size_t a32_in = a32
+
+    unpack_data_1_wrap(<double *>data12_in, <double *>data21_in, <double *>data13_in, <double *>data31_in, <double *>data23_in, <double *>data32_in,
+                      <double *>a12_in, <double *>a21_in, <double *>a13_in, <double *>a31_in, <double *>a23_in, <double *>a32_in,
+                      N, num_bin)
+
+
+@pointer_adjust
+def XYZ(a12, a21, a13, a31, a23, a32,
+        XLS, YLS, ZLS,
+        f0_all,
+        num_bin, N, dt, T, df):
+
+    cdef size_t a12_in = a12
+    cdef size_t a21_in = a21
+    cdef size_t a13_in = a13
+    cdef size_t a31_in = a31
+    cdef size_t a23_in = a23
+    cdef size_t a32_in = a32
+    cdef size_t XLS_in = XLS
+    cdef size_t YLS_in = YLS
+    cdef size_t ZLS_in = ZLS
+    cdef size_t f0_all_in = f0_all
+
+    XYZ_wrap(<double *>a12_in, <double *>a21_in, <double *>a13_in, <double *>a31_in, <double *>a23_in, <double *>a32_in,
+                <double *>XLS_in, <double *>YLS_in, <double *>ZLS_in,
+                <double *>f0_all_in,
+                num_bin, N, dt, T, df)
