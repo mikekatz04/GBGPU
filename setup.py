@@ -123,8 +123,8 @@ include_gsl_dir = "/opt/local/include"
 
 if run_cuda_install:
     ext_gpu = Extension(
-        "GBGPU",
-        sources=["gbgpu/src/manager.cu", "gbgpu/GBGPU.pyx"],
+        "newfastgb",
+        sources=["src/new_fastGB.cu", "src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
         libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
         language="c++",
@@ -153,90 +153,9 @@ if run_cuda_install:
                 "-fopenmp",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/src"],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
 
-    ext_gpu2 = Extension(
-        "GlobalFitUtils",
-        sources=["gbgpu/src/likelihood.cu", "gbgpu/Utils.pyx"],
-        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
-        libraries=["cudart", "cublas", "gsl", "gslcblas", "gomp"],
-        language="c++",
-        runtime_library_dirs=[CUDA["lib64"]],
-        # This syntax is specific to this build system
-        # we're only going to use certain compiler args with nvcc
-        # and not with gcc the implementation of this trick is in
-        # customize_compiler()
-        extra_compile_args={
-            "gcc": ["-std=c99"],  # '-g'],
-            "nvcc": [
-                "-arch=sm_70",
-                "-gencode=arch=compute_35,code=sm_35",
-                "-gencode=arch=compute_50,code=sm_50",
-                "-gencode=arch=compute_52,code=sm_52",
-                "-gencode=arch=compute_60,code=sm_60",
-                "-gencode=arch=compute_61,code=sm_61",
-                "-gencode=arch=compute_70,code=sm_70",
-                "--default-stream=per-thread",
-                "--ptxas-options=-v",
-                "-c",
-                "--compiler-options",
-                "'-fPIC'",
-                "-lineinfo",
-                "-Xcompiler",
-                "-fopenmp",
-            ],  # ,"-G", "-g"] # for debugging
-        },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/src"],
-    )
-
-"""
-src_folder = "gbgpu/src/"
-for file in os.listdir(src_folder):
-    if file.split(".")[-1] == "cu":
-        shutil.copy(src_folder + file, src_folder + file[:-2] + "cpp")
-shutil.copy("gbgpu/gpuPhenomHM.pyx", "gbgpu/cpuPhenomHM.pyx")
-# Obtain the numpy include directory. This logic works across numpy versions.
-try:
-    numpy_include = numpy.get_include()
-except AttributeError:
-    numpy_include = numpy.get_numpy_include()
-
-lib_gsl_dir = "/opt/local/lib"
-include_gsl_dir = "/opt/local/include"
-
-ext_cpu = Extension(
-    "cpuPhenomHM",
-    sources=[
-        "gbgpu/src/globalPhenomHM.cpp",
-        "gbgpu/src/RingdownCW.cpp",
-        "gbgpu/src/fdresponse.cpp",
-        "gbgpu/src/IMRPhenomD_internals.cpp",
-        "gbgpu/src/IMRPhenomD.cpp",
-        "gbgpu/src/PhenomHM.cpp",
-        "gbgpu/src/manager.cpp",
-        "gbgpu/cpuPhenomHM.pyx",
-    ],
-    library_dirs=[lib_gsl_dir],
-    libraries=["gsl", "gslcblas", "pthread"],
-    language="c++",
-    # sruntime_library_dirs = [CUDA['lib64']],
-    # This syntax is specific to this build system
-    # we're only going to use certain compiler args with nvcc
-    # and not with gcc the implementation of this trick is in
-    # customize_compiler()
-    extra_compile_args={"gcc": ["-O3", "-fopenmp", "-fPIC"]},
-    extra_link_args=["-Wl,-rpath,/usr/local/opt/gcc/lib/gcc/9/"],
-    include_dirs=[numpy_include, include_gsl_dir, "gbgpu/src"],
-)
-
-if run_cuda_install:
-    extensions = [ext_gpu, ext_cpu]
-else:
-    print("Did not locate CUDA binary.")
-    extensions = [ext_cpu]
-
-"""
 extensions = [ext_gpu]  # , ext_gpu2]
 
 setup(
@@ -244,7 +163,8 @@ setup(
     # Random metadata. there's more you can supply
     author="Michael Katz",
     version="0.1",
-    packages=["gbgpu"],
+    packages=["gbgpu", "gbgpu.utils"],
+    py_modules=["gbgpu.new_gbgpu", "gbgpu.utils.pointeradjust"],
     ext_modules=extensions,
     # Inject our custom trigger
     cmdclass={"build_ext": custom_build_ext},

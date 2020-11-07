@@ -2,12 +2,14 @@ import numpy as np
 
 try:
     import cupy as xp
-    from newfastgb import get_basis_tensors
+    from newfastgb import get_basis_tensors, GenWave
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
 
     print("no cupy")
+
+YEAR = 31457280.0
 
 
 class GBGPU(object):
@@ -21,7 +23,20 @@ class GBGPU(object):
         else:
             self.xp = np
 
-    def run_wave(self, amp, f0, fdot, phi0, iota, psi, lam, beta):
+    def run_wave(
+        self,
+        amp,
+        f0,
+        fdot,
+        fddot,
+        phi0,
+        iota,
+        psi,
+        lam,
+        beta,
+        N=int(2 ** 12),
+        T=4 * YEAR,
+    ):
 
         num_bin = len(amp)
 
@@ -38,6 +53,7 @@ class GBGPU(object):
         amp = self.xp.asarray(amp)
         f0 = self.xp.asarray(f0)  # in mHz
         fdot = self.xp.asarray(fdot)
+        fddot = self.xp.asarray(fddot)
         phi0 = self.xp.asarray(phi0)
         iota = self.xp.asarray(iota)
         psi = self.xp.asarray(psi)
@@ -50,4 +66,33 @@ class GBGPU(object):
             eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, num_bin
         )
 
+        data12 = self.xp.zeros(num_bin * 2 * N)
+        data21 = self.xp.zeros(num_bin * 2 * N)
+        data13 = self.xp.zeros(num_bin * 2 * N)
+        data31 = self.xp.zeros(num_bin * 2 * N)
+        data23 = self.xp.zeros(num_bin * 2 * N)
+        data32 = self.xp.zeros(num_bin * 2 * N)
+
+        GenWave(
+            data12,
+            data21,
+            data13,
+            data31,
+            data23,
+            data32,
+            eplus,
+            ecross,
+            f0,
+            fdot,
+            fddot,
+            phi0,
+            DPr,
+            DPi,
+            DCr,
+            DCi,
+            k,
+            T,
+            N,
+            num_bin,
+        )
         breakpoint()
