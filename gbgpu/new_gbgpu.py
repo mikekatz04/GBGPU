@@ -8,7 +8,7 @@ from newfastgb_cpu import XYZ as XYZ_cpu
 
 try:
     import cupy as xp
-    from newfastgb import get_basis_tensors, GenWave, fft_data, unpack_data_1, XYZ
+    from newfastgb import get_basis_tensors, GenWave, unpack_data_1, XYZ
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
