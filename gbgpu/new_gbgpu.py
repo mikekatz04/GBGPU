@@ -55,6 +55,13 @@ class GBGPU(object):
 
         num_bin = len(amp)
 
+        # transform inputs
+        f0 = f0 * T
+        fdot = fdot * T * T
+        fddot = fddot * T * T * T
+
+        theta = np.pi / 2 - beta
+
         eplus = self.xp.zeros(3 * 3 * num_bin)
         ecross = self.xp.zeros(3 * 3 * num_bin)
 
@@ -73,14 +80,15 @@ class GBGPU(object):
         iota = self.xp.asarray(iota)
         psi = self.xp.asarray(psi)
         lam = self.xp.asarray(lam)
-        beta = self.xp.asarray(beta)
+        theta = self.xp.asarray(theta)
 
         cosiota = self.xp.cos(iota)
 
         self.get_basis_tensors(
-            eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, num_bin
+            eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, theta, num_bin
         )
 
+        breakpoint()
         data12 = self.xp.zeros(num_bin * 2 * N)
         data21 = self.xp.zeros(num_bin * 2 * N)
         data13 = self.xp.zeros(num_bin * 2 * N)

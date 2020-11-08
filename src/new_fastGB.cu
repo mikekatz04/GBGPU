@@ -3,6 +3,7 @@
 #include <cufft.h>
 #endif
 
+#include "stdio.h"
 #include "new_fastGB.hh"
 #include "global.h"
 #include "LISA.h"
@@ -108,7 +109,8 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
     			//wfm->eplus[i][j]  = u[i]*u[j] - v[i]*v[j];
     			eplus[(i*3 + j) * num_bin + bin_i]  = v[i]*v[j] - u[i]*u[j];
     			ecross[(i*3 + j) * num_bin + bin_i] = u[i]*v[j] + v[i]*u[j];
-    			//wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
+
+                //wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
     		}
     	}
     }
@@ -163,7 +165,7 @@ void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 	y[0] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
 	z[0] = -SQ3*AU*ec*(ca*cb + sa*sb);
 
-	sb = sin(beta2);
+    sb = sin(beta2);
 	cb = cos(beta2);
 	x[1] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
 	y[1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
@@ -189,14 +191,14 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
 	d2fdt2_0 = d2fdt2/T/T/T;
 
 	spacecraft(t, x, y, z, n, N); // Calculate position of each spacecraft at time t
-
 	for(int i = 0; i < 3; i++)
 	{
 		kdotx_temp = (x[i] * k[0] + y[i] * k[1] + z[i] * k[2])/C;
 		//Wave arrival time at spacecraft i
 		xi_temp    = t - kdotx_temp;
         xi[i] = xi_temp;
-		//FIXME
+
+        //FIXME
 		//xi[i]    = t + kdotx[i];
 		//First order approximation to frequency at spacecraft i
 		f_temp     = f0_0 + dfdt_0 * xi_temp + 0.5 * d2fdt2_0 * xi_temp * xi_temp;
@@ -261,21 +263,27 @@ void calc_kdotr(double* k, double *kdotr, double *r12, double *r21, double *r13,
 
 CUDA_CALLABLE_MEMBER
 void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecross,
-                     double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
+                     double *r12, double *r21, double *r13, double *r31, double *r23, double *r32, int n)
 {
     //Zero arrays to be summed
+    dplus [(0*3 + 0)] = 0.0;
 	dplus [(0*3 + 1)] = 0.0;
 	dplus [(0*3 + 2)] = 0.0;
 	dplus [(1*3 + 0)] = 0.;
-	dplus [(1*3 + 2)] = 0.0;
+	dplus [(1*3 + 1)] = 0.0;
+    dplus [(1*3 + 2)] = 0.0;
 	dplus [(2*3 + 0)] = 0.0;
-	dplus [(2*3 + 1)] = 0.;
-	dcross[(0*3 + 1)] = 0.0;
-	dcross[(0*3 + 2)] = 0.0;
-	dcross[(1*3 + 0)] = 0.;
-	dcross[(1*3 + 2)] = 0.0;
-	dcross[(2*3 + 0)] = 0.0;
-	dcross[(2*3 + 1)] = 0.;
+	dplus [(2*3 + 1)] = 0.0;
+	dplus [(2*3 + 2)] = 0.;
+    dcross [(0*3 + 0)] = 0.0;
+	dcross [(0*3 + 1)] = 0.0;
+	dcross [(0*3 + 2)] = 0.0;
+	dcross [(1*3 + 0)] = 0.;
+	dcross [(1*3 + 1)] = 0.0;
+    dcross [(1*3 + 2)] = 0.0;
+	dcross [(2*3 + 0)] = 0.0;
+	dcross [(2*3 + 1)] = 0.0;
+	dcross [(2*3 + 2)] = 0.;
 
 	//Convenient quantities d+ & dx
 	for(int i = 0; i < 3; i++)
@@ -349,7 +357,15 @@ void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				//Real & Imaginary part of the slowly evolving signal
 				TR[(i*3 + j)] = sinc*(tran1r*tran2r - tran1i*tran2i);
 				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
+
+                //if ((i == 0) && (j == 1) && (t == 1.536000000000000000e+05))
+                //    printf("%.18e %.18e %.18e %.18e\n", kdotr[(i*3 + j)], fonfs[i], xi[i], phi0);
 			}
+            else
+            {
+                TR[(i*3 + j)] = 0.0;
+				TI[(i*3 + j)] = 0.0;
+            }
 		}
 	}
 }
@@ -434,7 +450,6 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
     #endif
 
     int start, end, increment;
-    double t;
 
     #ifdef __CUDACC__
 
@@ -530,11 +545,11 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
     			 n < N;
     			 n += 1)
         {
-        	 t = T*(double)(n)/(double)N;
+        	 double t = T*(double)(n)/(double)N;
 
         	 calc_xi_f(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N);		  // calc frequency and time variables
              calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
-             calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32);    // calculate pieces of waveform
+             calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
              calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
              get_transfer(q, f0, dfdt, d2fdt2, phi0,
                               T, t, n, N,

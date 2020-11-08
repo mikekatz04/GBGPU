@@ -3,15 +3,17 @@ import time
 
 from gbgpu.new_gbgpu import GBGPU
 
+YEAR = 31457280.0
+
 if __name__ == "__main__":
 
-    use_gpu = True
+    use_gpu = False
     gb = GBGPU(use_gpu=use_gpu)
 
-    num_bin = 20000
+    num_bin = 2
     amp = 1e-22
     f0 = 1e0
-    fdot = 1e-16
+    fdot = 1e-11
     fddot = 0.0
     phi0 = 0.1
     iota = 0.2
@@ -28,9 +30,9 @@ if __name__ == "__main__":
     psi_in = np.full(num_bin, psi)
     lam_in = np.full(num_bin, lam)
     beta_in = np.full(num_bin, beta)
-    N = int(1024)
+    N = int(4096)
 
-    num = 100
+    num = 1
     st = time.perf_counter()
     for _ in range(num):
         gb.run_wave(
@@ -59,9 +61,10 @@ if __name__ == "__main__":
     params = np.array([f0, fdot, beta, lam, amp, iota, psi, phi0])
 
     try:
+        print("\n\n\n\n")
         import FastGB as FB
 
-        Tobs = 4.0
+        Tobs = 4.0 * YEAR
         dt = 10.0
 
         fastGB = FB.FastGB("Test", dt=dt, Tobs=Tobs, orbit="analytic")
