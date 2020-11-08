@@ -7,6 +7,7 @@
 #include "new_fastGB.hh"
 #include "global.h"
 #include "LISA.h"
+#include "cuda_complex.hpp"
 
 
 CUDA_CALLABLE_MEMBER
@@ -374,22 +375,15 @@ void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
 
 CUDA_CALLABLE_MEMBER
 void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *TI,
-					  double *data12, double *data21, double *data13,
-					  double *data31, double *data23, double *data32)
+					  cmplx *data12, cmplx *data21, cmplx *data13,
+					  cmplx *data31, cmplx *data23, cmplx *data32)
 {
-	data12[2*n * num_bin + bin_i]   = TR[(0*3 + 1)];
-	data21[2*n * num_bin + bin_i]   = TR[(1*3 + 0)];
-	data31[2*n * num_bin + bin_i]   = TR[(2*3 + 0)];
-	data12[(2*n + 1) * num_bin + bin_i] = TI[(0*3 + 1)];
-	data21[(2*n + 1) * num_bin + bin_i] = TI[(1*3 + 0)];
-	data31[(2*n + 1) * num_bin + bin_i] = TI[(2*3 + 0)];
-	data13[2*n * num_bin + bin_i]   = TR[(0*3 + 2)];
-	data23[2*n * num_bin + bin_i]   = TR[(1*3 + 2)];
-	data32[2*n * num_bin + bin_i]   = TR[(2*3 + 1)];
-	data13[(2*n + 1) * num_bin + bin_i] = TI[(0*3 + 2)];
-	data23[(2*n + 1) * num_bin + bin_i] = TI[(1*3 + 2)];
-	data32[(2*n + 1) * num_bin + bin_i] = TI[(2*3 + 1)];
-
+	data12[n * num_bin + bin_i]   = cmplx(TR[(0*3 + 1)], TI[(0*3 + 1)]);
+	data21[n * num_bin + bin_i]   = cmplx(TR[(1*3 + 0)], TI[(1*3 + 0)]);
+	data31[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 0)], TI[(2*3 + 0)]);
+	data13[n * num_bin + bin_i]   = cmplx(TR[(0*3 + 2)], TI[(0*3 + 2)]);
+	data23[n * num_bin + bin_i]   = cmplx(TR[(1*3 + 2)], TI[(1*3 + 2)]);
+	data32[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 1)], TI[(2*3 + 1)]);
 }
 
 
@@ -397,7 +391,7 @@ void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *
 
 
 CUDA_KERNEL
-void GenWave(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
@@ -563,7 +557,7 @@ void GenWave(double *data12, double *data21, double *data13, double *data31, dou
 }
 
 
-void GenWave_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
@@ -650,13 +644,17 @@ void fft_data_wrap(double *data12, double *data21, double *data13, double *data3
 
 
 CUDA_KERNEL
-void unpack_data_1(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
-                   double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+void unpack_data_1(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                    int N, int num_bin)
 {
 
 
     int start, end, increment;
+
+    int ind_st = N/2;
+
+    double N_double = (double) N;
+
     #ifdef __CUDACC__
 
     start = blockIdx.x * blockDim.x + threadIdx.x;
@@ -676,28 +674,49 @@ void unpack_data_1(double *data12, double *data21, double *data13, double *data3
 			 bin_i += increment)
     {
         for (int i = 0;
-    			 i < N;
+    			 i < ind_st;
     			 i += 1)
         {
     		// populate from most negative (Nyquist) to most positive (Nyquist-1)
-    		a12[i * num_bin + bin_i]   = 0.5*data12[(N + i) * num_bin + bin_i]/(double)N;  // moved the 0.5
-    		a21[i * num_bin + bin_i]   = 0.5*data21[(N + i) * num_bin + bin_i]/(double)N;
-    		a31[i * num_bin + bin_i]   = 0.5*data31[(N + i) * num_bin + bin_i]/(double)N;
-    		a12[(i+N) * num_bin + bin_i] = 0.5*data12[(i) * num_bin + bin_i]/(double)N;
-    		a21[(i+N) * num_bin + bin_i] = 0.5*data21[(i) * num_bin + bin_i]/(double)N;
-    		a31[(i+N) * num_bin + bin_i] = 0.5*data31[(i) * num_bin + bin_i]/(double)N;
-    		a13[i * num_bin + bin_i]   = 0.5*data13[(N + i) * num_bin + bin_i]/(double)N;
-    		a23[i * num_bin + bin_i]   = 0.5*data23[(N + i) * num_bin + bin_i]/(double)N;
-    		a32[i * num_bin + bin_i]   = 0.5*data32[(N + i) * num_bin + bin_i]/(double)N;
-    		a13[(i+N) * num_bin + bin_i] = 0.5*data13[(i) * num_bin + bin_i]/(double)N;
-    		a23[(i+N) * num_bin + bin_i] = 0.5*data23[(i) * num_bin + bin_i]/(double)N;
-    		a32[(i+N) * num_bin + bin_i] = 0.5*data32[(i) * num_bin + bin_i]/(double)N;
+            int ind1 = i * num_bin + bin_i;
+            int ind2 = (ind_st + i) * num_bin + bin_i;
+
+            cmplx temp1, temp2;
+
+            temp1 = data12[ind1];
+            temp2 = data12[ind2];
+            data12[ind2] = 0.5 * temp1 / N_double;
+            data12[ind1] = 0.5 * temp2 / N_double;
+
+            temp1 = data21[ind1];
+            temp2 = data21[ind2];
+            data21[ind2] = 0.5 * temp1 / N_double;
+            data21[ind1] = 0.5 * temp2 / N_double;
+
+            temp1 = data13[ind1];
+            temp2 = data13[ind2];
+            data13[ind2] = 0.5 * temp1 / N_double;
+            data13[ind1] = 0.5 * temp2 / N_double;
+
+            temp1 = data31[ind1];
+            temp2 = data31[ind2];
+            data31[ind2] = 0.5 * temp1 / N_double;
+            data31[ind1] = 0.5 * temp2 / N_double;
+
+            temp1 = data23[ind1];
+            temp2 = data23[ind2];
+            data23[ind2] = 0.5 * temp1 / N_double;
+            data23[ind1] = 0.5 * temp2 / N_double;
+
+            temp1 = data32[ind1];
+            temp2 = data32[ind2];
+            data32[ind2] = 0.5 * temp1 / N_double;
+            data32[ind1] = 0.5 * temp2 / N_double;
     	}
     }
 }
 
-void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
-                   double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+void unpack_data_1_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                    int N, int num_bin)
 {
     #ifdef __CUDACC__
@@ -705,7 +724,6 @@ void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *
 
     unpack_data_1<<<num_blocks, NUM_THREADS>>>(
         data12, data21, data13, data31, data23, data32,
-        a12, a21, a13, a31, a23, a32,
         N, num_bin
     );
     cudaDeviceSynchronize();
@@ -714,7 +732,6 @@ void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *
 
     unpack_data_1(
         data12, data21, data13, data31, data23, data32,
-        a12, a21, a13, a31, a23, a32,
         N, num_bin
     );
 
@@ -724,7 +741,7 @@ void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *
 
 
 CUDA_CALLABLE_MEMBER
-void XYZ_sub(int i, int bin_i, int num_bin, double *a12, double *a21, double *a13, double *a31, double *a23, double *a32, double f0, int q, int M, double dt, double Tobs, double *XLS_r, double *YLS_r, double *ZLS_r,
+void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32, double f0, int q, int M, double dt, double Tobs, double *XLS_r, double *YLS_r, double *ZLS_r,
 					double* XSL_r, double* YSL_r, double* ZSL_r, double *XLS_i, double *YLS_i, double *ZLS_i, double *XSL_i, double *YSL_i, double *ZSL_i)
 {
 	double fonfs;
@@ -758,27 +775,37 @@ void XYZ_sub(int i, int bin_i, int num_bin, double *a12, double *a21, double *a1
 				//printf("%e, %e, %ld, %ld, %ld\n", f, f2 - f1, q, i, M/2);
 		//}
 		fonfs = f/fstar;
+
+        //if (i == 0) printf("%.18e %.18e %.18e %.18e %d %d \n", fonfs, f, fstar, Tobs, q, M/2);
 		//printf("Stas fonfs = %f, %f, %f, %f \n", fonfs, f, fstar, Tobs);
 		c3 = cos(3.*fonfs);  c2 = cos(2.*fonfs);  c1 = cos(1.*fonfs);
 		s3 = sin(3.*fonfs);  s2 = sin(2.*fonfs);  s1 = sin(1.*fonfs);
 
-        double a12_r = a12[(2*i) * num_bin + bin_i];
-        double a12_i = a12[(2*i + 1) * num_bin + bin_i];
+        cmplx temp;
 
-        double a21_r = a21[(2*i) * num_bin + bin_i];
-        double a21_i = a21[(2*i + 1) * num_bin + bin_i];
+        temp = a12[i * num_bin + bin_i];
+        double a12_r = temp.real();
+        double a12_i = temp.imag();
 
-        double a13_r = a13[(2*i) * num_bin + bin_i];
-        double a13_i = a13[(2*i + 1) * num_bin + bin_i];
+        temp = a21[i * num_bin + bin_i];
+        double a21_r = temp.real();
+        double a21_i = temp.imag();
 
-        double a31_r = a31[(2*i) * num_bin + bin_i];
-        double a31_i = a31[(2*i + 1) * num_bin + bin_i];
+        temp = a13[i * num_bin + bin_i];
+        double a13_r = temp.real();
+        double a13_i = temp.imag();
 
-        double a23_r = a23[(2*i) * num_bin + bin_i];
-        double a23_i = a23[(2*i + 1) * num_bin + bin_i];
+        temp = a31[i * num_bin + bin_i];
+        double a31_r = temp.real();
+        double a31_i = temp.imag();
 
-        double a32_r = a32[(2*i) * num_bin + bin_i];
-        double a32_i = a32[(2*i + 1) * num_bin + bin_i];
+        temp = a23[i * num_bin + bin_i];
+        double a23_r = temp.real();
+        double a23_i = temp.imag();
+
+        temp = a32[i * num_bin + bin_i];
+        double a32_r = temp.real();
+        double a32_i = temp.imag();
 
 		X_1   = (a12_r-a13_r)*c3 + (a12_i-a13_i)*s3 +
 		           (a21_r-a31_r)*c2 + (a21_i-a31_i)*s2 +
@@ -855,8 +882,7 @@ void XYZ_sub(int i, int bin_i, int num_bin, double *a12, double *a21, double *a1
 }
 
 CUDA_KERNEL
-void XYZ(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
-              double *XLS, double *YLS, double *ZLS,
+void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
               double *f0_all,
               int num_bin, int N, double dt, double T, double df){
 
@@ -888,7 +914,7 @@ void XYZ(double *a12, double *a21, double *a13, double *a31, double *a23, double
     {
 
         double f0 = f0_all[bin_i];
-        int q = (int) f0*T;
+        int q = (int) f0;
 
 		for (int i = 0;
 				 i < M;
@@ -920,13 +946,9 @@ void XYZ(double *a12, double *a21, double *a13, double *a31, double *a23, double
             T_i = invsqrt3*(XSL_i+YSL_i+ZSL_i)/df;
 
 
-            XLS[2 * i * num_bin + bin_i] = A_r;
-            XLS[(2 * i + 1) * num_bin + bin_i] = A_i;
-            YLS[2 * i * num_bin + bin_i] = E_r;
-            YLS[(2 * i + 1) * num_bin + bin_i] = E_i;
-            ZLS[2 * i * num_bin + bin_i] = T_r;
-            ZLS[(2 * i + 1) * num_bin + bin_i] = T_i;
-
+            a12[i * num_bin + bin_i] = cmplx(XSL_r, XSL_i);
+            a21[i * num_bin + bin_i] = cmplx(YSL_r, YSL_i);
+            a13[i * num_bin + bin_i] = cmplx(ZSL_r, ZSL_i);
 
     		//atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
     		//atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);
@@ -952,8 +974,7 @@ void XYZ(double *a12, double *a21, double *a13, double *a31, double *a23, double
 }
 
 
-void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
-              double *XLS, double *YLS, double *ZLS,
+void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
               double *f0_all,
               int num_bin, int N, double dt, double T, double df)
 {
@@ -964,7 +985,6 @@ void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, d
 
     XYZ<<<num_blocks, NUM_THREADS>>>(
         a12, a21, a13, a31, a23, a32,
-        XLS, YLS, ZLS,
         f0_all,
         num_bin, N, dt, T, df
     );
@@ -975,7 +995,6 @@ void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, d
 
     XYZ(
         a12, a21, a13, a31, a23, a32,
-        XLS, YLS, ZLS,
         f0_all,
         num_bin, N, dt, T, df
     );

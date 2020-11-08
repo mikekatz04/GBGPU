@@ -30,33 +30,7 @@ if __name__ == "__main__":
     psi_in = np.full(num_bin, psi)
     lam_in = np.full(num_bin, lam)
     beta_in = np.full(num_bin, beta)
-    N = int(4096)
-
-    num = 1
-    st = time.perf_counter()
-    for _ in range(num):
-        gb.run_wave(
-            amp_in,
-            f0_in,
-            fdot_in,
-            fddot_in,
-            phi0_in,
-            iota_in,
-            psi_in,
-            lam_in,
-            beta_in,
-            N=N,
-        )
-    et = time.perf_counter()
-
-    print(
-        "time:",
-        (et - st) / num,
-        "sec",
-        "time per bin:",
-        (et - st) / (num * num_bin),
-        "sec",
-    )
+    N = int(256)
 
     params = np.array([f0, fdot, beta, lam, amp, iota, psi, phi0])
 
@@ -85,5 +59,31 @@ if __name__ == "__main__":
 
     except:
         pass
+
+    num = 100
+    st = time.perf_counter()
+    for _ in range(num):
+        gb.run_wave(
+            amp_in,
+            f0_in,
+            fdot_in,
+            fddot_in,
+            phi0_in,
+            iota_in,
+            psi_in,
+            lam_in,
+            beta_in,
+            N=N,
+        )
+    et = time.perf_counter()
+
+    print(
+        "time:",
+        (et - st) / num,
+        "sec",
+        "time per bin:",
+        (et - st) / (num * num_bin),
+        "sec",
+    )
 
     breakpoint()

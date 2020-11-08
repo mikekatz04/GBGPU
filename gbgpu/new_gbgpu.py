@@ -88,20 +88,12 @@ class GBGPU(object):
             eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, theta, num_bin
         )
 
-        breakpoint()
-        data12 = self.xp.zeros(num_bin * 2 * N)
-        data21 = self.xp.zeros(num_bin * 2 * N)
-        data13 = self.xp.zeros(num_bin * 2 * N)
-        data31 = self.xp.zeros(num_bin * 2 * N)
-        data23 = self.xp.zeros(num_bin * 2 * N)
-        data32 = self.xp.zeros(num_bin * 2 * N)
-
-        a12 = self.xp.zeros(num_bin * 2 * N)
-        a21 = self.xp.zeros(num_bin * 2 * N)
-        a13 = self.xp.zeros(num_bin * 2 * N)
-        a31 = self.xp.zeros(num_bin * 2 * N)
-        a23 = self.xp.zeros(num_bin * 2 * N)
-        a32 = self.xp.zeros(num_bin * 2 * N)
+        data12 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+        data21 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+        data13 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+        data31 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+        data23 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+        data32 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
 
         self.GenWave(
             data12,
@@ -126,67 +118,20 @@ class GBGPU(object):
             num_bin,
         )
 
-        data12 = self.xp.fft.fft(
-            data12.reshape(2 * N, num_bin)[:, 0::2]
-            + 1j * data12.reshape(2 * N, num_bin)[:, 1::2]
-        ).flatten()
-        data21 = self.xp.fft.fft(
-            data21.reshape(2 * N, num_bin)[:, 0::2]
-            + 1j * data21.reshape(2 * N, num_bin)[:, 1::2]
-        ).flatten()
-        data13 = self.xp.fft.fft(
-            data13.reshape(2 * N, num_bin)[:, 0::2]
-            + 1j * data13.reshape(2 * N, num_bin)[:, 1::2]
-        ).flatten()
-        data31 = self.xp.fft.fft(
-            data31.reshape(2 * N, num_bin)[:, 0::2]
-            + 1j * data31.reshape(2 * N, num_bin)[:, 1::2]
-        ).flatten()
-        data23 = self.xp.fft.fft(
-            data23.reshape(2 * N, num_bin)[:, 0::2]
-            + 1j * data23.reshape(2 * N, num_bin)[:, 1::2]
-        ).flatten()
-        data32 = self.xp.fft.fft(
-            data32.reshape(2 * N, num_bin)[:, 0::2]
-            + 1j * data32.reshape(2 * N, num_bin)[:, 1::2]
-        ).flatten()
+        data12 = self.xp.fft.fft(data12.reshape(N, num_bin), axis=0).flatten()
+        data21 = self.xp.fft.fft(data21.reshape(N, num_bin), axis=0).flatten()
+        data13 = self.xp.fft.fft(data13.reshape(N, num_bin), axis=0).flatten()
+        data31 = self.xp.fft.fft(data31.reshape(N, num_bin), axis=0).flatten()
+        data23 = self.xp.fft.fft(data23.reshape(N, num_bin), axis=0).flatten()
+        data32 = self.xp.fft.fft(data32.reshape(N, num_bin), axis=0).flatten()
 
-        self.unpack_data_1(
-            data12,
-            data21,
-            data13,
-            data31,
-            data23,
-            data32,
-            a12,
-            a21,
-            a13,
-            a31,
-            a23,
-            a32,
-            N,
-            num_bin,
-        )
-
-        self.XLS = self.xp.zeros(num_bin * 2 * N)
-        self.YLS = self.xp.zeros(num_bin * 2 * N)
-        self.ZLS = self.xp.zeros(num_bin * 2 * N)
+        self.unpack_data_1(data12, data21, data13, data31, data23, data32, N, num_bin)
 
         df = 1 / T
         self.XYZ(
-            a12,
-            a21,
-            a13,
-            a31,
-            a23,
-            a32,
-            self.XLS,
-            self.YLS,
-            self.ZLS,
-            f0,
-            num_bin,
-            N,
-            dt,
-            T,
-            df,
+            data12, data21, data13, data31, data23, data32, f0, num_bin, N, dt, T, df
         )
+
+        self.X = data12.reshape(N, num_bin).T
+        self.Y = data21.reshape(N, num_bin).T
+        self.Z = data13.reshape(N, num_bin).T

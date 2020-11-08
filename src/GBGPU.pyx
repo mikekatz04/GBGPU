@@ -6,23 +6,20 @@ from gbgpu.utils.pointeradjust import pointer_adjust
 assert sizeof(int) == sizeof(np.int32_t)
 
 cdef extern from "new_fastGB.hh":
+    ctypedef void* cmplx 'cmplx'
     void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
                             double* amp, double* cosiota, double* psi, double* lam, double* beta, int num_bin);
 
-    void GenWave_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
+    void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                  double* eplus_in, double* ecross_in,
                  double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
                  double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
                  double* k_in, double T, int N, int num_bin);
 
-    void fft_data_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32, int num_bin, int N);
-
-    void unpack_data_1_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32,
-                       double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
+    void unpack_data_1_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                        int N, int num_bin);
 
-    void XYZ_wrap(double *a12, double *a21, double *a13, double *a31, double *a23, double *a32,
-                 double *XLS, double *YLS, double *ZLS,
+    void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
                  double *f0_all,
                  int num_bin, int N, double dt, double T, double df);
 
@@ -73,7 +70,7 @@ def GenWave(data12, data21, data13, data31, data23, data32,
     cdef size_t DCi_all_in = DCi_all
 
 
-    GenWave_wrap(<double*>data12_in, <double*>data21_in, <double*>data13_in, <double*>data31_in, <double*>data23_in, <double*>data32_in,
+    GenWave_wrap(<cmplx*>data12_in, <cmplx*>data21_in, <cmplx*>data13_in, <cmplx*>data31_in, <cmplx*>data23_in, <cmplx*>data32_in,
                  <double*> eplus_in, <double*> ecross_in,
                  <double*>f0_all_in, <double*>dfdt_all_in, <double*>d2fdt2_all_in, <double*> phi0_all_in,
                  <double*>DPr_all_in, <double*>DPi_all_in, <double*>DCr_all_in, <double*>DCi_all_in,
@@ -98,7 +95,6 @@ def fft_data(data12, data21, data13, data31, data23, data32, num_bin, N):
 
 @pointer_adjust
 def unpack_data_1(data12, data21, data13, data31, data23, data32,
-                  a12, a21, a13, a31, a23, a32,
                   N, num_bin):
 
     cdef size_t data12_in = data12
@@ -108,21 +104,12 @@ def unpack_data_1(data12, data21, data13, data31, data23, data32,
     cdef size_t data23_in = data23
     cdef size_t data32_in = data32
 
-    cdef size_t a12_in = a12
-    cdef size_t a21_in = a21
-    cdef size_t a13_in = a13
-    cdef size_t a31_in = a31
-    cdef size_t a23_in = a23
-    cdef size_t a32_in = a32
-
-    unpack_data_1_wrap(<double *>data12_in, <double *>data21_in, <double *>data13_in, <double *>data31_in, <double *>data23_in, <double *>data32_in,
-                      <double *>a12_in, <double *>a21_in, <double *>a13_in, <double *>a31_in, <double *>a23_in, <double *>a32_in,
+    unpack_data_1_wrap(<cmplx*>data12_in, <cmplx*>data21_in, <cmplx*>data13_in, <cmplx*>data31_in, <cmplx*>data23_in, <cmplx*>data32_in,
                       N, num_bin)
 
 
 @pointer_adjust
 def XYZ(a12, a21, a13, a31, a23, a32,
-        XLS, YLS, ZLS,
         f0_all,
         num_bin, N, dt, T, df):
 
@@ -132,12 +119,8 @@ def XYZ(a12, a21, a13, a31, a23, a32,
     cdef size_t a31_in = a31
     cdef size_t a23_in = a23
     cdef size_t a32_in = a32
-    cdef size_t XLS_in = XLS
-    cdef size_t YLS_in = YLS
-    cdef size_t ZLS_in = ZLS
     cdef size_t f0_all_in = f0_all
 
-    XYZ_wrap(<double *>a12_in, <double *>a21_in, <double *>a13_in, <double *>a31_in, <double *>a23_in, <double *>a32_in,
-                <double *>XLS_in, <double *>YLS_in, <double *>ZLS_in,
+    XYZ_wrap(<cmplx *>a12_in, <cmplx *>a21_in, <cmplx *>a13_in, <cmplx *>a31_in, <cmplx *>a23_in, <cmplx *>a32_in,
                 <double *>f0_all_in,
                 num_bin, N, dt, T, df)
