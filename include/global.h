@@ -37,6 +37,7 @@
 #define CUDA_CALLABLE_MEMBER __host__ __device__
 #define CUDA_KERNEL __global__
 #define CUDA_SHARED __shared__
+#define CUDA_SYNCTHREADS __syncthreads();
 
 
 /*
@@ -58,6 +59,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 #define CUDA_CALLABLE_MEMBER
 #define CUDA_KERNEL
 #define CUDA_SHARED
+#define CUDA_SYNCTHREADS
 #endif
 
 typedef gcmplx::complex<double> cmplx;

@@ -170,7 +170,7 @@ ext_cpu = Extension(
     library_dirs=[lib_gsl_dir],
     libraries=["gsl", "gslcblas", "gomp"],
     language="c++",
-    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp"],},  # '-g'],
+    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp", "-fPIC"],},  # '-g'],
     include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
 

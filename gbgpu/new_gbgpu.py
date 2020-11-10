@@ -48,12 +48,20 @@ class GBGPU(object):
         psi,
         lam,
         beta,
+        A2,
+        omegabar,
+        e,
+        n2,
+        T2,
+        modes=np.array([2]),
         N=int(2 ** 12),
         T=4 * YEAR,
         dt=10.0,
     ):
 
         num_bin = len(amp)
+
+        num_modes = len(modes)
 
         # transform inputs
         f0 = f0 * T
@@ -62,13 +70,13 @@ class GBGPU(object):
 
         theta = np.pi / 2 - beta
 
-        eplus = self.xp.zeros(3 * 3 * num_bin)
-        ecross = self.xp.zeros(3 * 3 * num_bin)
+        eplus = self.xp.zeros(3 * 3 * num_modes * num_bin)
+        ecross = self.xp.zeros(3 * 3 * num_modes * num_bin)
 
-        DPr = self.xp.zeros(num_bin)
-        DPi = self.xp.zeros(num_bin)
-        DCr = self.xp.zeros(num_bin)
-        DCi = self.xp.zeros(num_bin)
+        DPr = self.xp.zeros(num_bin * num_modes)
+        DPi = self.xp.zeros(num_bin * num_modes)
+        DCr = self.xp.zeros(num_bin * num_modes)
+        DCi = self.xp.zeros(num_bin * num_modes)
 
         k = self.xp.zeros(3 * num_bin)
 
@@ -81,19 +89,36 @@ class GBGPU(object):
         psi = self.xp.asarray(psi)
         lam = self.xp.asarray(lam)
         theta = self.xp.asarray(theta)
+        e = self.xp.asarray(e)
+        modes = self.xp.asarray(modes).astype(self.xp.int32)
 
         cosiota = self.xp.cos(iota)
 
         self.get_basis_tensors(
-            eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, theta, num_bin
+            eplus,
+            ecross,
+            DPr,
+            DPi,
+            DCr,
+            DCi,
+            k,
+            amp,
+            cosiota,
+            psi,
+            lam,
+            theta,
+            e,
+            modes,
+            num_modes,
+            num_bin,
         )
 
-        data12 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-        data21 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-        data13 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-        data31 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-        data23 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-        data32 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+        data12 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
+        data21 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
+        data13 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
+        data31 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
+        data23 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
+        data32 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
 
         self.GenWave(
             data12,
@@ -108,6 +133,11 @@ class GBGPU(object):
             fdot,
             fddot,
             phi0,
+            A2,
+            omegabar,
+            e,
+            n2,
+            T2,
             DPr,
             DPi,
             DCr,
@@ -115,15 +145,29 @@ class GBGPU(object):
             k,
             T,
             N,
+            modes,
+            num_modes,
             num_bin,
         )
 
-        data12 = self.xp.fft.fft(data12.reshape(N, num_bin), axis=0).flatten()
-        data21 = self.xp.fft.fft(data21.reshape(N, num_bin), axis=0).flatten()
-        data13 = self.xp.fft.fft(data13.reshape(N, num_bin), axis=0).flatten()
-        data31 = self.xp.fft.fft(data31.reshape(N, num_bin), axis=0).flatten()
-        data23 = self.xp.fft.fft(data23.reshape(N, num_bin), axis=0).flatten()
-        data32 = self.xp.fft.fft(data32.reshape(N, num_bin), axis=0).flatten()
+        data12 = self.xp.fft.fft(
+            data12.reshape(num_modes, N, num_bin), axis=1
+        ).flatten()
+        data21 = self.xp.fft.fft(
+            data21.reshape(num_modes, N, num_bin), axis=1
+        ).flatten()
+        data13 = self.xp.fft.fft(
+            data13.reshape(num_modes, N, num_bin), axis=1
+        ).flatten()
+        data31 = self.xp.fft.fft(
+            data31.reshape(num_modes, N, num_bin), axis=1
+        ).flatten()
+        data23 = self.xp.fft.fft(
+            data23.reshape(num_modes, N, num_bin), axis=1
+        ).flatten()
+        data32 = self.xp.fft.fft(
+            data32.reshape(num_modes, N, num_bin), axis=1
+        ).flatten()
 
         self.unpack_data_1(data12, data21, data13, data31, data23, data32, N, num_bin)
 
@@ -132,6 +176,6 @@ class GBGPU(object):
             data12, data21, data13, data31, data23, data32, f0, num_bin, N, dt, T, df
         )
 
-        self.X = data12.reshape(N, num_bin).T
-        self.Y = data21.reshape(N, num_bin).T
-        self.Z = data13.reshape(N, num_bin).T
+        self.X = data12.reshape(num_modes, N, num_bin).T
+        self.Y = data21.reshape(num_modes, N, num_bin).T
+        self.Z = data13.reshape(num_modes, N, num_bin).T

@@ -1,13 +1,76 @@
-
-#ifdef __CUDACC__
-#include <cufft.h>
-#endif
-
 #include "stdio.h"
 #include "new_fastGB.hh"
 #include "global.h"
 #include "LISA.h"
 #include "cuda_complex.hpp"
+#include "omp.h"
+
+#ifdef __CUDACC__
+#include <cufft.h>
+#else
+#include <gsl/gsl_errno.h>
+#include <gsl/gsl_sf_bessel.h>
+#endif
+
+
+CUDA_CALLABLE_MEMBER
+void get_j_consts(double* Cpj, double* Spj, double* Ccj, double* Scj, double beta, double e, double cosiota, int j)
+{
+
+	double result;
+
+    #ifdef __CUDACC__
+    double Jj   = jn(j,   j*e);
+	double Jjp1 = jn(j+1, j*e);
+	double Jjm1 = jn(j-1, j*e);
+    #else
+	double Jj   = gsl_sf_bessel_Jn(j,   j*e);
+	double Jjp1 = gsl_sf_bessel_Jn(j+1, j*e);
+	double Jjm1 = gsl_sf_bessel_Jn(j-1, j*e);
+    #endif
+
+	result  = cos(2*beta)*(1 + cosiota*cosiota)*e*(1-e*e)*j*(Jjp1 - Jjm1);
+	result -= (cos(2*beta)*(1 + cosiota*cosiota)*(e*e-2)+e*e*sqrt(1-cosiota*cosiota))*Jj;
+
+	*Cpj = result*2/e/e; // CPj
+
+    result  = e*Jjm1;
+	result -= (1+(1-e*e)*j)*Jj;
+
+	*Spj = result*4/e/e*sin(2*beta)*(1+cosiota*cosiota)*sqrt(1-e*e); // Spj
+
+    result  = 2*e*(1-e*e)*j*Jjm1;
+    result -= 2*(1+j*(1-e*e)-e*e/2)*Jj;
+
+    *Ccj = result*4/e/e*sin(2*beta)*cosiota;  // Ccj
+
+    result  = e*Jjm1;
+    result -= (1+(1-e*e)*j)*Jj;
+
+    *Scj = result*8/e/e*sqrt(1-e*e)*cos(2*beta)*cosiota;  // Scj
+
+}
+
+CUDA_CALLABLE_MEMBER
+void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
+                             double amp, double cosiota, double psi, double beta, double e, int jj, int j, int bin_i, int num_bin)
+{
+	double sinps, cosps;
+
+	double Cpj, Spj, Ccj, Scj;
+
+    get_j_consts(&Cpj, &Spj, &Ccj, &Scj, beta, e, cosiota, j);
+
+	//Calculate cos and sin of polarization
+	cosps = cos(2.*psi);
+	sinps = sin(2.*psi);
+
+	//Calculate constant pieces of transfer functions
+	DPr[jj * num_bin + bin_i]    =  amp*(Cpj*cosps - Scj*sinps);
+	DPi[jj * num_bin + bin_i]    = -amp*(Scj*cosps + Ccj*sinps);
+	DCr[jj * num_bin + bin_i]    = -amp*(Cpj*sinps + Scj*cosps);
+	DCi[jj * num_bin + bin_i]    =  amp*(Spj*sinps - Ccj*cosps);
+}
 
 
 CUDA_CALLABLE_MEMBER
@@ -34,7 +97,6 @@ void set_const_trans(double* DPr, double* DPi, double* DCr, double* DCi, double 
 }
 
 
-
 CUDA_CALLABLE_MEMBER
 void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, int bin_i, int num_bin)
 {
@@ -53,10 +115,10 @@ void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, i
 
 // TODO: check if this can be upped by reusing shared memory
 #define  NUM_THREADS 256
-
+#define  MAX_MODES 4
 CUDA_KERNEL
 void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                       double* amp, double* cosiota, double* psi, double* lam, double* beta, int num_bin)
+                       double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int* mode_j, int num_modes, int num_bin)
 {
 	 // GW basis vectors
 
@@ -69,6 +131,29 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
     #endif
 
     int start, end, increment;
+
+    CUDA_SHARED int js[MAX_MODES];
+
+    #ifdef __CUDACC__
+
+    start = blockIdx.x;
+    end = num_modes;
+    increment = blockDim.x;
+
+    #else
+
+    start = 0;
+    end = num_modes;
+    increment = 1;
+
+    #pragma omp parallel for
+    #endif
+    for (int j = start; j < end; j += increment)
+    {
+        js[j] = mode_j[j];
+    }
+    CUDA_SYNCTHREADS
+
     #ifdef __CUDACC__
 
     start = blockIdx.x * blockDim.x + threadIdx.x;
@@ -83,42 +168,60 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
 
     #pragma omp parallel for
     #endif
-	for (int bin_i = start; bin_i < end; bin_i += increment)
+    for (int bin_i = start; bin_i < end; bin_i += increment)
     {
 
         #ifdef __CUDACC__
         #else
 
         double u_all[3];
-    	double v_all[3];
+        double v_all[3];
 
         double* u = &u_all[0];
         double* v = &v_all[0];
 
         #endif
 
-    	set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);  // set the constant pieces of transfer function
+        get_basis_vecs(k, u, v, lam[bin_i], beta[bin_i], bin_i, num_bin); //Gravitational Wave source basis vectors
 
-        // TODO: beta vs theta?
-    	get_basis_vecs(k, u, v, lam[bin_i], beta[bin_i], bin_i, num_bin); //Gravitational Wave source basis vectors
+        int start1, end1, increment1;
+        #ifdef __CUDACC__
 
-    	//GW polarization basis tensors
-    	for(int i = 0; i < 3; i++)
-    	{
-    		for(int j = 0; j < 3; j++)
-    		{
-    			//wfm->eplus[i][j]  = u[i]*u[j] - v[i]*v[j];
-    			eplus[(i*3 + j) * num_bin + bin_i]  = v[i]*v[j] - u[i]*u[j];
-    			ecross[(i*3 + j) * num_bin + bin_i] = u[i]*v[j] + v[i]*u[j];
+        start1= blockIdx.y;
+        end1 = num_modes;
+        increment1 = gridDim.y;
 
-                //wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
-    		}
-    	}
+        #else
+
+        start1 = 0;
+        end1 = num_modes;
+        increment1 = 1;
+        #endif
+        for (int jj = start1; jj < end1; jj += increment1)
+        {
+            int j = js[jj];
+            //printf("%d %d %d\n", jj, j, num_modes);
+            set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta[bin_i], e[bin_i], jj, j, bin_i, num_bin);  // set the constant pieces of transfer function
+            //set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);
+
+            //GW polarization basis tensors
+            for(int i = 0; i < 3; i++)
+            {
+                for(int j = 0; j < 3; j++)
+                {
+                    //wfm->eplus[i][j]  = u[i]*u[j] - v[i]*v[j];
+                    eplus[(jj * 9 + (i*3 + j)) * num_bin + bin_i]  = v[i]*v[j] - u[i]*u[j];
+                    ecross[(jj * 9 + (i*3 + j)) * num_bin + bin_i] = u[i]*v[j] + v[i]*u[j];
+
+                    //wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
+                }
+            }
+        }
     }
 }
 
 void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                            double* amp, double* cosiota, double* psi, double* lam, double* beta, int num_bin)
+                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int* mode_j, int num_modes, int num_bin)
 {
 
     #ifdef __CUDACC__
@@ -127,7 +230,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 
     get_basis_tensors<<<num_blocks, NUM_THREADS>>>(
         eplus, ecross, DPr, DPi, DCr, DCi, k,
-        amp, cosiota, psi, lam, beta, num_bin
+        amp, cosiota, psi, lam, beta, e, mode_j, num_modes, num_bin
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -136,7 +239,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 
     get_basis_tensors(
         eplus, ecross, DPr, DPi, DCr, DCi, k,
-        amp, cosiota, psi, lam, beta, num_bin
+        amp, cosiota, psi, lam, beta, e, mode_j, num_modes, num_bin
     );
 
     #endif
@@ -180,8 +283,115 @@ void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 }
 
 CUDA_CALLABLE_MEMBER
-void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* fonfs,
-               double f0, double dfdt, double d2fdt2, double T, double t, int n, int N)
+double get_u(double l, double e)
+{
+	///////////////////////
+	//
+	// Invert Kepler's equation l = u - e sin(u)
+	// Using Mikkola's method (1987)
+	// referenced Tessmer & Gopakumar 2007
+	//
+	///////////////////////
+
+	double u0;							// initial guess at eccentric anomaly
+	double z, alpha, beta, s, w;		// auxiliary variables
+	double mult;						// multiple number of 2pi
+
+	int neg		 = 0;					// check if l is negative
+	int over2pi  = 0;					// check if over 2pi
+	int overpi	 = 0;					// check if over pi but not 2pi
+
+	double f, f1, f2, f3, f4;			// pieces of root finder
+	double u, u1, u2, u3, u4;
+
+	// enforce the mean anomaly to be in the domain -pi < l < pi
+	if (l < 0)
+	{
+		neg = 1;
+		l   = -l;
+	}
+	if (l > 2.*M_PI)
+	{
+		over2pi = 1;
+		mult	= floor(l/(2.*M_PI));
+		l	   -= mult*2.*M_PI;
+	}
+	if (l > M_PI)
+	{
+		overpi = 1;
+		l	   = 2.*M_PI - l;
+	}
+
+	alpha = (1. - e)/(4.*e + 0.5);
+	beta  = 0.5*l/(4.*e + 0.5);
+
+	z = sqrt(beta*beta + alpha*alpha*alpha);
+	if (neg == 1) z = beta - z;
+	else	      z = beta + z;
+
+	// to handle nan's from negative arguments
+	if (z < 0.) z = -pow(-z, 0.3333333333333333);
+	else 	    z =  pow( z, 0.3333333333333333);
+
+	s  = z - alpha/z;
+	w  = s - 0.078*s*s*s*s*s/(1. + e);
+
+	u0 = l + e*(3.*w - 4.*w*w*w);
+
+	// now this initial guess must be iterated once with a 4th order Newton root finder
+	f  = u0 - e*sin(u0) - l;
+	f1 = 1. - e*cos(u0);
+	f2 = u0 - f - l;
+	f3 = 1. - f1;
+	f4 = -f2;
+
+	f2 *= 0.5;
+	f3 *= 0.166666666666667;
+	f4 *= 0.0416666666666667;
+
+	u1 = -f/f1;
+	u2 = -f/(f1 + f2*u1);
+	u3 = -f/(f1 + f2*u2 + f3*u2*u2);
+	u4 = -f/(f1 + f2*u3 + f3*u3*u3 + f4*u3*u3*u3);
+
+	u = u0 + u4;
+
+	if (overpi  == 1) u = 2.*M_PI - u;
+	if (over2pi == 1) u = 2.*M_PI*mult + u;
+	if (neg		== 1) u = -u;
+
+	return u;
+}
+
+CUDA_CALLABLE_MEMBER
+double get_phi(double t, double T, double e, double n)
+{
+	double u, beta;
+
+	u = get_u(n*(t-T), e);
+
+	if (e == 0.) return u;
+
+	beta = (1. - sqrt(1. - e*e))/e;
+
+	return u + 2.*atan2( beta*sin(u), 1. - beta*cos(u));
+}
+
+CUDA_CALLABLE_MEMBER
+double get_vLOS(double A2, double omegabar, double e2, double n2, double T2, double t)
+{
+ 	double phi2;
+
+	phi2 = get_phi(t, T2, e2, n2); //if (t == 0.) fprintf(stdout, "phi2_{0}: %f\n", phi2);
+
+	return A2*(sin(phi2 + omegabar) + e2*sin(omegabar));
+}
+
+
+CUDA_CALLABLE_MEMBER
+void calc_xi_f_eccTrip(double* x, double* y, double* z, double* k, double* xi, double* fonfs,
+               double f0, double dfdt, double d2fdt2, double T, double t, int n, int N, int j,
+               double A2, double omegabar, double e2, double n2, double T2)
 {
 	double f0_0, dfdt_0, d2fdt2_0;
 
@@ -189,7 +399,7 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
 
 	f0_0       = f0/T;
 	dfdt_0   = dfdt/T/T;
-	d2fdt2_0 = d2fdt2/T/T/T;
+	d2fdt2_0 = 11./3.*dfdt_0*dfdt_0/f0_0;
 
 	spacecraft(t, x, y, z, n, N); // Calculate position of each spacecraft at time t
 	for(int i = 0; i < 3; i++)
@@ -203,6 +413,7 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
 		//xi[i]    = t + kdotx[i];
 		//First order approximation to frequency at spacecraft i
 		f_temp     = f0_0 + dfdt_0 * xi_temp + 0.5 * d2fdt2_0 * xi_temp * xi_temp;
+        f_temp     *= (1. + get_vLOS(A2, omegabar, e2, n2, T2, xi_temp)/C)*(double)j/2.;
 
 		//Ratio of true frequency to transfer frequency
 		fonfs[i] = f_temp/fstar;
@@ -374,16 +585,16 @@ void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
 
 
 CUDA_CALLABLE_MEMBER
-void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *TI,
+void fill_time_series(int bin_i, int num_bin, int j, int n, int N, double *TR, double *TI,
 					  cmplx *data12, cmplx *data21, cmplx *data13,
 					  cmplx *data31, cmplx *data23, cmplx *data32)
 {
-	data12[n * num_bin + bin_i]   = cmplx(TR[(0*3 + 1)], TI[(0*3 + 1)]);
-	data21[n * num_bin + bin_i]   = cmplx(TR[(1*3 + 0)], TI[(1*3 + 0)]);
-	data31[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 0)], TI[(2*3 + 0)]);
-	data13[n * num_bin + bin_i]   = cmplx(TR[(0*3 + 2)], TI[(0*3 + 2)]);
-	data23[n * num_bin + bin_i]   = cmplx(TR[(1*3 + 2)], TI[(1*3 + 2)]);
-	data32[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 1)], TI[(2*3 + 1)]);
+	data12[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(0*3 + 1)], TI[(0*3 + 1)]);
+	data21[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(1*3 + 0)], TI[(1*3 + 0)]);
+	data31[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(2*3 + 0)], TI[(2*3 + 0)]);
+	data13[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(0*3 + 2)], TI[(0*3 + 2)]);
+	data23[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(1*3 + 2)], TI[(1*3 + 2)]);
+	data32[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(2*3 + 1)], TI[(2*3 + 1)]);
 }
 
 
@@ -394,8 +605,9 @@ CUDA_KERNEL
 void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
+             double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
-             double* k_in, double T, int N, int num_bin)
+             double* k_in, double T, int N, int* mode_j, int num_modes, int num_bin)
 {
 
 
@@ -420,7 +632,6 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
     CUDA_SHARED double TR_all[9 * NUM_THREADS_2];
     CUDA_SHARED double TI_all[9 * NUM_THREADS_2];
 
-
     double* x = &x_all[3 * threadIdx.x];
     double* y = &y_all[3 * threadIdx.x];
     double* z = &z_all[3 * threadIdx.x];
@@ -443,7 +654,28 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
     #endif
 
+    CUDA_SHARED int js[MAX_MODES];
+
     int start, end, increment;
+    #ifdef __CUDACC__
+
+    start = blockIdx.x;
+    end = num_modes;
+    increment = blockDim.x;
+
+    #else
+
+    start = 0;
+    end = num_modes;
+    increment = 1;
+
+    #pragma omp parallel for
+    #endif
+    for (int j = start; j < end; j += increment)
+    {
+        js[j] = mode_j[j];
+    }
+    CUDA_SYNCTHREADS
 
     #ifdef __CUDACC__
 
@@ -519,39 +751,63 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         double d2fdt2 = d2fdt2_all[bin_i];
         double phi0 = phi0_all[bin_i];
 
-        double DPr = DPr_all[bin_i];
-        double DPi = DPi_all[bin_i];
-        double DCr = DCr_all[bin_i];
-        double DCi = DCi_all[bin_i];
-
-        int q = (int) f0*T;
-
-        for (int i = 0; i < 3; i ++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                eplus[(i * 3 + j)] = eplus_in[(i * 3 + j) * num_bin + bin_i];
-                ecross[(i * 3 + j)] = ecross_in[(i * 3 + j) * num_bin + bin_i];
-            }
-        }
+        double A2 = A2_all[bin_i];
+        double omegabar = omegabar_all[bin_i];
+        double e2 = e2_all[bin_i];
+        double n2 = n2_all[bin_i];
+        double T2 = T2_all[bin_i];
 
         for (int n = 0;
     			 n < N;
     			 n += 1)
         {
-        	 double t = T*(double)(n)/(double)N;
+            int start1, end1, increment1;
+            #ifdef __CUDACC__
 
-        	 calc_xi_f(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N);		  // calc frequency and time variables
-             calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
-             calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
-             calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
-             get_transfer(q, f0, dfdt, d2fdt2, phi0,
-                              T, t, n, N,
-                              kdotr, TR, TI,
-                              dplus, dcross,
-             				  xi, fonfs,
-                              DPr, DPi, DCr, DCi);     // Calculating Transfer function
-        	 fill_time_series(bin_i, num_bin, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
+            start1= blockIdx.y;
+            end1 = num_modes;
+            increment1 = gridDim.y;
+
+            #else
+
+            start1 = 0;
+            end1 = num_modes;
+            increment1 = 1;
+            #endif
+            for (int jj = start1; jj < end1; jj += increment1)
+            {
+
+                double DPr = DPr_all[jj * num_bin + bin_i];
+                double DPi = DPi_all[jj * num_bin + bin_i];
+                double DCr = DCr_all[jj * num_bin + bin_i];
+                double DCi = DCi_all[jj * num_bin + bin_i];
+
+                int q = (int) f0*T;
+
+                for (int i = 0; i < 3; i ++)
+                {
+                    for (int j = 0; j < 3; j++)
+                    {
+                        eplus[(i * 3 + j)] = eplus_in[(jj * 9 + (i * 3 + j)) * num_bin + bin_i];
+                        ecross[(i * 3 + j)] = ecross_in[(jj * 9 + (i * 3 + j)) * num_bin + bin_i];
+                    }
+                }
+
+                 int j = js[jj];
+            	 double t = T*(double)(n)/(double)N;
+
+            	 calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, j, N, A2, omegabar, e2, n2, T2);		  // calc frequency and time variables
+                 calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
+                 calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
+                 calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
+                 get_transfer(q, f0, dfdt, d2fdt2, phi0,
+                                  T, t, n, N,
+                                  kdotr, TR, TI,
+                                  dplus, dcross,
+                 				  xi, fonfs,
+                                  DPr, DPi, DCr, DCi);     // Calculating Transfer function
+            	 fill_time_series(bin_i, num_bin, jj, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
+            }
         }
     }
 }
@@ -560,8 +816,9 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
+             double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
-             double* k_all, double T, int N, int num_bin)
+             double* k_all, double T, int N, int* mode_j, int num_modes, int num_bin)
 {
 
     #ifdef __CUDACC__
@@ -572,8 +829,9 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
         data12, data21, data13, data31, data23, data32,
         eplus_in, ecross_in,
          f0_all, dfdt_all, d2fdt2_all, phi0_all,
+         A2_all, omegabar_all, e2_all, n2_all, T2_all,
          DPr_all, DPi_all, DCr_all, DCi_all,
-         k_all, T, N, num_bin
+         k_all, T, N, mode_j, num_modes, num_bin
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -584,8 +842,9 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
         data12, data21, data13, data31, data23, data32,
         eplus_in, ecross_in,
          f0_all, dfdt_all, d2fdt2_all, phi0_all,
+         A2_all, omegabar_all, e2_all, n2_all, T2_all,
          DPr_all, DPi_all, DCr_all, DCi_all,
-         k_all, T, N, num_bin
+         k_all, T, N, mode_j, num_modes, num_bin
     );
 
     #endif

@@ -20,6 +20,11 @@ if __name__ == "__main__":
     psi = 0.3
     lam = 0.4
     beta = 0.5
+    A2 = 1.0
+    omegabar = 1.0
+    e = 0.1
+    n2 = 1.0
+    T2 = 1.0
 
     amp_in = np.full(num_bin, amp)
     f0_in = np.full(num_bin, f0)
@@ -30,7 +35,14 @@ if __name__ == "__main__":
     psi_in = np.full(num_bin, psi)
     lam_in = np.full(num_bin, lam)
     beta_in = np.full(num_bin, beta)
+    e_in = np.full(num_bin, e)
+    A2_in = np.full(num_bin, A2)
+    n2_in = np.full(num_bin, n2)
+    omegabar_in = np.full(num_bin, omegabar)
+    T2_in = np.full(num_bin, T2)
     N = int(256)
+
+    modes = np.array([1, 2, 3])
 
     params = np.array([f0, fdot, beta, lam, amp, iota, psi, phi0])
 
@@ -60,7 +72,7 @@ if __name__ == "__main__":
     except:
         pass
 
-    num = 100
+    num = 1
     st = time.perf_counter()
     for _ in range(num):
         gb.run_wave(
@@ -73,6 +85,12 @@ if __name__ == "__main__":
             psi_in,
             lam_in,
             beta_in,
+            A2_in,
+            omegabar_in,
+            e_in,
+            n2_in,
+            T2_in,
+            modes=modes,
             N=N,
         )
     et = time.perf_counter()
