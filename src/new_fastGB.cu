@@ -53,23 +53,23 @@ void get_j_consts(double* Cpj, double* Spj, double* Ccj, double* Scj, double bet
 
 CUDA_CALLABLE_MEMBER
 void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
-                             double amp, double cosiota, double psi, double beta, double e, int jj, int j, int bin_i, int num_bin)
+                             double amp, double cosiota, double psi, double beta, double e, int mode_j, int bin_i, int num_bin)
 {
 	double sinps, cosps;
 
 	double Cpj, Spj, Ccj, Scj;
 
-    get_j_consts(&Cpj, &Spj, &Ccj, &Scj, beta, e, cosiota, j);
+    get_j_consts(&Cpj, &Spj, &Ccj, &Scj, beta, e, cosiota, mode_j);
 
 	//Calculate cos and sin of polarization
 	cosps = cos(2.*psi);
 	sinps = sin(2.*psi);
 
 	//Calculate constant pieces of transfer functions
-	DPr[jj * num_bin + bin_i]    =  amp*(Cpj*cosps - Scj*sinps);
-	DPi[jj * num_bin + bin_i]    = -amp*(Scj*cosps + Ccj*sinps);
-	DCr[jj * num_bin + bin_i]    = -amp*(Cpj*sinps + Scj*cosps);
-	DCi[jj * num_bin + bin_i]    =  amp*(Spj*sinps - Ccj*cosps);
+	DPr[bin_i]    =  amp*(Cpj*cosps - Scj*sinps);
+	DPi[bin_i]    = -amp*(Scj*cosps + Ccj*sinps);
+	DCr[bin_i]    = -amp*(Cpj*sinps + Scj*cosps);
+	DCi[bin_i]    =  amp*(Spj*sinps - Ccj*cosps);
 }
 
 
@@ -118,7 +118,7 @@ void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, i
 #define  MAX_MODES 4
 CUDA_KERNEL
 void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                       double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int* mode_j, int num_modes, int num_bin)
+                       double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin)
 {
 	 // GW basis vectors
 
@@ -131,28 +131,6 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
     #endif
 
     int start, end, increment;
-
-    CUDA_SHARED int js[MAX_MODES];
-
-    #ifdef __CUDACC__
-
-    start = blockIdx.x;
-    end = num_modes;
-    increment = blockDim.x;
-
-    #else
-
-    start = 0;
-    end = num_modes;
-    increment = 1;
-
-    #pragma omp parallel for
-    #endif
-    for (int j = start; j < end; j += increment)
-    {
-        js[j] = mode_j[j];
-    }
-    CUDA_SYNCTHREADS
 
     #ifdef __CUDACC__
 
@@ -184,44 +162,27 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
 
         get_basis_vecs(k, u, v, lam[bin_i], beta[bin_i], bin_i, num_bin); //Gravitational Wave source basis vectors
 
-        int start1, end1, increment1;
-        #ifdef __CUDACC__
+        //printf("%d %d %d\n", jj, j, num_modes);
+        set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta[bin_i], e[bin_i], mode_j, bin_i, num_bin);  // set the constant pieces of transfer function
+        //set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);
 
-        start1= blockIdx.y;
-        end1 = num_modes;
-        increment1 = gridDim.y;
-
-        #else
-
-        start1 = 0;
-        end1 = num_modes;
-        increment1 = 1;
-        #endif
-        for (int jj = start1; jj < end1; jj += increment1)
+        //GW polarization basis tensors
+        for(int i = 0; i < 3; i++)
         {
-            int j = js[jj];
-            //printf("%d %d %d\n", jj, j, num_modes);
-            set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta[bin_i], e[bin_i], jj, j, bin_i, num_bin);  // set the constant pieces of transfer function
-            //set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);
-
-            //GW polarization basis tensors
-            for(int i = 0; i < 3; i++)
+            for(int j = 0; j < 3; j++)
             {
-                for(int j = 0; j < 3; j++)
-                {
-                    //wfm->eplus[i][j]  = u[i]*u[j] - v[i]*v[j];
-                    eplus[(jj * 9 + (i*3 + j)) * num_bin + bin_i]  = v[i]*v[j] - u[i]*u[j];
-                    ecross[(jj * 9 + (i*3 + j)) * num_bin + bin_i] = u[i]*v[j] + v[i]*u[j];
+                //wfm->eplus[i][j]  = u[i]*u[j] - v[i]*v[j];
+                eplus[(i*3 + j) * num_bin + bin_i]  = v[i]*v[j] - u[i]*u[j];
+                ecross[(i*3 + j) * num_bin + bin_i] = u[i]*v[j] + v[i]*u[j];
 
-                    //wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
-                }
+                //wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
             }
         }
     }
 }
 
 void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int* mode_j, int num_modes, int num_bin)
+                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin)
 {
 
     #ifdef __CUDACC__
@@ -230,7 +191,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 
     get_basis_tensors<<<num_blocks, NUM_THREADS>>>(
         eplus, ecross, DPr, DPi, DCr, DCi, k,
-        amp, cosiota, psi, lam, beta, e, mode_j, num_modes, num_bin
+        amp, cosiota, psi, lam, beta, e, mode_j, num_bin
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -239,7 +200,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 
     get_basis_tensors(
         eplus, ecross, DPr, DPi, DCr, DCi, k,
-        amp, cosiota, psi, lam, beta, e, mode_j, num_modes, num_bin
+        amp, cosiota, psi, lam, beta, e, mode_j, num_bin
     );
 
     #endif
@@ -582,19 +543,125 @@ void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
 	}
 }
 
+CUDA_CALLABLE_MEMBER
+double get_fGW(double f0, double dfdt, double d2fdt2, double T, double t)
+{
+    double dfdt_0, d2fdt2_0;
+	f0        = f0/T;
+	dfdt_0    = dfdt/T/T;
+	d2fdt2_0  = 11./3.*dfdt_0*dfdt_0/f0;
+
+	// assuming t0 = 0.
+	return f0 + dfdt_0*t + 0.5*d2fdt2_0*t*t;
+}
+
+CUDA_CALLABLE_MEMBER
+double parab_step_ET(double f0, double dfdt, double d2fdt2, double A2, double omegabar, double e2, double n2, double T2, double t0, double t0_old, int j, double T)
+{
+	// step in an integral using parabolic approximation to integrand
+	// g1 starting point
+	// g2 mid-point
+	// g3 end-point
+
+	double g1, g2, g3;
+
+    double dtt = t0 - t0_old;
+
+	g1 = get_vLOS(A2, omegabar, e2, n2, T2, t0_old)*get_fGW( f0,  dfdt,  d2fdt2, T, t0_old);
+	g2 = get_vLOS(A2, omegabar, e2, n2, T2, t0)*get_fGW(f0,  dfdt,  d2fdt2, T, t0);
+	//g3 = get_vLOS(A2, omegabar, e2, n2, T2, t0 + dtt)*get_fGW(f0,  dfdt,  d2fdt2, T, t0 + dtt);
+
+	return (dtt * (g1 + g2)/2.*PI2/C)*(double)j/2.;
+}
 
 
 CUDA_CALLABLE_MEMBER
-void fill_time_series(int bin_i, int num_bin, int j, int n, int N, double *TR, double *TI,
+void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
+                 double T, double t, int n, int N,
+                 double *kdotr, double *TR, double *TI,
+                 double *dplus, double *dcross,
+				 double *xi, double *fonfs,
+                 double A2, double omegabar, double e2, double n2, double T2,
+                 double DPr, double DPi, double DCr, double DCi, int mode_j, double* sum, double* prev_xi)
+{
+	double tran1r, tran1i;
+	double tran2r, tran2i;
+	double aevol;			// amplitude evolution factor
+	double arg1, arg2, sinc;
+	double f0_0, dfdt_0, d2fdt2_0;
+	double df;
+
+	f0       = f0/T;
+	dfdt_0   = dfdt/T/T;
+
+    // TODO: make adjustable again
+    d2fdt2_0 = 11./3.*dfdt_0*dfdt_0/f0;
+
+	df = PI2*(((double)q)/T);
+
+	for(int i = 0; i < 3; i++)
+	{
+        if (n > 0) sum[i] += parab_step_ET(f0, dfdt,  d2fdt2,  A2,  omegabar,  e2,  n2,  T2,  xi[i], prev_xi[i], mode_j, T);
+
+
+		for(int j = 0; j < 3; j++)
+		{
+			if(i!=j)
+			{
+				//Argument of transfer function
+				// FIXME
+				//arg1 = 0.5*fonfs[i]*(1. - kdotr[i][j]);
+				arg1 = 0.5*fonfs[i]*(1. + kdotr[(i*3 + j)]);
+
+				//Argument of complex exponentials
+				arg2 = (PI2*f0*xi[i] + phi0 - df*t + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * mode_j/2. - df*t ;
+
+                if (n > 0) arg2 += sum[i];
+
+                //if ((i == 0) && (j == 1))printf("%d %d %e\n", n, i, xi[i]);
+				//Transfer function
+				sinc = 0.25*sin(arg1)/arg1;
+
+				//Evolution of amplitude
+				aevol = 1.0 + 0.66666666666666666666*dfdt_0/f0*xi[i];
+
+				///Real and imaginary pieces of time series (no complex exponential)
+				tran1r = aevol*(dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
+				tran1i = aevol*(dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
+
+				//Real and imaginry components of complex exponential
+				tran2r = cos(arg1 + arg2);
+				tran2i = sin(arg1 + arg2);
+
+				//Real & Imaginary part of the slowly evolving signal
+				TR[(i*3 + j)] = sinc*(tran1r*tran2r - tran1i*tran2i);
+				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
+
+                //if ((i == 0) && (j == 1) && (t == 1.536000000000000000e+05))
+                //    printf("%.18e %.18e %.18e %.18e\n", kdotr[(i*3 + j)], fonfs[i], xi[i], phi0);
+			}
+            else
+            {
+                TR[(i*3 + j)] = 0.0;
+				TI[(i*3 + j)] = 0.0;
+            }
+		}
+	}
+}
+
+
+
+CUDA_CALLABLE_MEMBER
+void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *TI,
 					  cmplx *data12, cmplx *data21, cmplx *data13,
 					  cmplx *data31, cmplx *data23, cmplx *data32)
 {
-	data12[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(0*3 + 1)], TI[(0*3 + 1)]);
-	data21[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(1*3 + 0)], TI[(1*3 + 0)]);
-	data31[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(2*3 + 0)], TI[(2*3 + 0)]);
-	data13[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(0*3 + 2)], TI[(0*3 + 2)]);
-	data23[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(1*3 + 2)], TI[(1*3 + 2)]);
-	data32[(j * N + n) * num_bin + bin_i]   = cmplx(TR[(2*3 + 1)], TI[(2*3 + 1)]);
+	data12[n * num_bin + bin_i]   = cmplx(TR[(0*3 + 1)], TI[(0*3 + 1)]);
+	data21[n * num_bin + bin_i]   = cmplx(TR[(1*3 + 0)], TI[(1*3 + 0)]);
+	data31[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 0)], TI[(2*3 + 0)]);
+	data13[n * num_bin + bin_i]   = cmplx(TR[(0*3 + 2)], TI[(0*3 + 2)]);
+	data23[n * num_bin + bin_i]   = cmplx(TR[(1*3 + 2)], TI[(1*3 + 2)]);
+	data32[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 1)], TI[(2*3 + 1)]);
 }
 
 
@@ -607,7 +674,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
-             double* k_in, double T, int N, int* mode_j, int num_modes, int num_bin)
+             double* k_in, double T, int N, int mode_j, int num_bin)
 {
 
 
@@ -624,6 +691,8 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
     CUDA_SHARED double r31_all[3 * NUM_THREADS_2];
     CUDA_SHARED double r23_all[3 * NUM_THREADS_2];
     CUDA_SHARED double r32_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double sum_all[3 * NUM_THREADS_2];
+    CUDA_SHARED double prev_xi_all[3 * NUM_THREADS_2];
     CUDA_SHARED double dplus_all[9 * NUM_THREADS_2];
     CUDA_SHARED double dcross_all[9 * NUM_THREADS_2];
     CUDA_SHARED double eplus_all[9 * NUM_THREADS_2];
@@ -644,6 +713,8 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
     double* r31 = &r31_all[3 * threadIdx.x];
     double* r23 = &r23_all[3 * threadIdx.x];
     double* r32 = &r32_all[3 * threadIdx.x];
+    double* sum = &sum_all[3 * threadIdx.x];
+    double* prev_xi = &prev_xi_all[3 * threadIdx.x];
     double* dplus = &dplus_all[9 * threadIdx.x];
     double* dcross = &dcross_all[9 * threadIdx.x];
     double* eplus = &eplus_all[9 * threadIdx.x];
@@ -654,29 +725,9 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
     #endif
 
-    CUDA_SHARED int js[MAX_MODES];
+    double dtt = T/(double)(N-1);
 
     int start, end, increment;
-    #ifdef __CUDACC__
-
-    start = blockIdx.x;
-    end = num_modes;
-    increment = blockDim.x;
-
-    #else
-
-    start = 0;
-    end = num_modes;
-    increment = 1;
-
-    #pragma omp parallel for
-    #endif
-    for (int j = start; j < end; j += increment)
-    {
-        js[j] = mode_j[j];
-    }
-    CUDA_SYNCTHREADS
-
     #ifdef __CUDACC__
 
     start = blockIdx.x * blockDim.x + threadIdx.x;
@@ -711,6 +762,8 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         double r31_all[3];
         double r23_all[3];
         double r32_all[3];
+        double sum_all[3];
+        double prev_xi_all[3];
         double dplus_all[9];
         double dcross_all[9];
         double eplus_all[9];
@@ -732,6 +785,8 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         double* r31 = &r31_all[0];
         double* r23 = &r23_all[0];
         double* r32 = &r32_all[0];
+        double* sum = &sum_all[0];
+        double* prev_xi = &prev_xi_all[0];
         double* dplus = &dplus_all[0];
         double* dcross = &dcross_all[0];
         double* eplus = &eplus_all[0];
@@ -741,6 +796,11 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         double* TI = &TI_all[0];
 
         #endif
+
+        for (int i = 0; i < 3; i += 1)
+        {
+            sum[i] = 0.0;
+        }
 
         k[0] = k_in[0 * num_bin + bin_i];
         k[1] = k_in[1 * num_bin + bin_i];
@@ -761,52 +821,41 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
     			 n < N;
     			 n += 1)
         {
-            int start1, end1, increment1;
-            #ifdef __CUDACC__
 
-            start1= blockIdx.y;
-            end1 = num_modes;
-            increment1 = gridDim.y;
+            double DPr = DPr_all[bin_i];
+            double DPi = DPi_all[bin_i];
+            double DCr = DCr_all[bin_i];
+            double DCi = DCi_all[bin_i];
 
-            #else
+            int q = (int) f0;
 
-            start1 = 0;
-            end1 = num_modes;
-            increment1 = 1;
-            #endif
-            for (int jj = start1; jj < end1; jj += increment1)
+            for (int i = 0; i < 3; i ++)
             {
-
-                double DPr = DPr_all[jj * num_bin + bin_i];
-                double DPi = DPi_all[jj * num_bin + bin_i];
-                double DCr = DCr_all[jj * num_bin + bin_i];
-                double DCi = DCi_all[jj * num_bin + bin_i];
-
-                int q = (int) f0*T;
-
-                for (int i = 0; i < 3; i ++)
+                for (int j = 0; j < 3; j++)
                 {
-                    for (int j = 0; j < 3; j++)
-                    {
-                        eplus[(i * 3 + j)] = eplus_in[(jj * 9 + (i * 3 + j)) * num_bin + bin_i];
-                        ecross[(i * 3 + j)] = ecross_in[(jj * 9 + (i * 3 + j)) * num_bin + bin_i];
-                    }
+                    eplus[(i * 3 + j)] = eplus_in[(i * 3 + j) * num_bin + bin_i];
+                    ecross[(i * 3 + j)] = ecross_in[(i * 3 + j) * num_bin + bin_i];
                 }
+            }
 
-                 int j = js[jj];
-            	 double t = T*(double)(n)/(double)N;
+            double t = T*(double)(n)/(double)N;
 
-            	 calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, j, N, A2, omegabar, e2, n2, T2);		  // calc frequency and time variables
-                 calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
-                 calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
-                 calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
-                 get_transfer(q, f0, dfdt, d2fdt2, phi0,
-                                  T, t, n, N,
-                                  kdotr, TR, TI,
-                                  dplus, dcross,
-                 				  xi, fonfs,
-                                  DPr, DPi, DCr, DCi);     // Calculating Transfer function
-            	 fill_time_series(bin_i, num_bin, jj, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
+            calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, mode_j, N, A2, omegabar, e2, n2, T2);		  // calc frequency and time variables
+            calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
+            calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
+            calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
+            get_transfer_ET(q, f0, dfdt, d2fdt2, phi0,
+                          T, t, n, N,
+                          kdotr, TR, TI,
+                          dplus, dcross,
+            				  xi, fonfs,
+                          A2, omegabar, e2, n2, T2,
+                          DPr, DPi, DCr, DCi, mode_j, sum, prev_xi);     // Calculating Transfer function
+            fill_time_series(bin_i, num_bin, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
+
+            for (int i = 0; i < 3; i += 1)
+            {
+                prev_xi[i] = xi[i];
             }
         }
     }
@@ -818,7 +867,7 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
-             double* k_all, double T, int N, int* mode_j, int num_modes, int num_bin)
+             double* k_all, double T, int N, int mode_j, int num_bin)
 {
 
     #ifdef __CUDACC__
@@ -831,7 +880,7 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
          f0_all, dfdt_all, d2fdt2_all, phi0_all,
          A2_all, omegabar_all, e2_all, n2_all, T2_all,
          DPr_all, DPi_all, DCr_all, DCi_all,
-         k_all, T, N, mode_j, num_modes, num_bin
+         k_all, T, N, mode_j, num_bin
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -844,7 +893,7 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
          f0_all, dfdt_all, d2fdt2_all, phi0_all,
          A2_all, omegabar_all, e2_all, n2_all, T2_all,
          DPr_all, DPi_all, DCr_all, DCi_all,
-         k_all, T, N, mode_j, num_modes, num_bin
+         k_all, T, N, mode_j, num_bin
     );
 
     #endif

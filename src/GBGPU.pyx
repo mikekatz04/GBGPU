@@ -8,14 +8,14 @@ assert sizeof(int) == sizeof(np.int32_t)
 cdef extern from "new_fastGB.hh":
     ctypedef void* cmplx 'cmplx'
     void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int* mode_j, int num_modes, int num_bin);
+                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin);
 
     void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                  double* eplus_in, double* ecross_in,
                  double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
                  double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
                  double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
-                 double* k_all, double T, int N, int* mode_j, int num_modes, int num_bin);
+                 double* k_all, double T, int N, int mode_j, int num_bin);
 
     void unpack_data_1_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                        int N, int num_bin);
@@ -25,7 +25,7 @@ cdef extern from "new_fastGB.hh":
                  int num_bin, int N, double dt, double T, double df);
 
 @pointer_adjust
-def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, e, mode_j, num_modes, num_bin):
+def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, e, mode_j, num_bin):
 
     cdef size_t eplus_in = eplus
     cdef size_t ecross_in = ecross
@@ -40,12 +40,10 @@ def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, l
     cdef size_t lam_in = lam
     cdef size_t beta_in = beta
     cdef size_t e_in = e
-    cdef size_t mode_j_in = mode_j
-
 
     get_basis_tensors_wrap(<double*> eplus_in, <double*> ecross_in, <double*> DPr_in, <double*> DPi_in, <double*> DCr_in, <double*> DCi_in, <double*> k_in,
                             <double*> amp_in, <double*> cosiota_in, <double*> psi_in, <double*> lam_in, <double*> beta_in, <double*> e_in,
-                            <int*> mode_j_in, num_modes, num_bin)
+                            mode_j, num_bin)
 
 
 @pointer_adjust
@@ -54,7 +52,7 @@ def GenWave(data12, data21, data13, data31, data23, data32,
              f0_all, dfdt_all, d2fdt2_all, phi0_all,
              A2_all, omegabar_all, e2_all, n2_all, T2_all,
              DPr_all, DPi_all, DCr_all, DCi_all,
-             k_all, T, N, mode_j, num_modes, num_bin):
+             k_all, T, N, mode_j, num_bin):
 
     cdef size_t data12_in = data12
     cdef size_t data21_in = data21
@@ -80,14 +78,12 @@ def GenWave(data12, data21, data13, data31, data23, data32,
     cdef size_t n2_all_in = n2_all
     cdef size_t T2_all_in = T2_all
 
-    cdef size_t mode_j_in = mode_j
-
     GenWave_wrap(<cmplx*>data12_in, <cmplx*>data21_in, <cmplx*>data13_in, <cmplx*>data31_in, <cmplx*>data23_in, <cmplx*>data32_in,
                  <double*> eplus_in, <double*> ecross_in,
                  <double*>f0_all_in, <double*>dfdt_all_in, <double*>d2fdt2_all_in, <double*> phi0_all_in,
                  <double*> A2_all_in, <double*> omegabar_all_in, <double*> e2_all_in, <double*> n2_all_in, <double*> T2_all_in,
                  <double*>DPr_all_in, <double*>DPi_all_in, <double*>DCr_all_in, <double*>DCi_all_in,
-                 <double*>k_all_in, T, N, <int*> mode_j_in, num_modes, num_bin)
+                 <double*>k_all_in, T, N, mode_j, num_bin)
 
 """
 @pointer_adjust

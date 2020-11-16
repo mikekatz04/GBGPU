@@ -63,6 +63,8 @@ class GBGPU(object):
 
         num_modes = len(modes)
 
+        j_max = np.max(modes)
+
         # transform inputs
         f0 = f0 * T
         fdot = fdot * T * T
@@ -70,15 +72,28 @@ class GBGPU(object):
 
         theta = np.pi / 2 - beta
 
-        eplus = self.xp.zeros(3 * 3 * num_modes * num_bin)
-        ecross = self.xp.zeros(3 * 3 * num_modes * num_bin)
+        N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params);
 
-        DPr = self.xp.zeros(num_bin * num_modes)
-        DPi = self.xp.zeros(num_bin * num_modes)
-        DCr = self.xp.zeros(num_bin * num_modes)
-        DCi = self.xp.zeros(num_bin * num_modes)
+        eplus = self.xp.zeros(3 * 3 * num_bin)
+        ecross = self.xp.zeros(3 * 3 * num_bin)
+
+        DPr = self.xp.zeros(num_bin)
+        DPi = self.xp.zeros(num_bin)
+        DCr = self.xp.zeros(num_bin)
+        DCi = self.xp.zeros(num_bin)
 
         k = self.xp.zeros(3 * num_bin)
+
+        data12 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
+        data21 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
+        data13 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
+        data31 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
+        data23 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
+        data32 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
+
+        self.X = self.xp.zeros((num_bin, N_max), dtype=self.xp.complex128)
+        self.Y = self.xp.zeros((num_bin, N_max), dtype=self.xp.complex128)
+        self.Z = self.xp.zeros((num_bin, N_max), dtype=self.xp.complex128)
 
         amp = self.xp.asarray(amp)
         f0 = self.xp.asarray(f0)  # in mHz
@@ -89,93 +104,109 @@ class GBGPU(object):
         psi = self.xp.asarray(psi)
         lam = self.xp.asarray(lam)
         theta = self.xp.asarray(theta)
-        e = self.xp.asarray(e)
-        modes = self.xp.asarray(modes).astype(self.xp.int32)
 
         cosiota = self.xp.cos(iota)
 
-        self.get_basis_tensors(
-            eplus,
-            ecross,
-            DPr,
-            DPi,
-            DCr,
-            DCi,
-            k,
-            amp,
-            cosiota,
-            psi,
-            lam,
-            theta,
-            e,
-            modes,
-            num_modes,
-            num_bin,
-        )
+        A2 = self.xp.asarray(A2)
+        omegabar = self.xp.asarray(omegabar)
+        e = self.xp.asarray(e)
+        n2 = self.xp.asarray(n2)
+        T2 = self.xp.asarray(T2)
 
-        data12 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
-        data21 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
-        data13 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
-        data31 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
-        data23 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
-        data32 = self.xp.zeros(num_bin * N * num_modes, dtype=self.xp.complex128)
+        N_base = N
 
-        self.GenWave(
-            data12,
-            data21,
-            data13,
-            data31,
-            data23,
-            data32,
-            eplus,
-            ecross,
-            f0,
-            fdot,
-            fddot,
-            phi0,
-            A2,
-            omegabar,
-            e,
-            n2,
-            T2,
-            DPr,
-            DPi,
-            DCr,
-            DCi,
-            k,
-            T,
-            N,
-            modes,
-            num_modes,
-            num_bin,
-        )
+        for j in modes:
 
-        data12 = self.xp.fft.fft(
-            data12.reshape(num_modes, N, num_bin), axis=1
-        ).flatten()
-        data21 = self.xp.fft.fft(
-            data21.reshape(num_modes, N, num_bin), axis=1
-        ).flatten()
-        data13 = self.xp.fft.fft(
-            data13.reshape(num_modes, N, num_bin), axis=1
-        ).flatten()
-        data31 = self.xp.fft.fft(
-            data31.reshape(num_modes, N, num_bin), axis=1
-        ).flatten()
-        data23 = self.xp.fft.fft(
-            data23.reshape(num_modes, N, num_bin), axis=1
-        ).flatten()
-        data32 = self.xp.fft.fft(
-            data32.reshape(num_modes, N, num_bin), axis=1
-        ).flatten()
+            N = int(2 ** (j - 1) * N_base)
 
-        self.unpack_data_1(data12, data21, data13, data31, data23, data32, N, num_bin)
+            self.get_basis_tensors(
+                eplus,
+                ecross,
+                DPr,
+                DPi,
+                DCr,
+                DCi,
+                k,
+                amp,
+                cosiota,
+                psi,
+                lam,
+                theta,
+                e,
+                j,
+                num_bin,
+            )
 
-        df = 1 / T
-        self.XYZ(
-            data12, data21, data13, data31, data23, data32, f0, num_bin, N, dt, T, df
-        )
+            self.GenWave(
+                data12,
+                data21,
+                data13,
+                data31,
+                data23,
+                data32,
+                eplus,
+                ecross,
+                f0,
+                fdot,
+                fddot,
+                phi0,
+                A2,
+                omegabar,
+                e,
+                n2,
+                T2,
+                DPr,
+                DPi,
+                DCr,
+                DCi,
+                k,
+                T,
+                N,
+                j,
+                num_bin,
+            )
 
-        self.X = data12.reshape(num_modes, N, num_bin).T
-        self.Y = data21.reshape(num_modes, N, num_bin).T
-        self.Z = data13.reshape(num_modes, N, num_bin).T
+            data12 = data12.reshape(N_max, num_bin)
+            data21 = data21.reshape(N_max, num_bin)
+            data13 = data13.reshape(N_max, num_bin)
+            data31 = data31.reshape(N_max, num_bin)
+            data23 = data23.reshape(N_max, num_bin)
+            data32 = data32.reshape(N_max, num_bin)
+
+            data12[:N] = self.xp.fft.fft(data12[:N], axis=0)
+            data21[:N] = self.xp.fft.fft(data21[:N], axis=0)
+            data13[:N] = self.xp.fft.fft(data13[:N], axis=0)
+            data31[:N] = self.xp.fft.fft(data31[:N], axis=0)
+            data23[:N] = self.xp.fft.fft(data23[:N], axis=0)
+            data32[:N] = self.xp.fft.fft(data32[:N], axis=0)
+
+            data12 = data12.flatten()
+            data21 = data21.flatten()
+            data13 = data13.flatten()
+            data31 = data31.flatten()
+            data23 = data23.flatten()
+            data32 = data32.flatten()
+
+            self.unpack_data_1(
+                data12, data21, data13, data31, data23, data32, N, num_bin
+            )
+
+            df = 1 / T
+            self.XYZ(
+                data12,
+                data21,
+                data13,
+                data31,
+                data23,
+                data32,
+                f0,
+                num_bin,
+                N,
+                dt,
+                T,
+                df,
+            )
+
+            self.X += data12.reshape(N_max, num_bin).T
+            self.Y += data21.reshape(N_max, num_bin).T
+            self.Z += data13.reshape(N_max, num_bin).T

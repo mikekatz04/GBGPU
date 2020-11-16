@@ -7,10 +7,10 @@ YEAR = 31457280.0
 
 if __name__ == "__main__":
 
-    use_gpu = False
+    use_gpu = True
     gb = GBGPU(use_gpu=use_gpu)
 
-    num_bin = 2
+    num_bin = 15000
     amp = 1e-22
     f0 = 1e0
     fdot = 1e-11
@@ -40,9 +40,9 @@ if __name__ == "__main__":
     n2_in = np.full(num_bin, n2)
     omegabar_in = np.full(num_bin, omegabar)
     T2_in = np.full(num_bin, T2)
-    N = int(256)
+    N = int(1024)
 
-    modes = np.array([1, 2, 3])
+    modes = np.array([2])
 
     params = np.array([f0, fdot, beta, lam, amp, iota, psi, phi0])
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     except:
         pass
 
-    num = 1
+    num = 100
     st = time.perf_counter()
     for _ in range(num):
         gb.run_wave(
