@@ -66,6 +66,8 @@ void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
 	sinps = sin(2.*psi);
 
 	//Calculate constant pieces of transfer functions
+
+    //printf("%e %e %e %e %e %e %e %e %e %d \n", Cpj, Spj, Ccj, Scj, psi, amp, beta, e, cosiota, mode_j);
 	DPr[bin_i]    =  amp*(Cpj*cosps - Scj*sinps);
 	DPi[bin_i]    = -amp*(Scj*cosps + Ccj*sinps);
 	DCr[bin_i]    = -amp*(Cpj*sinps + Scj*cosps);
@@ -343,6 +345,7 @@ double get_vLOS(double A2, double omegabar, double e2, double n2, double T2, dou
 {
  	double phi2;
 
+    T2 *= YEAR;
 	phi2 = get_phi(t, T2, e2, n2); //if (t == 0.) fprintf(stdout, "phi2_{0}: %f\n", phi2);
 
 	return A2*(sin(phi2 + omegabar) + e2*sin(omegabar));
@@ -378,6 +381,7 @@ void calc_xi_f_eccTrip(double* x, double* y, double* z, double* k, double* xi, d
 
 		//Ratio of true frequency to transfer frequency
 		fonfs[i] = f_temp/fstar;
+
 	}
 }
 
@@ -479,7 +483,7 @@ void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecros
 
 
 CUDA_CALLABLE_MEMBER
-void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
+void ansfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double T, double t, int n, int N,
                  double *kdotr, double *TR, double *TI,
                  double *dplus, double *dcross,
@@ -587,7 +591,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 	double tran1r, tran1i;
 	double tran2r, tran2i;
 	double aevol;			// amplitude evolution factor
-	double arg1, arg2, sinc;
+	//double arg1, arg2, sinc;
 	double f0_0, dfdt_0, d2fdt2_0;
 	double df;
 
@@ -611,16 +615,17 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				//Argument of transfer function
 				// FIXME
 				//arg1 = 0.5*fonfs[i]*(1. - kdotr[i][j]);
-				arg1 = 0.5*fonfs[i]*(1. + kdotr[(i*3 + j)]);
+				double arg1 = 0.5*fonfs[i]*(1. - kdotr[(i*3 + j)]);
 
 				//Argument of complex exponentials
-				arg2 = (PI2*f0*xi[i] + phi0 - df*t + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * mode_j/2. - df*t ;
+				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * mode_j/2. - df*t ;
 
+                if ((t == 4.915200e+05)) printf(" %d %d %e %e %e\n", i, j, arg2, df*t, sum[i]);
                 if (n > 0) arg2 += sum[i];
 
                 //if ((i == 0) && (j == 1))printf("%d %d %e\n", n, i, xi[i]);
 				//Transfer function
-				sinc = 0.25*sin(arg1)/arg1;
+				double sinc = 0.25*sin(arg1)/arg1;
 
 				//Evolution of amplitude
 				aevol = 1.0 + 0.66666666666666666666*dfdt_0/f0*xi[i];
@@ -840,7 +845,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
             double t = T*(double)(n)/(double)N;
 
-            calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, mode_j, N, A2, omegabar, e2, n2, T2);		  // calc frequency and time variables
+            calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N, mode_j, A2, omegabar, e2, n2, T2);		  // calc frequency and time variables
             calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
             calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
             calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product

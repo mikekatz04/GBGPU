@@ -137,6 +137,8 @@ class GBGPU(object):
                 num_bin,
             )
 
+            breakpoint()
+
             self.GenWave(
                 data12,
                 data21,

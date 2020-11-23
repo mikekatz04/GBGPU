@@ -7,13 +7,13 @@ YEAR = 31457280.0
 
 if __name__ == "__main__":
 
-    use_gpu = True
+    use_gpu = False
     gb = GBGPU(use_gpu=use_gpu)
 
-    num_bin = 15000
+    num_bin = 2
     amp = 1e-22
-    f0 = 1e0
-    fdot = 1e-11
+    f0 = 2e-3
+    fdot = 1e-14
     fddot = 0.0
     phi0 = 0.1
     iota = 0.2
@@ -21,7 +21,7 @@ if __name__ == "__main__":
     lam = 0.4
     beta = 0.5
     A2 = 1.0
-    omegabar = 1.0
+    omegabar = 0.0
     e = 0.1
     n2 = 1.0
     T2 = 1.0
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     n2_in = np.full(num_bin, n2)
     omegabar_in = np.full(num_bin, omegabar)
     T2_in = np.full(num_bin, T2)
-    N = int(1024)
+    N = int(256)
 
     modes = np.array([2])
 
@@ -51,7 +51,7 @@ if __name__ == "__main__":
         import FastGB as FB
 
         Tobs = 4.0 * YEAR
-        dt = 10.0
+        dt = 15.0
 
         fastGB = FB.FastGB("Test", dt=dt, Tobs=Tobs, orbit="analytic")
         num = 1
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     except:
         pass
 
-    num = 100
+    num = 1
     st = time.perf_counter()
     for _ in range(num):
         gb.run_wave(
