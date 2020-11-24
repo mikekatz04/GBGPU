@@ -4,7 +4,7 @@
 #include "global.h"
 
 void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin);
+                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin);
 
 void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,

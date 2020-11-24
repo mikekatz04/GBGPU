@@ -48,10 +48,12 @@ class GBGPU(object):
         psi,
         lam,
         beta,
+        e1,
+        beta1,
         A2,
         omegabar,
-        e,
-        n2,
+        e2,
+        P2,
         T2,
         modes=np.array([2]),
         N=int(2 ** 12),
@@ -69,8 +71,9 @@ class GBGPU(object):
         f0 = f0 * T
         fdot = fdot * T * T
         fddot = fddot * T * T * T
-
         theta = np.pi / 2 - beta
+        n2 = 2 * np.pi / (P2 * YEAR)
+        T2 *= YEAR
 
         N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params);
 
@@ -105,11 +108,14 @@ class GBGPU(object):
         lam = self.xp.asarray(lam)
         theta = self.xp.asarray(theta)
 
+        e1 = self.xp.asarray(e1)
+        beta1 = self.xp.asarray(beta1)
+
         cosiota = self.xp.cos(iota)
 
         A2 = self.xp.asarray(A2)
         omegabar = self.xp.asarray(omegabar)
-        e = self.xp.asarray(e)
+        e2 = self.xp.asarray(e2)
         n2 = self.xp.asarray(n2)
         T2 = self.xp.asarray(T2)
 
@@ -132,12 +138,11 @@ class GBGPU(object):
                 psi,
                 lam,
                 theta,
-                e,
+                e1,
+                beta1,
                 j,
                 num_bin,
             )
-
-            breakpoint()
 
             self.GenWave(
                 data12,
@@ -154,7 +159,7 @@ class GBGPU(object):
                 phi0,
                 A2,
                 omegabar,
-                e,
+                e2,
                 n2,
                 T2,
                 DPr,

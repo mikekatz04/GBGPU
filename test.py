@@ -19,12 +19,14 @@ if __name__ == "__main__":
     iota = 0.2
     psi = 0.3
     lam = 0.4
-    beta = 0.5
-    A2 = 1.0
+    beta_sky = 0.5
+    e1 = 0.1
+    beta1 = 0.5
+    A2 = 19.5
     omegabar = 0.0
-    e = 0.1
-    n2 = 1.0
-    T2 = 1.0
+    e2 = 0.3
+    P2 = 0.6
+    T2 = 0.0
 
     amp_in = np.full(num_bin, amp)
     f0_in = np.full(num_bin, f0)
@@ -34,17 +36,19 @@ if __name__ == "__main__":
     iota_in = np.full(num_bin, iota)
     psi_in = np.full(num_bin, psi)
     lam_in = np.full(num_bin, lam)
-    beta_in = np.full(num_bin, beta)
-    e_in = np.full(num_bin, e)
+    beta_sky_in = np.full(num_bin, beta_sky)
+    e1_in = np.full(num_bin, e1)
+    beta1_in = np.full(num_bin, beta1)
     A2_in = np.full(num_bin, A2)
-    n2_in = np.full(num_bin, n2)
+    P2_in = np.full(num_bin, P2)
     omegabar_in = np.full(num_bin, omegabar)
+    e2_in = np.full(num_bin, e2)
     T2_in = np.full(num_bin, T2)
     N = int(256)
 
     modes = np.array([2])
 
-    params = np.array([f0, fdot, beta, lam, amp, iota, psi, phi0])
+    params = np.array([f0, fdot, beta_sky, lam, amp, iota, psi, phi0])
 
     try:
         print("\n\n\n\n")
@@ -84,14 +88,17 @@ if __name__ == "__main__":
             iota_in,
             psi_in,
             lam_in,
-            beta_in,
+            beta_sky_in,
+            e1_in,
+            beta1_in,
             A2_in,
             omegabar_in,
-            e_in,
-            n2_in,
+            e2_in,
+            P2_in,
             T2_in,
             modes=modes,
             N=N,
+            dt=dt,
         )
     et = time.perf_counter()
 
@@ -104,4 +111,5 @@ if __name__ == "__main__":
         "sec",
     )
 
+    check = np.load("test_fin.npy")
     breakpoint()

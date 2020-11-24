@@ -72,6 +72,8 @@ void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
 	DPi[bin_i]    = -amp*(Scj*cosps + Ccj*sinps);
 	DCr[bin_i]    = -amp*(Cpj*sinps + Scj*cosps);
 	DCi[bin_i]    =  amp*(Spj*sinps - Ccj*cosps);
+
+    //if (bin_i == 0) printf("%e %e %e %e %e\n", DPr[bin_i], amp, beta, e, cosps);
 }
 
 
@@ -120,7 +122,7 @@ void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, i
 #define  MAX_MODES 4
 CUDA_KERNEL
 void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                       double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin)
+                       double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin)
 {
 	 // GW basis vectors
 
@@ -165,7 +167,7 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
         get_basis_vecs(k, u, v, lam[bin_i], beta[bin_i], bin_i, num_bin); //Gravitational Wave source basis vectors
 
         //printf("%d %d %d\n", jj, j, num_modes);
-        set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta[bin_i], e[bin_i], mode_j, bin_i, num_bin);  // set the constant pieces of transfer function
+        set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta1[bin_i], e1[bin_i], mode_j, bin_i, num_bin);  // set the constant pieces of transfer function
         //set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);
 
         //GW polarization basis tensors
@@ -184,7 +186,7 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
 }
 
 void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin)
+                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin)
 {
 
     #ifdef __CUDACC__
@@ -193,7 +195,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 
     get_basis_tensors<<<num_blocks, NUM_THREADS>>>(
         eplus, ecross, DPr, DPi, DCr, DCi, k,
-        amp, cosiota, psi, lam, beta, e, mode_j, num_bin
+        amp, cosiota, psi, lam, beta, e1, beta1, mode_j, num_bin
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -202,7 +204,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 
     get_basis_tensors(
         eplus, ecross, DPr, DPi, DCr, DCi, k,
-        amp, cosiota, psi, lam, beta, e, mode_j, num_bin
+        amp, cosiota, psi, lam, beta, e1, beta1, mode_j, num_bin
     );
 
     #endif
@@ -572,10 +574,11 @@ double parab_step_ET(double f0, double dfdt, double d2fdt2, double A2, double om
     double dtt = t0 - t0_old;
 
 	g1 = get_vLOS(A2, omegabar, e2, n2, T2, t0_old)*get_fGW( f0,  dfdt,  d2fdt2, T, t0_old);
-	g2 = get_vLOS(A2, omegabar, e2, n2, T2, t0)*get_fGW(f0,  dfdt,  d2fdt2, T, t0);
-	//g3 = get_vLOS(A2, omegabar, e2, n2, T2, t0 + dtt)*get_fGW(f0,  dfdt,  d2fdt2, T, t0 + dtt);
+	//g2 = get_vLOS(A2, omegabar, e2, n2, T2, (t0 + t0_old)/2.)*get_fGW(f0,  dfdt,  d2fdt2, T, (t0 + t0_old)/2.);
+	g3 = get_vLOS(A2, omegabar, e2, n2, T2, t0)*get_fGW(f0,  dfdt,  d2fdt2, T, t0);
 
-	return (dtt * (g1 + g2)/2.*PI2/C)*(double)j/2.;
+    return (dtt * (g1 + g3)/2.*PI2/C)*(double)j/2.;
+	//return (dtt * (g1 + g2)/2.*PI2/C)*(double)j/2.;
 }
 
 
@@ -586,7 +589,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double *dplus, double *dcross,
 				 double *xi, double *fonfs,
                  double A2, double omegabar, double e2, double n2, double T2,
-                 double DPr, double DPi, double DCr, double DCi, int mode_j, double* sum, double* prev_xi)
+                 double DPr, double DPi, double DCr, double DCi, int mode_j, double* sum, double* prev_xi, int bin_i)
 {
 	double tran1r, tran1i;
 	double tran2r, tran2i;
@@ -605,8 +608,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 
 	for(int i = 0; i < 3; i++)
 	{
-        if (n > 0) sum[i] += parab_step_ET(f0, dfdt,  d2fdt2,  A2,  omegabar,  e2,  n2,  T2,  xi[i], prev_xi[i], mode_j, T);
-
+        sum[i] += parab_step_ET(f0 * T, dfdt,  d2fdt2,  A2,  omegabar,  e2,  n2,  T2,  xi[i], prev_xi[i], mode_j, T);
 
 		for(int j = 0; j < 3; j++)
 		{
@@ -620,8 +622,10 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				//Argument of complex exponentials
 				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * mode_j/2. - df*t ;
 
-                if ((t == 4.915200e+05)) printf(" %d %d %e %e %e\n", i, j, arg2, df*t, sum[i]);
-                if (n > 0) arg2 += sum[i];
+                if (xi[i] > 0.0) arg2 += sum[i];
+
+                //if ((i == 2) && (bin_i == 0) && (j == 1)) printf(" %d %d %e %.18e %e\n", i, j, xi[i], arg2, sum[i]);
+
 
                 //if ((i == 0) && (j == 1))printf("%d %d %e\n", n, i, xi[i]);
 				//Transfer function
@@ -631,8 +635,10 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				aevol = 1.0 + 0.66666666666666666666*dfdt_0/f0*xi[i];
 
 				///Real and imaginary pieces of time series (no complex exponential)
-				tran1r = aevol*(dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
-				tran1i = aevol*(dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
+                // -plus due to difference with original fastGB
+
+				tran1r = aevol*(-dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
+				tran1i = aevol*(-dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
 
 				//Real and imaginry components of complex exponential
 				tran2r = cos(arg1 + arg2);
@@ -822,6 +828,11 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         double n2 = n2_all[bin_i];
         double T2 = T2_all[bin_i];
 
+        for (int i = 0; i < 3; i += 1)
+        {
+            prev_xi[i] = 0.0;
+        }
+
         for (int n = 0;
     			 n < N;
     			 n += 1)
@@ -855,7 +866,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
                           dplus, dcross,
             				  xi, fonfs,
                           A2, omegabar, e2, n2, T2,
-                          DPr, DPi, DCr, DCi, mode_j, sum, prev_xi);     // Calculating Transfer function
+                          DPr, DPi, DCr, DCi, mode_j, sum, prev_xi, bin_i);     // Calculating Transfer function
             fill_time_series(bin_i, num_bin, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
 
             for (int i = 0; i < 3; i += 1)
@@ -1166,11 +1177,11 @@ void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, 
 
 		// Alternative polarization definition
 		*XLS_r   =  (X_1*cLS - X_2*sLS);
-		*XLS_i =  (X_1*sLS + X_2*cLS);
+		*XLS_i =  -(X_1*sLS + X_2*cLS);
 		*YLS_r   =  (Y_1*cLS - Y_2*sLS);
-		*YLS_i =  (Y_1*sLS + Y_2*cLS);
+		*YLS_i =  -(Y_1*sLS + Y_2*cLS);
 		*ZLS_r   =  (Z_1*cLS - Z_2*sLS);
-		*ZLS_i =  (Z_1*sLS + Z_2*cLS);
+		*ZLS_i =  -(Z_1*sLS + Z_2*cLS);
 
 		*XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
 		*XSL_i =  2.0*fonfs*(X_1*sSL + X_2*cSL);
@@ -1250,18 +1261,16 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
             ZLS[bin_i*(2*M) + 2*i+1] = ZLS_i;*/
 
             double A_r, E_r, T_r, A_i, E_i, T_i;
-            A_r = invsqrt2*(ZSL_r-XSL_r)/df;
-            E_r = invsqrt6*(XSL_r-2.0*YSL_r+ZSL_r)/df;
-            T_r = invsqrt3*(XSL_r+YSL_r+ZSL_r)/df;
 
-            A_i = invsqrt2*(ZSL_i-XSL_i)/df;
-            E_i = invsqrt6*(XSL_i-2.0*YSL_i+ZSL_i)/df;
-            T_i = invsqrt3*(XSL_i+YSL_i+ZSL_i)/df;
+            A_r = (2.0*XLS_r - YLS_r - ZLS_r)/3.0;
+            A_i = (2.0*XLS_i - YLS_i - ZLS_i)/3.0;
 
+            E_r = (ZLS_r-YLS_r) * invsqrt3;
+            E_i = (ZLS_i-YLS_i) * invsqrt3;
 
-            a12[i * num_bin + bin_i] = cmplx(XSL_r, XSL_i);
-            a21[i * num_bin + bin_i] = cmplx(YSL_r, YSL_i);
-            a13[i * num_bin + bin_i] = cmplx(ZSL_r, ZSL_i);
+            a12[i * num_bin + bin_i] = sqrt(T) * cmplx(XLS_r, XLS_i);
+            a21[i * num_bin + bin_i] = sqrt(T) * cmplx(A_r, A_i);
+            a13[i * num_bin + bin_i] = sqrt(T) * cmplx(E_r, E_i);
 
     		//atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
     		//atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);

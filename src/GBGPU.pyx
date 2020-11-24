@@ -8,7 +8,7 @@ assert sizeof(int) == sizeof(np.int32_t)
 cdef extern from "new_fastGB.hh":
     ctypedef void* cmplx 'cmplx'
     void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
-                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e, int mode_j, int num_bin);
+                            double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin);
 
     void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                  double* eplus_in, double* ecross_in,
@@ -25,7 +25,7 @@ cdef extern from "new_fastGB.hh":
                  int num_bin, int N, double dt, double T, double df);
 
 @pointer_adjust
-def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, e, mode_j, num_bin):
+def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, e1, beta1, mode_j, num_bin):
 
     cdef size_t eplus_in = eplus
     cdef size_t ecross_in = ecross
@@ -39,10 +39,11 @@ def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, l
     cdef size_t psi_in = psi
     cdef size_t lam_in = lam
     cdef size_t beta_in = beta
-    cdef size_t e_in = e
+    cdef size_t e1_in = e1
+    cdef size_t beta1_in = beta1
 
     get_basis_tensors_wrap(<double*> eplus_in, <double*> ecross_in, <double*> DPr_in, <double*> DPi_in, <double*> DCr_in, <double*> DCi_in, <double*> k_in,
-                            <double*> amp_in, <double*> cosiota_in, <double*> psi_in, <double*> lam_in, <double*> beta_in, <double*> e_in,
+                            <double*> amp_in, <double*> cosiota_in, <double*> psi_in, <double*> lam_in, <double*> beta_in, <double*> e1_in, <double*> beta1_in,
                             mode_j, num_bin)
 
 
