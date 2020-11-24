@@ -59,21 +59,42 @@ void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
 
 	double Cpj, Spj, Ccj, Scj;
 
-    get_j_consts(&Cpj, &Spj, &Ccj, &Scj, beta, e, cosiota, mode_j);
+    double DPr_temp, DPi_temp, DCr_temp, DCi_temp;
 
-	//Calculate cos and sin of polarization
-	cosps = cos(2.*psi);
-	sinps = sin(2.*psi);
+    cosps = cos(2.*psi);
+    sinps = sin(2.*psi);
 
-	//Calculate constant pieces of transfer functions
+    if (e < 0.000001)
+    {
+        //Calculate GW polarization amplitudes
+    	double Aplus  = amp*(1. + cosiota*cosiota);
+    	double Across = -2.0*amp*cosiota;
 
-    //printf("%e %e %e %e %e %e %e %e %e %d \n", Cpj, Spj, Ccj, Scj, psi, amp, beta, e, cosiota, mode_j);
-	DPr[bin_i]    =  amp*(Cpj*cosps - Scj*sinps);
-	DPi[bin_i]    = -amp*(Scj*cosps + Ccj*sinps);
-	DCr[bin_i]    = -amp*(Cpj*sinps + Scj*cosps);
-	DCi[bin_i]    =  amp*(Spj*sinps - Ccj*cosps);
+    	//Calculate constant pieces of transfer functions
+    	DPr_temp   =  Aplus*cosps;
+    	DPi_temp   = -Across*sinps;
+    	DCr_temp   = -Aplus*sinps;
+    	DCi_temp   = -Across*cosps;
+    }
 
-    //if (bin_i == 0) printf("%e %e %e %e %e\n", DPr[bin_i], amp, beta, e, cosps);
+    else
+    {
+        get_j_consts(&Cpj, &Spj, &Ccj, &Scj, beta, e, cosiota, mode_j);
+
+    	//Calculate constant pieces of transfer functions
+
+        //printf("%e %e %e %e %e %e %e %e %e %d \n", Cpj, Spj, Ccj, Scj, psi, amp, beta, e, cosiota, mode_j);
+    	DPr_temp    =  amp*(Cpj*cosps - Scj*sinps);
+    	DPi_temp    = -amp*(Scj*cosps + Ccj*sinps);
+    	DCr_temp    = -amp*(Cpj*sinps + Scj*cosps);
+    	DCi_temp    =  amp*(Spj*sinps - Ccj*cosps);
+    }
+
+    DPr[bin_i] = DPr_temp;
+    DPi[bin_i] = DPi_temp;
+    DCr[bin_i] = DCr_temp;
+    DCi[bin_i] = DCi_temp;
+    //if (bin_i == 0) printf("%e %e %e %e %e %d\n", DPr[bin_i], amp, beta, e, cosps, mode_j);
 }
 
 
@@ -485,7 +506,7 @@ void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecros
 
 
 CUDA_CALLABLE_MEMBER
-void ansfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
+void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double T, double t, int n, int N,
                  double *kdotr, double *TR, double *TI,
                  double *dplus, double *dcross,
@@ -620,11 +641,11 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				double arg1 = 0.5*fonfs[i]*(1. - kdotr[(i*3 + j)]);
 
 				//Argument of complex exponentials
-				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * mode_j/2. - df*t ;
+				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * (double)mode_j/2. - df*t ;
 
                 if (xi[i] > 0.0) arg2 += sum[i];
 
-                //if ((i == 2) && (bin_i == 0) && (j == 1)) printf(" %d %d %e %.18e %e\n", i, j, xi[i], arg2, sum[i]);
+                //if ((i == 2) && (bin_i == 0) && (j == 1)) printf(" %d %d %e %.18e %e %d\n", i, j, xi[i], arg2, sum[i], mode_j);
 
 
                 //if ((i == 0) && (j == 1))printf("%d %d %e\n", n, i, xi[i]);
@@ -649,7 +670,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
 
                 //if ((i == 0) && (j == 1) && (t == 1.536000000000000000e+05))
-                //    printf("%.18e %.18e %.18e %.18e\n", kdotr[(i*3 + j)], fonfs[i], xi[i], phi0);
+                //if ((i == 2) && (bin_i == 0) && (j == 1)) printf("%.18e %.18e %.18e %.18e\n", TR[(i*3 + j)], TI[(i*3 + j)], xi[i], phi0);
 			}
             else
             {
@@ -843,7 +864,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
             double DCr = DCr_all[bin_i];
             double DCi = DCi_all[bin_i];
 
-            int q = (int) f0;
+            int q = (int) f0*(double)mode_j/2.;
 
             for (int i = 0; i < 3; i ++)
             {
@@ -1183,6 +1204,8 @@ void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, 
 		*ZLS_r   =  (Z_1*cLS - Z_2*sLS);
 		*ZLS_i =  -(Z_1*sLS + Z_2*cLS);
 
+        //if ((bin_i) && (i == 0)) printf("%e %e %e %e\n", f0, dt, phiLS, f);
+
 		*XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
 		*XSL_i =  2.0*fonfs*(X_1*sSL + X_2*cSL);
 		*YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
@@ -1208,7 +1231,7 @@ void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, 
 CUDA_KERNEL
 void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
               double *f0_all,
-              int num_bin, int N, double dt, double T, double df){
+              int num_bin, int N, double dt, double T, double df, int mode_j){
 
 	int add_ind;
 	double asd1, asd2, asd3;
@@ -1237,7 +1260,7 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
 			 bin_i += increment)
     {
 
-        double f0 = f0_all[bin_i];
+        double f0 = f0_all[bin_i] * (double)mode_j/2;
         int q = (int) f0;
 
 		for (int i = 0;
@@ -1298,7 +1321,7 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
 
 void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
               double *f0_all,
-              int num_bin, int N, double dt, double T, double df)
+              int num_bin, int N, double dt, double T, double df, int mode_j)
 {
 
     #ifdef __CUDACC__
@@ -1308,7 +1331,7 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
     XYZ<<<num_blocks, NUM_THREADS>>>(
         a12, a21, a13, a31, a23, a32,
         f0_all,
-        num_bin, N, dt, T, df
+        num_bin, N, dt, T, df, mode_j
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -1318,7 +1341,7 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
     XYZ(
         a12, a21, a13, a31, a23, a32,
         f0_all,
-        num_bin, N, dt, T, df
+        num_bin, N, dt, T, df, mode_j
     );
 
     #endif

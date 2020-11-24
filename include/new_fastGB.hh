@@ -20,6 +20,6 @@ void unpack_data_1_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data
 
 void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
              double *f0_all,
-             int num_bin, int N, double dt, double T, double df);
+             int num_bin, int N, double dt, double T, double df, int mode_j);
 
 #endif // __NEW_FASTGB_HH__

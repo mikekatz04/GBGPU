@@ -20,7 +20,7 @@ if __name__ == "__main__":
     psi = 0.3
     lam = 0.4
     beta_sky = 0.5
-    e1 = 0.1
+    e1 = 0.3
     beta1 = 0.5
     A2 = 19.5
     omegabar = 0.0
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     T2_in = np.full(num_bin, T2)
     N = int(256)
 
-    modes = np.array([2])
+    modes = np.array([1])
 
     params = np.array([f0, fdot, beta_sky, lam, amp, iota, psi, phi0])
 
@@ -111,5 +111,5 @@ if __name__ == "__main__":
         "sec",
     )
 
-    check = np.load("test_fin.npy")
+    check = np.load("test_fin_j1.npy")
     breakpoint()

@@ -22,7 +22,7 @@ cdef extern from "new_fastGB.hh":
 
     void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
                  double *f0_all,
-                 int num_bin, int N, double dt, double T, double df);
+                 int num_bin, int N, double dt, double T, double df, int mode_j);
 
 @pointer_adjust
 def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, e1, beta1, mode_j, num_bin):
@@ -121,7 +121,7 @@ def unpack_data_1(data12, data21, data13, data31, data23, data32,
 @pointer_adjust
 def XYZ(a12, a21, a13, a31, a23, a32,
         f0_all,
-        num_bin, N, dt, T, df):
+        num_bin, N, dt, T, df, mode_j):
 
     cdef size_t a12_in = a12
     cdef size_t a21_in = a21
@@ -133,4 +133,4 @@ def XYZ(a12, a21, a13, a31, a23, a32,
 
     XYZ_wrap(<cmplx *>a12_in, <cmplx *>a21_in, <cmplx *>a13_in, <cmplx *>a31_in, <cmplx *>a23_in, <cmplx *>a32_in,
                 <double *>f0_all_in,
-                num_bin, N, dt, T, df)
+                num_bin, N, dt, T, df, mode_j)

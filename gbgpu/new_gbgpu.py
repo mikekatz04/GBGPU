@@ -212,6 +212,7 @@ class GBGPU(object):
                 dt,
                 T,
                 df,
+                j,
             )
 
             self.X += data12.reshape(N_max, num_bin).T
