@@ -1,16 +1,22 @@
 import numpy as np
 import time
 
+try:
+    import cupy as xp
+
+except (ImportError, ModuleNotFoundError) as e:
+    import numpy as xp
+
 from gbgpu.new_gbgpu import GBGPU
 
 YEAR = 31457280.0
 
 if __name__ == "__main__":
 
-    use_gpu = False
+    use_gpu = True
     gb = GBGPU(use_gpu=use_gpu)
 
-    num_bin = 2
+    num_bin = 2000
     amp = 1e-22
     f0 = 2e-3
     fdot = 1e-14
@@ -44,18 +50,32 @@ if __name__ == "__main__":
     omegabar_in = np.full(num_bin, omegabar)
     e2_in = np.full(num_bin, e2)
     T2_in = np.full(num_bin, T2)
-    N = int(256)
+    N = int(128)
 
-    modes = np.array([1])
+    modes = np.array([2])
 
     params = np.array([f0, fdot, beta_sky, lam, amp, iota, psi, phi0])
 
+    Tobs = 4.0 * YEAR
+    dt = 15.0
+
+    length = int(Tobs / dt)
+
+    freqs = np.fft.rfftfreq(length, dt)
+    data_stream_length = len(freqs)
+
+    data = [
+        1e-24 * xp.ones(data_stream_length, dtype=np.complex128),
+        1e-24 * xp.ones(data_stream_length, dtype=np.complex128),
+    ]
+
+    noise_factor = [
+        xp.ones(data_stream_length, dtype=np.float64),
+        xp.ones(data_stream_length, dtype=np.float64),
+    ]
     try:
         print("\n\n\n\n")
         import FastGB as FB
-
-        Tobs = 4.0 * YEAR
-        dt = 15.0
 
         fastGB = FB.FastGB("Test", dt=dt, Tobs=Tobs, orbit="analytic")
         num = 1
@@ -76,7 +96,8 @@ if __name__ == "__main__":
     except:
         pass
 
-    num = 1
+    num = 100
+
     st = time.perf_counter()
     for _ in range(num):
         gb.run_wave(
@@ -100,6 +121,8 @@ if __name__ == "__main__":
             N=N,
             dt=dt,
         )
+
+        like = gb.get_ll(data, noise_factor)
     et = time.perf_counter()
 
     print(
@@ -111,5 +134,5 @@ if __name__ == "__main__":
         "sec",
     )
 
-    check = np.load("test_fin_j1.npy")
+    # check = np.load("test_fin_j1.npy")
     breakpoint()

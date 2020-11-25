@@ -5,10 +5,11 @@ from newfastgb_cpu import get_basis_tensors as get_basis_tensors_cpu
 from newfastgb_cpu import GenWave as GenWave_cpu
 from newfastgb_cpu import unpack_data_1 as unpack_data_1_cpu
 from newfastgb_cpu import XYZ as XYZ_cpu
+from newfastgb_cpu import get_ll as get_ll_cpu
 
 try:
     import cupy as xp
-    from newfastgb import get_basis_tensors, GenWave, unpack_data_1, XYZ
+    from newfastgb import get_basis_tensors, GenWave, unpack_data_1, XYZ, get_ll
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -29,6 +30,7 @@ class GBGPU(object):
             self.GenWave = GenWave
             self.unpack_data_1 = unpack_data_1
             self.XYZ = XYZ
+            self.get_ll_func = get_ll
 
         else:
             self.xp = np
@@ -36,6 +38,7 @@ class GBGPU(object):
             self.GenWave = GenWave_cpu
             self.unpack_data_1 = unpack_data_1_cpu
             self.XYZ = XYZ_cpu
+            self.get_ll_func = get_ll_cpu
 
     def run_wave(
         self,
@@ -61,7 +64,7 @@ class GBGPU(object):
         dt=10.0,
     ):
 
-        num_bin = len(amp)
+        self.num_bin = num_bin = len(amp)
 
         num_modes = len(modes)
 
@@ -75,7 +78,11 @@ class GBGPU(object):
         n2 = 2 * np.pi / (P2 * YEAR)
         T2 *= YEAR
 
-        N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params);
+        self.N_max = N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params);
+
+        self.start_inds = []
+
+        self.df = df = 1 / T
 
         eplus = self.xp.zeros(3 * 3 * num_bin)
         ecross = self.xp.zeros(3 * 3 * num_bin)
@@ -87,16 +94,9 @@ class GBGPU(object):
 
         k = self.xp.zeros(3 * num_bin)
 
-        data12 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
-        data21 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
-        data13 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
-        data31 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
-        data23 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
-        data32 = self.xp.zeros(num_bin * N_max, dtype=self.xp.complex128)
-
-        self.X = self.xp.zeros((num_bin, N_max), dtype=self.xp.complex128)
-        self.Y = self.xp.zeros((num_bin, N_max), dtype=self.xp.complex128)
-        self.Z = self.xp.zeros((num_bin, N_max), dtype=self.xp.complex128)
+        self.X_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
+        self.A_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
+        self.E_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
 
         amp = self.xp.asarray(amp)
         f0 = self.xp.asarray(f0)  # in mHz
@@ -121,9 +121,25 @@ class GBGPU(object):
 
         N_base = N
 
+        self.X_out = []
+        self.A_out = []
+        self.E_out = []
+
+        self.Ns = []
         for j in modes:
 
             N = int(2 ** (j - 1) * N_base)
+            self.Ns.append(N)
+
+            data12 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+            data21 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+            data13 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+            data31 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+            data23 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+            data32 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
+
+            q_check = (f0 * j / 2.0).astype(np.int32)
+            self.start_inds.append((q_check - N / 2).astype(xp.int32))
 
             self.get_basis_tensors(
                 eplus,
@@ -173,12 +189,12 @@ class GBGPU(object):
                 num_bin,
             )
 
-            data12 = data12.reshape(N_max, num_bin)
-            data21 = data21.reshape(N_max, num_bin)
-            data13 = data13.reshape(N_max, num_bin)
-            data31 = data31.reshape(N_max, num_bin)
-            data23 = data23.reshape(N_max, num_bin)
-            data32 = data32.reshape(N_max, num_bin)
+            data12 = data12.reshape(N, num_bin)
+            data21 = data21.reshape(N, num_bin)
+            data13 = data13.reshape(N, num_bin)
+            data31 = data31.reshape(N, num_bin)
+            data23 = data23.reshape(N, num_bin)
+            data32 = data32.reshape(N, num_bin)
 
             data12[:N] = self.xp.fft.fft(data12[:N], axis=0)
             data21[:N] = self.xp.fft.fft(data21[:N], axis=0)
@@ -215,6 +231,45 @@ class GBGPU(object):
                 j,
             )
 
-            self.X += data12.reshape(N_max, num_bin).T
-            self.Y += data21.reshape(N_max, num_bin).T
-            self.Z += data13.reshape(N_max, num_bin).T
+            self.X_out.append(data12)
+            self.A_out.append(data21)
+            self.E_out.append(data13)
+
+    @property
+    def X(self):
+        return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.X_out, self.Ns)]
+
+    @property
+    def A(self):
+        return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.A_out, self.Ns)]
+
+    @property
+    def E(self):
+        return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.E_out, self.Ns)]
+
+    def get_ll(self, data, noise_factor):
+
+        if isinstance(data[0], self.xp.ndarray) is False:
+            raise TypeError(
+                "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
+            )
+
+        like_out = xp.zeros(self.num_bin)
+
+        for X, A, E, start_inds, N in zip(
+            self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
+        ):
+            self.get_ll_func(
+                like_out,
+                A,
+                E,
+                data[0],
+                data[1],
+                noise_factor[0],
+                noise_factor[1],
+                start_inds,
+                N,
+                self.num_bin,
+            )
+
+        return like_out

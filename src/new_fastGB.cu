@@ -1346,3 +1346,76 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
 
     #endif
 }
+
+
+CUDA_KERNEL
+void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
+{
+    int start, end, increment;
+    #ifdef __CUDACC__
+
+    start = blockIdx.x * blockDim.x + threadIdx.x;
+    end = num_bin;
+    increment = blockDim.x * gridDim.x;
+
+    #else
+
+    start = 0;
+    end = num_bin;
+    increment = 1;
+
+    #pragma omp parallel for
+    #endif
+	for (int bin_i = start;
+			 bin_i < end;
+			 bin_i += increment)
+    {
+
+        int start_ind = start_ind_all[bin_i];
+
+        double like_temp = 0.0;
+		for (int i = 0;
+				 i < M;
+				 i += 1)
+		{
+            int j = start_ind + i;
+
+            cmplx h_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
+            cmplx h_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
+
+            cmplx d_minus_h_A = A_data[j] - h_A;
+            cmplx d_minus_h_E = E_data[j] - h_E;
+
+            //if (bin_i == 0) printf("%d %e %e\n", i, A_template[i * num_bin + bin_i].real(), A_noise_factor[j]);
+            like_temp += gcmplx::real(gcmplx::conj(d_minus_h_A) * d_minus_h_A);
+            like_temp += gcmplx::real(gcmplx::conj(d_minus_h_E) * d_minus_h_E);
+        }
+
+        like_out[bin_i] += like_temp;
+    }
+}
+
+void get_ll_wrap(double* like_out,
+                 cmplx* A_template, cmplx* E_template,
+                 cmplx* A_data, cmplx* E_data,
+                 double* A_noise_factor, double* E_noise_factor,
+                 int* start_ind, int M, int num_bin)
+{
+    #ifdef __CUDACC__
+
+    int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
+
+    get_ll<<<num_blocks, NUM_THREADS>>>(
+        like_out, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
+    );
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaGetLastError());
+
+    #else
+
+    get_ll(
+        like_out, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
+    );
+
+    #endif
+}

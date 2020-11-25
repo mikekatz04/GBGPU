@@ -24,6 +24,12 @@ cdef extern from "new_fastGB.hh":
                  double *f0_all,
                  int num_bin, int N, double dt, double T, double df, int mode_j);
 
+    void get_ll_wrap(double* like_out,
+                   cmplx* A_template, cmplx* E_template,
+                   cmplx* A_data, cmplx* E_data,
+                   double* A_noise_factor, double* E_noise_factor,
+                   int* start_ind, int M, int num_bin);
+
 @pointer_adjust
 def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, lam, beta, e1, beta1, mode_j, num_bin):
 
@@ -134,3 +140,26 @@ def XYZ(a12, a21, a13, a31, a23, a32,
     XYZ_wrap(<cmplx *>a12_in, <cmplx *>a21_in, <cmplx *>a13_in, <cmplx *>a31_in, <cmplx *>a23_in, <cmplx *>a32_in,
                 <double *>f0_all_in,
                 num_bin, N, dt, T, df, mode_j)
+
+
+@pointer_adjust
+def get_ll(like_out,
+              A_template, E_template,
+              A_data, E_data,
+              A_noise_factor, E_noise_factor,
+              start_ind, M, num_bin):
+
+    cdef size_t like_out_in = like_out
+    cdef size_t A_template_in = A_template
+    cdef size_t E_template_in = E_template
+    cdef size_t A_data_in = A_data
+    cdef size_t E_data_in = E_data
+    cdef size_t A_noise_factor_in = A_noise_factor
+    cdef size_t E_noise_factor_in = E_noise_factor
+    cdef size_t start_ind_in = start_ind
+
+    get_ll_wrap(<double*> like_out_in,
+            <cmplx*> A_template_in, <cmplx*> E_template_in,
+            <cmplx*> A_data_in, <cmplx*> E_data_in,
+            <double*> A_noise_factor_in, <double*> E_noise_factor_in,
+            <int*> start_ind_in, M, num_bin);
