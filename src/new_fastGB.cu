@@ -1386,6 +1386,9 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
             cmplx d_minus_h_A = A_data[j] - h_A;
             cmplx d_minus_h_E = E_data[j] - h_E;
 
+            //if ((bin_i == 0)) printf("%d %e %e\n", i, d_minus_h_E.real(), d_minus_h_E.imag());
+
+
             //if (bin_i == 0) printf("%d %e %e\n", i, A_template[i * num_bin + bin_i].real(), A_noise_factor[j]);
             like_temp += gcmplx::real(gcmplx::conj(d_minus_h_A) * d_minus_h_A);
             like_temp += gcmplx::real(gcmplx::conj(d_minus_h_E) * d_minus_h_E);

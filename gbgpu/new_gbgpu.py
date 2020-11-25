@@ -20,9 +20,10 @@ YEAR = 31457280.0
 
 
 class GBGPU(object):
-    def __init__(self, use_gpu=False):
+    def __init__(self, shift_ind=2, use_gpu=False):
 
         self.use_gpu = use_gpu
+        self.shift_ind = shift_ind
 
         if self.use_gpu:
             self.xp = xp
@@ -115,26 +116,26 @@ class GBGPU(object):
         self.A_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
         self.E_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
 
-        amp = self.xp.asarray(amp)
-        f0 = self.xp.asarray(f0)  # in mHz
-        fdot = self.xp.asarray(fdot)
-        fddot = self.xp.asarray(fddot)
-        phi0 = self.xp.asarray(phi0)
-        iota = self.xp.asarray(iota)
-        psi = self.xp.asarray(psi)
-        lam = self.xp.asarray(lam)
-        theta = self.xp.asarray(theta)
+        amp = self.xp.asarray(amp.copy())
+        f0 = self.xp.asarray(f0.copy())  # in mHz
+        fdot = self.xp.asarray(fdot.copy())
+        fddot = self.xp.asarray(fddot.copy())
+        phi0 = self.xp.asarray(phi0.copy())
+        iota = self.xp.asarray(iota.copy())
+        psi = self.xp.asarray(psi.copy())
+        lam = self.xp.asarray(lam.copy())
+        theta = self.xp.asarray(theta.copy())
 
-        e1 = self.xp.asarray(e1)
-        beta1 = self.xp.asarray(beta1)
+        e1 = self.xp.asarray(e1.copy())
+        beta1 = self.xp.asarray(beta1.copy())
 
-        cosiota = self.xp.cos(iota)
+        cosiota = self.xp.cos(iota.copy())
 
-        A2 = self.xp.asarray(A2)
-        omegabar = self.xp.asarray(omegabar)
-        e2 = self.xp.asarray(e2)
-        n2 = self.xp.asarray(n2)
-        T2 = self.xp.asarray(T2)
+        A2 = self.xp.asarray(A2.copy())
+        omegabar = self.xp.asarray(omegabar.copy())
+        e2 = self.xp.asarray(e2.copy())
+        n2 = self.xp.asarray(n2.copy())
+        T2 = self.xp.asarray(T2.copy())
 
         N_base = N
 
@@ -264,8 +265,9 @@ class GBGPU(object):
     def E(self):
         return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.E_out, self.Ns)]
 
-    def get_ll(self, data, noise_factor):
+    def get_ll(self, params, data, noise_factor, **kwargs):
 
+        self.run_wave(*params, **kwargs)
         if isinstance(data[0], self.xp.ndarray) is False:
             raise TypeError(
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
@@ -276,6 +278,7 @@ class GBGPU(object):
         for X, A, E, start_inds, N in zip(
             self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
         ):
+            start_inds = (start_inds - self.shift_ind).astype(self.xp.int32)
             self.get_ll_func(
                 like_out,
                 A,
@@ -307,7 +310,16 @@ class GBGPU(object):
             self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
         ):
             start = start_inds[0]
-            A_out[start : start + N] = A.squeeze()
-            E_out[start : start + N] = E.squeeze()
+
+            if self.use_gpu:
+                A_temp = A.squeeze().get()
+                E_temp = E.squeeze().get()
+
+            else:
+                A_temp = A.squeeze()
+                E_temp = E.squeeze()
+
+            A_out[start : start + N] = A_temp
+            E_out[start : start + N] = E_temp
 
         return A_out, E_out
