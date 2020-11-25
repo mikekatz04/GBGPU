@@ -13,10 +13,10 @@ YEAR = 31457280.0
 
 if __name__ == "__main__":
 
-    use_gpu = True
+    use_gpu = False
     gb = GBGPU(use_gpu=use_gpu)
 
-    num_bin = 2000
+    num_bin = 1
     amp = 1e-22
     f0 = 2e-3
     fdot = 1e-14
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     T2_in = np.full(num_bin, T2)
     N = int(128)
 
-    modes = np.array([2])
+    modes = np.array([1, 2, 3])
 
     params = np.array([f0, fdot, beta_sky, lam, amp, iota, psi, phi0])
 
@@ -73,6 +73,7 @@ if __name__ == "__main__":
         xp.ones(data_stream_length, dtype=np.float64),
         xp.ones(data_stream_length, dtype=np.float64),
     ]
+
     try:
         print("\n\n\n\n")
         import FastGB as FB
@@ -97,6 +98,29 @@ if __name__ == "__main__":
         pass
 
     num = 100
+
+    A_inj, E_inj = gb.inject_signal(
+        Tobs,
+        amp,
+        f0,
+        fdot,
+        fddot,
+        phi0,
+        iota,
+        psi,
+        lam,
+        beta_sky,
+        e1,
+        beta1,
+        A2,
+        omegabar,
+        e2,
+        P2,
+        T2,
+        modes=modes,
+        N=N,
+        dt=dt,
+    )
 
     st = time.perf_counter()
     for _ in range(num):

@@ -64,6 +64,23 @@ class GBGPU(object):
         dt=10.0,
     ):
 
+        amp = np.atleast_1d(amp)
+        f0 = np.atleast_1d(f0)
+        fdot = np.atleast_1d(fdot)
+        fddot = np.atleast_1d(fddot)
+        phi0 = np.atleast_1d(phi0)
+        iota = np.atleast_1d(iota)
+        psi = np.atleast_1d(psi)
+        lam = np.atleast_1d(lam)
+        beta = np.atleast_1d(beta)
+        e1 = np.atleast_1d(e1)
+        beta1 = np.atleast_1d(beta1)
+        A2 = np.atleast_1d(A2)
+        omegabar = np.atleast_1d(omegabar)
+        e2 = np.atleast_1d(e2)
+        P2 = np.atleast_1d(P2)
+        T2 = np.atleast_1d(T2)
+
         self.num_bin = num_bin = len(amp)
 
         num_modes = len(modes)
@@ -273,3 +290,24 @@ class GBGPU(object):
             )
 
         return like_out
+
+    def inject_signal(self, Tobs, *args, fmax=1e-2, **kwargs):
+        Tobs = Tobs * 4.0
+        df = 1 / Tobs
+
+        f = np.arange(0.0, fmax, df)
+        num = len(f)
+
+        A_out = np.zeros(num, dtype=np.complex128)
+        E_out = np.zeros(num, dtype=np.complex128)
+
+        self.run_wave(*args, **kwargs)
+
+        for X, A, E, start_inds, N in zip(
+            self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
+        ):
+            start = start_inds[0]
+            A_out[start : start + N] = A.squeeze()
+            E_out[start : start + N] = E.squeeze()
+
+        return A_out, E_out
