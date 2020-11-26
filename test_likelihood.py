@@ -1,5 +1,6 @@
 import numpy as np
-import matplotlib.pyplot as plt
+
+# import matplotlib.pyplot as plt
 
 from lisatools.sensitivity import get_sensitivity
 from lisatools.diagnostic import (
@@ -19,7 +20,7 @@ from lisatools.sampling.likelihood import Likelihood
 from lisatools.sensitivity import get_sensitivity
 
 # from lisatools.sampling.samplers.emcee import EmceeSampler
-# from lisatools.sampling.samplers.ptemcee import PTEmceeSampler
+from lisatools.sampling.samplers.ptemcee import PTEmceeSampler
 
 import warnings
 
@@ -27,7 +28,7 @@ YEAR = 31457280.0
 
 warnings.filterwarnings("ignore")
 
-use_gpu = False
+use_gpu = True
 gb = GBGPU(use_gpu=use_gpu)
 
 num_bin = 400
@@ -73,7 +74,30 @@ dt = 15.0
 
 waveform_kwargs = dict(modes=modes, N=N, dt=dt)
 
-like = Likelihood(gb, 2, frequency_domain=True, parameter_transforms={}, use_gpu=False,)
+like = Likelihood(
+    gb, 2, frequency_domain=True, parameter_transforms={}, use_gpu=use_gpu,
+)
+
+injection_params = np.array(
+    [
+        amp,
+        f0,
+        fdot,
+        fddot,
+        phi0,
+        iota,
+        psi,
+        lam,
+        beta_sky,
+        e1,
+        beta1,
+        A2,
+        omegabar,
+        e2,
+        P2,
+        T2,
+    ]
+)
 
 A_inj, E_inj = gb.inject_signal(
     Tobs,
@@ -128,35 +152,36 @@ params_test = np.array(
 ).T
 
 check = like.get_ll(params_test, waveform_kwargs=waveform_kwargs)
-breakpoint()
-print("snr:", snr_check)
-params_test[0] *= 1.0000001
 
-params_test = np.tile(params_test, (2, 1))
+nwalkers = 10000
 
-check = like.get_ll(params_test, waveform_kwargs=waveform_kwargs)
+ndim_full = 16
 
+test_inds = np.array([0, 1, 2, 5])
+
+ndim = len(test_inds)
+fill_inds = np.delete(np.arange(ndim_full), test_inds)
+fill_values = injection_params[fill_inds]
 
 prior_ranges = [
-    [injection_params[i] * 0.9, injection_params[i] * 1.1] for i in test_inds
+    [injection_params[i] * 0.95, injection_params[i] * 1.05] for i in test_inds
 ]
 
-waveform_kwargs_templates = waveform_kwargs.copy()
-waveform_kwargs_templates["eps"] = 1e-5
+
 sampler = PTEmceeSampler(
     nwalkers,
     ndim,
     ndim_full,
     like,
     prior_ranges,
-    subset=4,
-    lnlike_kwargs={"waveform_kwargs": waveform_kwargs_templates},
+    subset=None,
+    lnlike_kwargs={"waveform_kwargs": waveform_kwargs},
     test_inds=test_inds,
     fill_values=fill_values,
-    fp="test_full_2yr.h5",
+    fp="test_full_gb.h5",
 )
 
-
+"""
 eps = 1e-9
 cov = covariance(
     fast,
@@ -169,12 +194,17 @@ cov = covariance(
     inner_product_kwargs=inner_product_kwargs,
     diagonalize=False,
 )
+"""
 
 factor = 1e-2
-start_points = injection_params[
-    np.newaxis, test_inds
-] + factor * np.random.multivariate_normal(np.zeros(len(test_inds)), cov, size=nwalkers)
+start_points = (
+    injection_params[np.newaxis, test_inds]
+    + factor
+    * np.random.randn(nwalkers, ndim)
+    * 0.00001
+    * injection_params[np.newaxis, test_inds]
+)
 
-
+breakpoint()
 max_iter = 40000
 sampler.sample(start_points, max_iter, show_progress=True)

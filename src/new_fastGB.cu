@@ -1378,6 +1378,8 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
 				 i < M;
 				 i += 1)
 		{
+            //if ((bin_i == 20)) printf("before %e %e\n", like_temp, like_temp);
+
             int j = start_ind + i;
 
             cmplx h_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
@@ -1386,13 +1388,14 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
             cmplx d_minus_h_A = A_data[j] - h_A;
             cmplx d_minus_h_E = E_data[j] - h_E;
 
-            //if ((bin_i == 0)) printf("%d %e %e\n", i, d_minus_h_E.real(), d_minus_h_E.imag());
+            //if ((bin_i == 20)) printf("%d %e %e\n", i, d_minus_h_E.real(), d_minus_h_E.imag());
 
 
             //if (bin_i == 0) printf("%d %e %e\n", i, A_template[i * num_bin + bin_i].real(), A_noise_factor[j]);
             like_temp += gcmplx::real(gcmplx::conj(d_minus_h_A) * d_minus_h_A);
             like_temp += gcmplx::real(gcmplx::conj(d_minus_h_E) * d_minus_h_E);
         }
+
 
         like_out[bin_i] += like_temp;
     }

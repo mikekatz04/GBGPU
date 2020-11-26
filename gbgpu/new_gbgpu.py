@@ -279,6 +279,7 @@ class GBGPU(object):
             self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
         ):
             start_inds = (start_inds - self.shift_ind).astype(self.xp.int32)
+
             self.get_ll_func(
                 like_out,
                 A,
@@ -319,7 +320,7 @@ class GBGPU(object):
                 A_temp = A.squeeze()
                 E_temp = E.squeeze()
 
-            A_out[start : start + N] = A_temp
-            E_out[start : start + N] = E_temp
+            A_out[start.item() : start.item() + N] = A_temp
+            E_out[start.item() : start.item() + N] = E_temp
 
         return A_out, E_out
