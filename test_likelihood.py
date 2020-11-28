@@ -1,5 +1,13 @@
 import numpy as np
 
+try:
+    import cupy as xp
+
+    gpu_available = True
+except ModuleNotFoundError:
+    import numpy as xp
+
+    gpu_available = False
 # import matplotlib.pyplot as plt
 
 from lisatools.sensitivity import get_sensitivity
@@ -28,7 +36,7 @@ YEAR = 31457280.0
 
 warnings.filterwarnings("ignore")
 
-use_gpu = True
+use_gpu = gpu_available
 gb = GBGPU(use_gpu=use_gpu)
 
 num_bin = 400
@@ -153,11 +161,11 @@ params_test = np.array(
 
 check = like.get_ll(params_test, waveform_kwargs=waveform_kwargs)
 
-nwalkers = 10000
+nwalkers = 500
 
 ndim_full = 16
 
-test_inds = np.array([0, 1, 2, 5])
+test_inds = np.delete(np.arange(ndim_full), np.array([3, 12, 15]))
 
 ndim = len(test_inds)
 fill_inds = np.delete(np.arange(ndim_full), test_inds)
@@ -167,6 +175,8 @@ prior_ranges = [
     [injection_params[i] * 0.95, injection_params[i] * 1.05] for i in test_inds
 ]
 
+ntemps = 4
+Tmax = np.inf
 
 sampler = PTEmceeSampler(
     nwalkers,
@@ -178,6 +188,9 @@ sampler = PTEmceeSampler(
     lnlike_kwargs={"waveform_kwargs": waveform_kwargs},
     test_inds=test_inds,
     fill_values=fill_values,
+    ntemps=ntemps,
+    Tmax=Tmax,
+    autocorr_multiplier=500,
     fp="test_full_gb.h5",
 )
 
@@ -200,11 +213,10 @@ factor = 1e-2
 start_points = (
     injection_params[np.newaxis, test_inds]
     + factor
-    * np.random.randn(nwalkers, ndim)
+    * np.random.randn(nwalkers * ntemps, ndim)
     * 0.00001
     * injection_params[np.newaxis, test_inds]
 )
 
-breakpoint()
 max_iter = 40000
 sampler.sample(start_points, max_iter, show_progress=True)
