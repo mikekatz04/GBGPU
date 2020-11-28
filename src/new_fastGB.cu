@@ -189,7 +189,7 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
 
         //printf("%d %d %d\n", jj, j, num_modes);
         set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta1[bin_i], e1[bin_i], mode_j, bin_i, num_bin);  // set the constant pieces of transfer function
-        //set_const_trans(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], bin_i);
+
 
         //GW polarization basis tensors
         for(int i = 0; i < 3; i++)
@@ -376,9 +376,14 @@ double get_vLOS(double A2, double omegabar, double e2, double n2, double T2, dou
 
 
 CUDA_CALLABLE_MEMBER
+#ifdef __THIRD__
 void calc_xi_f_eccTrip(double* x, double* y, double* z, double* k, double* xi, double* fonfs,
                double f0, double dfdt, double d2fdt2, double T, double t, int n, int N, int j,
                double A2, double omegabar, double e2, double n2, double T2)
+#else
+void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* fonfs,
+               double f0, double dfdt, double d2fdt2, double T, double t, int n, int N, int j)
+#endif
 {
 	double f0_0, dfdt_0, d2fdt2_0;
 
@@ -400,8 +405,11 @@ void calc_xi_f_eccTrip(double* x, double* y, double* z, double* k, double* xi, d
 		//xi[i]    = t + kdotx[i];
 		//First order approximation to frequency at spacecraft i
 		f_temp     = f0_0 + dfdt_0 * xi_temp + 0.5 * d2fdt2_0 * xi_temp * xi_temp;
+        #ifdef __THIRD__
         f_temp     *= (1. + get_vLOS(A2, omegabar, e2, n2, T2, xi_temp)/C)*(double)j/2.;
-
+        #else
+        f_temp     *= (double)j/2.;
+        #endif
 		//Ratio of true frequency to transfer frequency
 		fonfs[i] = f_temp/fstar;
 
@@ -604,6 +612,7 @@ double parab_step_ET(double f0, double dfdt, double d2fdt2, double A2, double om
 
 
 CUDA_CALLABLE_MEMBER
+#ifdef __THIRD__
 void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double T, double t, int n, int N,
                  double *kdotr, double *TR, double *TI,
@@ -611,6 +620,14 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				 double *xi, double *fonfs,
                  double A2, double omegabar, double e2, double n2, double T2,
                  double DPr, double DPi, double DCr, double DCi, int mode_j, double* sum, double* prev_xi, int bin_i)
+#else
+void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
+                 double T, double t, int n, int N,
+                 double *kdotr, double *TR, double *TI,
+                 double *dplus, double *dcross,
+				 double *xi, double *fonfs,
+                 double DPr, double DPi, double DCr, double DCi, int mode_j, int bin_i)
+#endif
 {
 	double tran1r, tran1i;
 	double tran2r, tran2i;
@@ -629,7 +646,9 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 
 	for(int i = 0; i < 3; i++)
 	{
+        #ifdef __THIRD__
         sum[i] += parab_step_ET(f0 * T, dfdt,  d2fdt2,  A2,  omegabar,  e2,  n2,  T2,  xi[i], prev_xi[i], mode_j, T);
+        #endif
 
 		for(int j = 0; j < 3; j++)
 		{
@@ -643,7 +662,9 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				//Argument of complex exponentials
 				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * (double)mode_j/2. - df*t ;
 
+                #ifdef __THIRD__
                 if (xi[i] > 0.0) arg2 += sum[i];
+                #endif
 
                 //if ((i == 2) && (bin_i == 0) && (j == 1)) printf(" %d %d %e %.18e %e %d\n", i, j, xi[i], arg2, sum[i], mode_j);
 
@@ -701,12 +722,23 @@ void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *
 
 
 CUDA_KERNEL
+
+#ifdef __THIRD__
 void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
              double* k_in, double T, int N, int mode_j, int num_bin)
+
+#else
+void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
+             double* eplus_in, double* ecross_in,
+             double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
+             double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
+             double* k_in, double T, int N, int mode_j, int num_bin)
+
+#endif
 {
 
 
@@ -843,6 +875,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         double d2fdt2 = d2fdt2_all[bin_i];
         double phi0 = phi0_all[bin_i];
 
+        #ifdef __THIRD__
         double A2 = A2_all[bin_i];
         double omegabar = omegabar_all[bin_i];
         double e2 = e2_all[bin_i];
@@ -853,6 +886,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         {
             prev_xi[i] = 0.0;
         }
+        #endif
 
         for (int n = 0;
     			 n < N;
@@ -877,10 +911,17 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
             double t = T*(double)(n)/(double)N;
 
-            calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N, mode_j, A2, omegabar, e2, n2, T2);		  // calc frequency and time variables
+            #ifdef __THIRD__
+            calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N, mode_j, A2, omegabar, e2, n2, T2); // calc frequency and time variables
+            #else
+            calc_xi_f(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N, mode_j); // calc frequency and time variables
+            #endif
+
             calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
             calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
             calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
+
+            #ifdef __THIRD__
             get_transfer_ET(q, f0, dfdt, d2fdt2, phi0,
                           T, t, n, N,
                           kdotr, TR, TI,
@@ -888,29 +929,48 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
             				  xi, fonfs,
                           A2, omegabar, e2, n2, T2,
                           DPr, DPi, DCr, DCi, mode_j, sum, prev_xi, bin_i);     // Calculating Transfer function
+            #else
+            get_transfer_ET(q, f0, dfdt, d2fdt2, phi0,
+                          T, t, n, N,
+                          kdotr, TR, TI,
+                          dplus, dcross,
+                              xi, fonfs,
+                          DPr, DPi, DCr, DCi, mode_j, bin_i);     // Calculating Transfer function
+            #endif
             fill_time_series(bin_i, num_bin, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
 
+            #ifdef __THIRD__
             for (int i = 0; i < 3; i += 1)
             {
                 prev_xi[i] = xi[i];
             }
+            #endif
         }
     }
 }
 
-
+#ifdef __THIRD__
 void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
              double* k_all, double T, int N, int mode_j, int num_bin)
+#else
+void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
+             double* eplus_in, double* ecross_in,
+             double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
+             double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
+             double* k_all, double T, int N, int mode_j, int num_bin)
+#endif
+
 {
 
     #ifdef __CUDACC__
 
     int num_blocks = std::ceil((num_bin + NUM_THREADS_2 -1)/NUM_THREADS_2);
 
+    #ifdef __THIRD__
     GenWave<<<num_blocks, NUM_THREADS_2>>>(
         data12, data21, data13, data31, data23, data32,
         eplus_in, ecross_in,
@@ -919,11 +979,21 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
          DPr_all, DPi_all, DCr_all, DCi_all,
          k_all, T, N, mode_j, num_bin
     );
+    #else
+    GenWave<<<num_blocks, NUM_THREADS_2>>>(
+        data12, data21, data13, data31, data23, data32,
+        eplus_in, ecross_in,
+         f0_all, dfdt_all, d2fdt2_all, phi0_all,
+         DPr_all, DPi_all, DCr_all, DCi_all,
+         k_all, T, N, mode_j, num_bin
+    );
+    #endif
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
 
     #else
 
+    #ifdef __THIRD__
     GenWave(
         data12, data21, data13, data31, data23, data32,
         eplus_in, ecross_in,
@@ -932,7 +1002,15 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
          DPr_all, DPi_all, DCr_all, DCi_all,
          k_all, T, N, mode_j, num_bin
     );
-
+    #else
+    GenWave(
+        data12, data21, data13, data31, data23, data32,
+        eplus_in, ecross_in,
+         f0_all, dfdt_all, d2fdt2_all, phi0_all,
+         DPr_all, DPi_all, DCr_all, DCi_all,
+         k_all, T, N, mode_j, num_bin
+    );
+    #endif
     #endif
 }
 

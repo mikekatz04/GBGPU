@@ -122,8 +122,8 @@ lib_gsl_dir = "/opt/local/lib"
 include_gsl_dir = "/opt/local/include"
 
 if run_cuda_install:
-    ext_gpu = Extension(
-        "newfastgb",
+
+    ext_gpu_dict = dict(
         sources=["src/new_fastGB.cu", "src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
         libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
@@ -155,17 +155,21 @@ if run_cuda_install:
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
+    ext_gpu = Extension("newfastgb", **ext_gpu_dict)
+
+    ext_gpu_dict["sources"] = (["src/new_fastGB.cu", "src/GBGPU_third.pyx"],)
+    ext_gpu_dict["extra_compile_args"]["nvcc"].append("-D__THIRD__")
+    ext_third_gpu = Extension("newfastgbthird", **ext_gpu_dict)
 
 cu_files = ["new_fastGB"]
-pyx_files = ["GBGPU"]
+pyx_files = ["GBGPU", "GBGPU_third"]
 for fp in cu_files:
     shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
 
 for fp in pyx_files:
     shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
 
-ext_cpu = Extension(
-    "newfastgb_cpu",
+ext_cpu_dict = dict(
     sources=["src/new_fastGB.cpp", "src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
     libraries=["gsl", "gslcblas", "gomp"],
@@ -173,12 +177,18 @@ ext_cpu = Extension(
     extra_compile_args={"gcc": ["-std=c++11", "-fopenmp", "-fPIC"],},  # '-g'],
     include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
+ext_cpu = Extension("newfastgb_cpu", **ext_cpu_dict)
+
+ext_cpu_dict["sources"] = ["src/new_fastGB.cpp", "src/GBGPU_third_cpu.pyx"]
+ext_cpu_dict["extra_compile_args"]["gcc"].append("-D__THIRD__")
+
+ext_third_cpu = ext_cpu = Extension("newfastgbthird_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
-    extensions = [ext_gpu, ext_cpu]
+    extensions = [ext_gpu, ext_third_gpu, ext_cpu, ext_third_cpu]
 
 else:
-    extensions = [ext_cpu]
+    extensions = [ext_cpu, ext_third_cpu]
 
 setup(
     name="gbgpu",

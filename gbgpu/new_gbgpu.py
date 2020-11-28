@@ -6,10 +6,12 @@ from newfastgb_cpu import GenWave as GenWave_cpu
 from newfastgb_cpu import unpack_data_1 as unpack_data_1_cpu
 from newfastgb_cpu import XYZ as XYZ_cpu
 from newfastgb_cpu import get_ll as get_ll_cpu
+from newfastgbthird_cpu import GenWave as GenWave_third_cpu
 
 try:
     import cupy as xp
     from newfastgb import get_basis_tensors, GenWave, unpack_data_1, XYZ, get_ll
+    from newfastgbthird import GenWave as GenWave_third
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -20,15 +22,16 @@ YEAR = 31457280.0
 
 
 class GBGPU(object):
-    def __init__(self, shift_ind=2, use_gpu=False):
+    def __init__(self, shift_ind=2, use_gpu=False, third=False):
 
         self.use_gpu = use_gpu
         self.shift_ind = shift_ind
+        self.third = third
 
         if self.use_gpu:
             self.xp = xp
             self.get_basis_tensors = get_basis_tensors
-            self.GenWave = GenWave
+            self.GenWave = GenWave if third is False else GenWave_third
             self.unpack_data_1 = unpack_data_1
             self.XYZ = XYZ
             self.get_ll_func = get_ll
@@ -36,7 +39,7 @@ class GBGPU(object):
         else:
             self.xp = np
             self.get_basis_tensors = get_basis_tensors_cpu
-            self.GenWave = GenWave_cpu
+            self.GenWave = GenWave_gpu if third is False else GenWave_third_gpu
             self.unpack_data_1 = unpack_data_1_cpu
             self.XYZ = XYZ_cpu
             self.get_ll_func = get_ll_cpu
@@ -54,11 +57,7 @@ class GBGPU(object):
         beta,
         e1,
         beta1,
-        A2,
-        omegabar,
-        e2,
-        P2,
-        T2,
+        *args,
         modes=np.array([2]),
         N=int(2 ** 12),
         T=4 * YEAR,
@@ -76,11 +75,6 @@ class GBGPU(object):
         beta = np.atleast_1d(beta)
         e1 = np.atleast_1d(e1)
         beta1 = np.atleast_1d(beta1)
-        A2 = np.atleast_1d(A2)
-        omegabar = np.atleast_1d(omegabar)
-        e2 = np.atleast_1d(e2)
-        P2 = np.atleast_1d(P2)
-        T2 = np.atleast_1d(T2)
 
         self.num_bin = num_bin = len(amp)
 
@@ -93,8 +87,6 @@ class GBGPU(object):
         fdot = fdot * T * T
         fddot = fddot * T * T * T
         theta = np.pi / 2 - beta
-        n2 = 2 * np.pi / (P2 * YEAR)
-        T2 *= YEAR
 
         self.N_max = N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params);
 
@@ -131,11 +123,22 @@ class GBGPU(object):
 
         cosiota = self.xp.cos(iota.copy())
 
-        A2 = self.xp.asarray(A2.copy())
-        omegabar = self.xp.asarray(omegabar.copy())
-        e2 = self.xp.asarray(e2.copy())
-        n2 = self.xp.asarray(n2.copy())
-        T2 = self.xp.asarray(T2.copy())
+        if self.third:
+            A2, omegabar, e2, P2, T2 = args
+            A2 = np.atleast_1d(A2)
+            omegabar = np.atleast_1d(omegabar)
+            e2 = np.atleast_1d(e2)
+            P2 = np.atleast_1d(P2)
+            T2 = np.atleast_1d(T2)
+
+            n2 = 2 * np.pi / (P2 * YEAR)
+            T2 *= YEAR
+
+            A2 = self.xp.asarray(A2.copy())
+            omegabar = self.xp.asarray(omegabar.copy())
+            e2 = self.xp.asarray(e2.copy())
+            n2 = self.xp.asarray(n2.copy())
+            T2 = self.xp.asarray(T2.copy())
 
         N_base = N
 
@@ -178,34 +181,59 @@ class GBGPU(object):
                 num_bin,
             )
 
-            self.GenWave(
-                data12,
-                data21,
-                data13,
-                data31,
-                data23,
-                data32,
-                eplus,
-                ecross,
-                f0,
-                fdot,
-                fddot,
-                phi0,
-                A2,
-                omegabar,
-                e2,
-                n2,
-                T2,
-                DPr,
-                DPi,
-                DCr,
-                DCi,
-                k,
-                T,
-                N,
-                j,
-                num_bin,
-            )
+            if self.third:
+                self.GenWave(
+                    data12,
+                    data21,
+                    data13,
+                    data31,
+                    data23,
+                    data32,
+                    eplus,
+                    ecross,
+                    f0,
+                    fdot,
+                    fddot,
+                    phi0,
+                    A2,
+                    omegabar,
+                    e2,
+                    n2,
+                    T2,
+                    DPr,
+                    DPi,
+                    DCr,
+                    DCi,
+                    k,
+                    T,
+                    N,
+                    j,
+                    num_bin,
+                )
+            else:
+                self.GenWave(
+                    data12,
+                    data21,
+                    data13,
+                    data31,
+                    data23,
+                    data32,
+                    eplus,
+                    ecross,
+                    f0,
+                    fdot,
+                    fddot,
+                    phi0,
+                    DPr,
+                    DPi,
+                    DCr,
+                    DCi,
+                    k,
+                    T,
+                    N,
+                    j,
+                    num_bin,
+                )
 
             data12 = data12.reshape(N, num_bin)
             data21 = data21.reshape(N, num_bin)

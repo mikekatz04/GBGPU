@@ -13,7 +13,6 @@ cdef extern from "new_fastGB.hh":
     void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                  double* eplus_in, double* ecross_in,
                  double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
-                 double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
                  double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
                  double* k_all, double T, int N, int mode_j, int num_bin);
 
@@ -57,7 +56,6 @@ def get_basis_tensors(eplus, ecross, DPr, DPi, DCr, DCi, k, amp, cosiota, psi, l
 def GenWave(data12, data21, data13, data31, data23, data32,
             eplus, ecross,
              f0_all, dfdt_all, d2fdt2_all, phi0_all,
-             A2_all, omegabar_all, e2_all, n2_all, T2_all,
              DPr_all, DPi_all, DCr_all, DCi_all,
              k_all, T, N, mode_j, num_bin):
 
@@ -79,35 +77,12 @@ def GenWave(data12, data21, data13, data31, data23, data32,
     cdef size_t DCr_all_in = DCr_all
     cdef size_t DCi_all_in = DCi_all
 
-    cdef size_t A2_all_in = A2_all
-    cdef size_t omegabar_all_in = omegabar_all
-    cdef size_t e2_all_in = e2_all
-    cdef size_t n2_all_in = n2_all
-    cdef size_t T2_all_in = T2_all
-
     GenWave_wrap(<cmplx*>data12_in, <cmplx*>data21_in, <cmplx*>data13_in, <cmplx*>data31_in, <cmplx*>data23_in, <cmplx*>data32_in,
                  <double*> eplus_in, <double*> ecross_in,
                  <double*>f0_all_in, <double*>dfdt_all_in, <double*>d2fdt2_all_in, <double*> phi0_all_in,
-                 <double*> A2_all_in, <double*> omegabar_all_in, <double*> e2_all_in, <double*> n2_all_in, <double*> T2_all_in,
                  <double*>DPr_all_in, <double*>DPi_all_in, <double*>DCr_all_in, <double*>DCi_all_in,
                  <double*>k_all_in, T, N, mode_j, num_bin)
 
-"""
-@pointer_adjust
-def fft_data(data12, data21, data13, data31, data23, data32, num_bin, N):
-
-    cdef size_t data12_in = data12
-    cdef size_t data21_in = data21
-    cdef size_t data13_in = data13
-    cdef size_t data31_in = data31
-    cdef size_t data23_in = data23
-    cdef size_t data32_in = data32
-
-    fft_data_wrap(<double *>data12_in, <double *>data21_in,
-                  <double *>data13_in, <double *>data31_in,
-                  <double *>data23_in, <double *>data32_in,
-                  num_bin, N)
-"""
 
 @pointer_adjust
 def unpack_data_1(data12, data21, data13, data31, data23, data32,
