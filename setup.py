@@ -157,9 +157,41 @@ if run_cuda_install:
     )
     ext_gpu = Extension("newfastgb", **ext_gpu_dict)
 
-    ext_gpu_dict["sources"] = (["src/new_fastGB.cu", "src/GBGPU_third.pyx"],)
-    ext_gpu_dict["extra_compile_args"]["nvcc"].append("-D__THIRD__")
-    ext_third_gpu = Extension("newfastgbthird", **ext_gpu_dict)
+    ext_gpu_third_dict = dict(
+        sources=["src/new_fastGB.cu", "src/GBGPU_third.pyx"],
+        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
+        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
+        language="c++",
+        runtime_library_dirs=[CUDA["lib64"]],
+        # This syntax is specific to this build system
+        # we're only going to use certain compiler args with nvcc
+        # and not with gcc the implementation of this trick is in
+        # customize_compiler()
+        extra_compile_args={
+            "gcc": ["-std=c99", "-D__THIRD__"],  # '-g'],
+            "nvcc": [
+                "-arch=sm_70",
+                "-gencode=arch=compute_35,code=sm_35",
+                "-gencode=arch=compute_50,code=sm_50",
+                "-gencode=arch=compute_52,code=sm_52",
+                "-gencode=arch=compute_60,code=sm_60",
+                "-gencode=arch=compute_61,code=sm_61",
+                "-gencode=arch=compute_70,code=sm_70",
+                "--default-stream=per-thread",
+                "--ptxas-options=-v",
+                "-c",
+                "--compiler-options",
+                "'-fPIC'",
+                "-lineinfo",
+                "-Xcompiler",
+                "-fopenmp",
+                "-D__THIRD__",
+            ],  # ,"-G", "-g"] # for debugging
+        },
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
+    )
+
+    ext_third_gpu = Extension("newfastgbthird", **ext_gpu_third_dict)
 
 cu_files = ["new_fastGB"]
 pyx_files = ["GBGPU", "GBGPU_third"]

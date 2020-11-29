@@ -29,8 +29,8 @@ class GBGPU(object):
         if self.use_gpu:
             self.xp = xp
             self.get_basis_tensors = get_basis_tensors
-            self.GenWave = GenWave_gpu
-            self.GenWaveThird = GenWave_third_gpu
+            self.GenWave = GenWave
+            self.GenWaveThird = GenWave_third
             self.unpack_data_1 = unpack_data_1
             self.XYZ = XYZ
             self.get_ll_func = get_ll
