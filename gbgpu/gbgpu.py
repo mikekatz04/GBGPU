@@ -1,37 +1,36 @@
 import numpy as np
 import time
 
+from gbgpu.utils.constants import *
 from newfastgb_cpu import get_basis_tensors as get_basis_tensors_cpu
 from newfastgb_cpu import GenWave as GenWave_cpu
 from newfastgb_cpu import unpack_data_1 as unpack_data_1_cpu
 from newfastgb_cpu import XYZ as XYZ_cpu
 from newfastgb_cpu import get_ll as get_ll_cpu
-from newfastgbthird_cpu import GenWave as GenWave_third_cpu
+from newfastgbthird_cpu import GenWaveThird as GenWave_third_cpu
 
 try:
     import cupy as xp
     from newfastgb import get_basis_tensors, GenWave, unpack_data_1, XYZ, get_ll
-    from newfastgbthird import GenWave as GenWave_third
+    from newfastgbthird import GenWaveThird as GenWave_third
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
 
     print("no cupy")
 
-YEAR = 31457280.0
-
 
 class GBGPU(object):
-    def __init__(self, shift_ind=2, use_gpu=False, third=False):
+    def __init__(self, shift_ind=2, use_gpu=False):
 
         self.use_gpu = use_gpu
         self.shift_ind = shift_ind
-        self.third = third
 
         if self.use_gpu:
             self.xp = xp
             self.get_basis_tensors = get_basis_tensors
-            self.GenWave = GenWave if third is False else GenWave_third
+            self.GenWave = GenWave_gpu
+            self.GenWaveThird = GenWave_third_gpu
             self.unpack_data_1 = unpack_data_1
             self.XYZ = XYZ
             self.get_ll_func = get_ll
@@ -39,7 +38,8 @@ class GBGPU(object):
         else:
             self.xp = np
             self.get_basis_tensors = get_basis_tensors_cpu
-            self.GenWave = GenWave_gpu if third is False else GenWave_third_gpu
+            self.GenWave = GenWave_cpu
+            self.GenWaveThird = GenWave_third_cpu
             self.unpack_data_1 = unpack_data_1_cpu
             self.XYZ = XYZ_cpu
             self.get_ll_func = get_ll_cpu
@@ -55,8 +55,6 @@ class GBGPU(object):
         psi,
         lam,
         beta,
-        e1,
-        beta1,
         *args,
         modes=np.array([2]),
         N=int(2 ** 12),
@@ -73,6 +71,39 @@ class GBGPU(object):
         psi = np.atleast_1d(psi)
         lam = np.atleast_1d(lam)
         beta = np.atleast_1d(beta)
+
+        if len(args) == 2:
+            e1, beta1 = args
+
+            run_ecc = True
+            run_third = False
+
+        elif len(args) == 5:
+            e1 = np.full_like(amp, 0.0)
+            beta1 = np.full_like(amp, 0.0)
+
+            A2, omegabar, e2, P2, T2 = args
+
+            run_ecc = False
+            run_third = True
+
+        elif len(args) == 7:
+            e1, beta1, A2, omegabar, e2, P2, T2 = args
+
+            run_ecc = True
+            run_third = True
+
+        elif len(args) == 0:
+            e1 = np.full_like(amp, 0.0)
+            beta1 = np.full_like(amp, 0.0)
+
+            run_ecc = False
+            run_third = False
+        else:
+            raise ValueError(
+                "Wrong number of extra arguments. Needs to be 2 for eccentric inner binary, 5 for circular inner binary and a third body, or 7 for eccentric inner and third body."
+            )
+
         e1 = np.atleast_1d(e1)
         beta1 = np.atleast_1d(beta1)
 
@@ -104,10 +135,6 @@ class GBGPU(object):
 
         k = self.xp.zeros(3 * num_bin)
 
-        self.X_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
-        self.A_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
-        self.E_flat = self.xp.zeros((num_bin * N_max,), dtype=self.xp.complex128)
-
         amp = self.xp.asarray(amp.copy())
         f0 = self.xp.asarray(f0.copy())  # in mHz
         fdot = self.xp.asarray(fdot.copy())
@@ -123,8 +150,8 @@ class GBGPU(object):
 
         cosiota = self.xp.cos(iota.copy())
 
-        if self.third:
-            A2, omegabar, e2, P2, T2 = args
+        if run_third:
+
             A2 = np.atleast_1d(A2)
             omegabar = np.atleast_1d(omegabar)
             e2 = np.atleast_1d(e2)
@@ -147,6 +174,7 @@ class GBGPU(object):
         self.E_out = []
 
         self.Ns = []
+
         for j in modes:
 
             N = int(2 ** (j - 1) * N_base)
@@ -181,8 +209,8 @@ class GBGPU(object):
                 num_bin,
             )
 
-            if self.third:
-                self.GenWave(
+            if run_third:
+                self.GenWaveThird(
                     data12,
                     data21,
                     data13,

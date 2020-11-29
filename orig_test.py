@@ -9,7 +9,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from gbgpu.new_gbgpu import GBGPU
 
-YEAR = 31457280.0
+from gbgpu.utils.constants import *
 
 if __name__ == "__main__":
 

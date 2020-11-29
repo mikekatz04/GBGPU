@@ -7,7 +7,7 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
                             double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin);
 
 #ifdef __THIRD__
-void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
+void GenWaveThird_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,

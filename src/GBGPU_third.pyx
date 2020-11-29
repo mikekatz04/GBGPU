@@ -8,7 +8,7 @@ assert sizeof(int) == sizeof(np.int32_t)
 cdef extern from "new_fastGB.hh":
     ctypedef void* cmplx 'cmplx'
 
-    void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
+    void GenWaveThird_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                  double* eplus_in, double* ecross_in,
                  double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
                  double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
@@ -16,7 +16,7 @@ cdef extern from "new_fastGB.hh":
                  double* k_all, double T, int N, int mode_j, int num_bin);
 
 @pointer_adjust
-def GenWave(data12, data21, data13, data31, data23, data32,
+def GenWaveThird(data12, data21, data13, data31, data23, data32,
             eplus, ecross,
              f0_all, dfdt_all, d2fdt2_all, phi0_all,
              A2_all, omegabar_all, e2_all, n2_all, T2_all,
@@ -47,7 +47,7 @@ def GenWave(data12, data21, data13, data31, data23, data32,
     cdef size_t n2_all_in = n2_all
     cdef size_t T2_all_in = T2_all
 
-    GenWave_wrap(<cmplx*>data12_in, <cmplx*>data21_in, <cmplx*>data13_in, <cmplx*>data31_in, <cmplx*>data23_in, <cmplx*>data32_in,
+    GenWaveThird_wrap(<cmplx*>data12_in, <cmplx*>data21_in, <cmplx*>data13_in, <cmplx*>data31_in, <cmplx*>data23_in, <cmplx*>data32_in,
                  <double*> eplus_in, <double*> ecross_in,
                  <double*>f0_all_in, <double*>dfdt_all_in, <double*>d2fdt2_all_in, <double*> phi0_all_in,
                  <double*> A2_all_in, <double*> omegabar_all_in, <double*> e2_all_in, <double*> n2_all_in, <double*> T2_all_in,

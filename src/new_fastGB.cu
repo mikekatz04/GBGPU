@@ -1,4 +1,5 @@
 #include "stdio.h"
+
 #include "new_fastGB.hh"
 #include "global.h"
 #include "LISA.h"
@@ -512,7 +513,7 @@ void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecros
 	dplus[(2*3 + 0)] = dplus[(0*3 + 2)];  dcross[(2*3 + 0)] = dcross[(0*3 + 2)];
 }
 
-
+/*
 CUDA_CALLABLE_MEMBER
 void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double T, double t, int n, int N,
@@ -577,6 +578,7 @@ void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
 		}
 	}
 }
+*/
 
 CUDA_CALLABLE_MEMBER
 double get_fGW(double f0, double dfdt, double d2fdt2, double T, double t)
@@ -621,7 +623,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double A2, double omegabar, double e2, double n2, double T2,
                  double DPr, double DPi, double DCr, double DCi, int mode_j, double* sum, double* prev_xi, int bin_i)
 #else
-void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
+void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
                  double T, double t, int n, int N,
                  double *kdotr, double *TR, double *TI,
                  double *dplus, double *dcross,
@@ -950,7 +952,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 }
 
 #ifdef __THIRD__
-void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
+void GenWaveThird_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
              double* f0_all, double* dfdt_all, double* d2fdt2_all, double* phi0_all,
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,

@@ -179,10 +179,19 @@ ext_cpu_dict = dict(
 )
 ext_cpu = Extension("newfastgb_cpu", **ext_cpu_dict)
 
-ext_cpu_dict["sources"] = ["src/new_fastGB.cpp", "src/GBGPU_third_cpu.pyx"]
-ext_cpu_dict["extra_compile_args"]["gcc"].append("-D__THIRD__")
+ext_cpu_third_dict = dict(
+    sources=["src/new_fastGB.cpp", "src/GBGPU_cpu.pyx"],
+    library_dirs=[lib_gsl_dir],
+    libraries=["gsl", "gslcblas", "gomp"],
+    language="c++",
+    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp", "-fPIC"],},  # '-g'],
+    include_dirs=[numpy_include, include_gsl_dir, "include"],
+)
 
-ext_third_cpu = ext_cpu = Extension("newfastgbthird_cpu", **ext_cpu_dict)
+ext_cpu_third_dict["sources"] = ["src/new_fastGB.cpp", "src/GBGPU_third_cpu.pyx"]
+ext_cpu_third_dict["extra_compile_args"]["gcc"].append("-D__THIRD__")
+
+ext_third_cpu = Extension("newfastgbthird_cpu", **ext_cpu_third_dict)
 
 if run_cuda_install:
     extensions = [ext_gpu, ext_third_gpu, ext_cpu, ext_third_cpu]
@@ -190,13 +199,32 @@ if run_cuda_install:
 else:
     extensions = [ext_cpu, ext_third_cpu]
 
+fp_out_name = "gbgpu/utils/constants.py"
+fp_in_name = "include/Constants.h"
+
+# develop few.utils.constants.py
+with open(fp_out_name, "w") as fp_out:
+    with open(fp_in_name, "r") as fp_in:
+        lines = fp_in.readlines()
+        for line in lines:
+            if len(line.split()) == 3:
+                if line.split()[0] == "#define":
+                    try:
+                        _ = float(line.split()[2])
+                        string_out = line.split()[1] + " = " + line.split()[2] + "\n"
+                        fp_out.write(string_out)
+
+                    except (ValueError) as e:
+                        continue
+
+
 setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
     version="0.1",
     packages=["gbgpu", "gbgpu.utils"],
-    py_modules=["gbgpu.new_gbgpu", "gbgpu.utils.pointeradjust"],
+    py_modules=["gbgpu.gbgpu", "gbgpu.utils.pointeradjust", "gbgpu.utils.constants",],
     ext_modules=extensions,
     # Inject our custom trigger
     cmdclass={"build_ext": custom_build_ext},
