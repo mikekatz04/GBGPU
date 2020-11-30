@@ -122,9 +122,9 @@ lib_gsl_dir = "/opt/local/lib"
 include_gsl_dir = "/opt/local/include"
 
 if run_cuda_install:
-    ext_gpu = Extension(
-        "GBGPU",
-        sources=["gbgpu/src/manager.cu", "gbgpu/GBGPU.pyx"],
+
+    ext_gpu_dict = dict(
+        sources=["src/new_fastGB.cu", "src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
         libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
         language="c++",
@@ -153,14 +153,14 @@ if run_cuda_install:
                 "-fopenmp",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/src"],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
+    ext_gpu = Extension("newfastgb", **ext_gpu_dict)
 
-    ext_gpu2 = Extension(
-        "GlobalFitUtils",
-        sources=["gbgpu/src/likelihood.cu", "gbgpu/Utils.pyx"],
+    ext_gpu_third_dict = dict(
+        sources=["src/new_fastGB.cu", "src/GBGPU_third.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
-        libraries=["cudart", "cublas", "gsl", "gslcblas", "gomp"],
+        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
         language="c++",
         runtime_library_dirs=[CUDA["lib64"]],
         # This syntax is specific to this build system
@@ -168,7 +168,7 @@ if run_cuda_install:
         # and not with gcc the implementation of this trick is in
         # customize_compiler()
         extra_compile_args={
-            "gcc": ["-std=c99"],  # '-g'],
+            "gcc": ["-std=c99", "-D__THIRD__"],  # '-g'],
             "nvcc": [
                 "-arch=sm_70",
                 "-gencode=arch=compute_35,code=sm_35",
@@ -185,69 +185,87 @@ if run_cuda_install:
                 "-lineinfo",
                 "-Xcompiler",
                 "-fopenmp",
+                "-D__THIRD__",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/src"],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
 
-"""
-src_folder = "gbgpu/src/"
-for file in os.listdir(src_folder):
-    if file.split(".")[-1] == "cu":
-        shutil.copy(src_folder + file, src_folder + file[:-2] + "cpp")
-shutil.copy("gbgpu/gpuPhenomHM.pyx", "gbgpu/cpuPhenomHM.pyx")
-# Obtain the numpy include directory. This logic works across numpy versions.
-try:
-    numpy_include = numpy.get_include()
-except AttributeError:
-    numpy_include = numpy.get_numpy_include()
+    ext_third_gpu = Extension("newfastgbthird", **ext_gpu_third_dict)
 
-lib_gsl_dir = "/opt/local/lib"
-include_gsl_dir = "/opt/local/include"
+cu_files = ["new_fastGB"]
+pyx_files = ["GBGPU", "GBGPU_third"]
+for fp in cu_files:
+    shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
 
-ext_cpu = Extension(
-    "cpuPhenomHM",
-    sources=[
-        "gbgpu/src/globalPhenomHM.cpp",
-        "gbgpu/src/RingdownCW.cpp",
-        "gbgpu/src/fdresponse.cpp",
-        "gbgpu/src/IMRPhenomD_internals.cpp",
-        "gbgpu/src/IMRPhenomD.cpp",
-        "gbgpu/src/PhenomHM.cpp",
-        "gbgpu/src/manager.cpp",
-        "gbgpu/cpuPhenomHM.pyx",
-    ],
+for fp in pyx_files:
+    shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
+
+ext_cpu_dict = dict(
+    sources=["src/new_fastGB.cpp", "src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
-    libraries=["gsl", "gslcblas", "pthread"],
+    libraries=["gsl", "gslcblas", "gomp"],
     language="c++",
-    # sruntime_library_dirs = [CUDA['lib64']],
-    # This syntax is specific to this build system
-    # we're only going to use certain compiler args with nvcc
-    # and not with gcc the implementation of this trick is in
-    # customize_compiler()
-    extra_compile_args={"gcc": ["-O3", "-fopenmp", "-fPIC"]},
-    extra_link_args=["-Wl,-rpath,/usr/local/opt/gcc/lib/gcc/9/"],
-    include_dirs=[numpy_include, include_gsl_dir, "gbgpu/src"],
+    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp", "-fPIC"],},  # '-g'],
+    include_dirs=[numpy_include, include_gsl_dir, "include"],
+)
+ext_cpu = Extension("newfastgb_cpu", **ext_cpu_dict)
+
+ext_cpu_third_dict = dict(
+    sources=["src/new_fastGB.cpp", "src/GBGPU_cpu.pyx"],
+    library_dirs=[lib_gsl_dir],
+    libraries=["gsl", "gslcblas", "gomp"],
+    language="c++",
+    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp", "-fPIC"],},  # '-g'],
+    include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
 
-if run_cuda_install:
-    extensions = [ext_gpu, ext_cpu]
-else:
-    print("Did not locate CUDA binary.")
-    extensions = [ext_cpu]
+ext_cpu_third_dict["sources"] = ["src/new_fastGB.cpp", "src/GBGPU_third_cpu.pyx"]
+ext_cpu_third_dict["extra_compile_args"]["gcc"].append("-D__THIRD__")
 
-"""
-extensions = [ext_gpu, ext_gpu2]
+ext_third_cpu = Extension("newfastgbthird_cpu", **ext_cpu_third_dict)
+
+if run_cuda_install:
+    extensions = [ext_gpu, ext_third_gpu, ext_cpu, ext_third_cpu]
+
+else:
+    extensions = [ext_cpu, ext_third_cpu]
+
+fp_out_name = "gbgpu/utils/constants.py"
+fp_in_name = "include/Constants.h"
+
+# develop few.utils.constants.py
+with open(fp_out_name, "w") as fp_out:
+    with open(fp_in_name, "r") as fp_in:
+        lines = fp_in.readlines()
+        for line in lines:
+            if len(line.split()) == 3:
+                if line.split()[0] == "#define":
+                    try:
+                        _ = float(line.split()[2])
+                        string_out = line.split()[1] + " = " + line.split()[2] + "\n"
+                        fp_out.write(string_out)
+
+                    except (ValueError) as e:
+                        continue
+
 
 setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
     version="0.1",
-    packages=["gbgpu"],
+    packages=["gbgpu", "gbgpu.utils"],
+    py_modules=["gbgpu.gbgpu", "gbgpu.utils.pointeradjust", "gbgpu.utils.constants",],
     ext_modules=extensions,
     # Inject our custom trigger
     cmdclass={"build_ext": custom_build_ext},
     # Since the package has c code, the egg cannot be zipped
     zip_safe=False,
 )
+
+for fp in cu_files:
+    os.remove("src/" + fp + ".cpp")
+
+for fp in pyx_files:
+    os.remove("src/" + fp + "_cpu.pyx")
