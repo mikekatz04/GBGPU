@@ -1328,7 +1328,7 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
         }
 
         // read out
-        like_out[bin_i] += like_temp;
+        like_out[bin_i] +=  1./2. * (4. * like_temp);
     }
 }
 

@@ -271,3 +271,5 @@ print(
     "per binary:",
     (et - st) / (num * num_bin),
 )
+
+breakpoint()
