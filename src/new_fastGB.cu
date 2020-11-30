@@ -1,3 +1,7 @@
+// Code by Michael Katz. Based on code by Travis Robson, Neil Cornish, Tyson Littenberg, Stas Babak
+
+
+// imports
 #include "stdio.h"
 
 #include "new_fastGB.hh"
@@ -7,19 +11,19 @@
 #include "omp.h"
 
 #ifdef __CUDACC__
-#include <cufft.h>
 #else
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_bessel.h>
 #endif
 
-
+// Get constants that determine eccentricity weighting of each harmonic
 CUDA_CALLABLE_MEMBER
 void get_j_consts(double* Cpj, double* Spj, double* Ccj, double* Scj, double beta, double e, double cosiota, int j)
 {
 
 	double result;
 
+    // bessel functions on CPU vs GPU
     #ifdef __CUDACC__
     double Jj   = jn(j,   j*e);
 	double Jjp1 = jn(j+1, j*e);
@@ -52,6 +56,7 @@ void get_j_consts(double* Cpj, double* Spj, double* Ccj, double* Scj, double bet
 
 }
 
+// Get transfer information for eccentric or circular GBs
 CUDA_CALLABLE_MEMBER
 void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
                              double amp, double cosiota, double psi, double beta, double e, int mode_j, int bin_i, int num_bin)
@@ -65,6 +70,7 @@ void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
     cosps = cos(2.*psi);
     sinps = sin(2.*psi);
 
+    // if eccentricity is very small, assume circular
     if (e < 0.000001)
     {
         //Calculate GW polarization amplitudes
@@ -80,49 +86,24 @@ void set_const_trans_eccTrip(double* DPr, double* DPi, double* DCr, double* DCi,
 
     else
     {
+        // Get constants determining eccentric mode weighting
         get_j_consts(&Cpj, &Spj, &Ccj, &Scj, beta, e, cosiota, mode_j);
 
-    	//Calculate constant pieces of transfer functions
-
-        //printf("%e %e %e %e %e %e %e %e %e %d \n", Cpj, Spj, Ccj, Scj, psi, amp, beta, e, cosiota, mode_j);
-    	DPr_temp    =  amp*(Cpj*cosps - Scj*sinps);
+    	// Calculate constant pieces of transfer functions
+        DPr_temp    =  amp*(Cpj*cosps - Scj*sinps);
     	DPi_temp    = -amp*(Scj*cosps + Ccj*sinps);
     	DCr_temp    = -amp*(Cpj*sinps + Scj*cosps);
     	DCi_temp    =  amp*(Spj*sinps - Ccj*cosps);
     }
 
+    // read out
     DPr[bin_i] = DPr_temp;
     DPi[bin_i] = DPi_temp;
     DCr[bin_i] = DCr_temp;
     DCi[bin_i] = DCi_temp;
-    //if (bin_i == 0) printf("%e %e %e %e %e %d\n", DPr[bin_i], amp, beta, e, cosps, mode_j);
 }
 
-
-CUDA_CALLABLE_MEMBER
-void set_const_trans(double* DPr, double* DPi, double* DCr, double* DCi, double amp, double cosiota, double psi, int bin_i)
-{
-	double Aplus, Across;
-	double sinps, cosps;
-
-	//Calculate GW polarization amplitudes
-	Aplus  = amp*(1. + cosiota*cosiota);
-	// Aplus  = -amp*(1. + cosiota*cosiota);
-	Across = -2.0*amp*cosiota;
-	//Across = 2.0*amp*cosiota;
-
-	//Calculate cos and sin of polarization
-	cosps = cos(2.*psi);
-	sinps = sin(2.*psi);
-
-	//Calculate constant pieces of transfer functions
-	DPr[bin_i]    =  Aplus*cosps;
-	DPi[bin_i]    = -Across*sinps;
-	DCr[bin_i]    = -Aplus*sinps;
-	DCi[bin_i]    = -Across*cosps;
-}
-
-
+// get the u, v, k basis vectors based on sky location of source
 CUDA_CALLABLE_MEMBER
 void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, int bin_i, int num_bin)
 {
@@ -134,20 +115,24 @@ void get_basis_vecs(double *k, double *u, double *v, double phi, double theta, i
 	cosph = cos(phi);
 	sinph = sin(phi);
 
+    // read out
 	u[0] =  costh*cosph;  u[1] =  costh*sinph;  u[2] = -sinth;
 	v[0] =  sinph;        v[1] = -cosph;        v[2] =  0.;
 	k[0 * num_bin + bin_i] = -sinth*cosph;  k[1 * num_bin + bin_i] = -sinth*sinph;  k[2 * num_bin + bin_i] = -costh;
 }
 
 // TODO: check if this can be upped by reusing shared memory
+
+// declare constants for GPU shared memory declarations
 #define  NUM_THREADS 256
 #define  MAX_MODES 4
+
+// get basis tensors (eplus and ecross) and k array describing sky location of source
 CUDA_KERNEL
 void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
                        double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin)
 {
-	 // GW basis vectors
-
+    // Prepare shared memory if compiling for GPU
     #ifdef __CUDACC__
     CUDA_SHARED double u_all[3 * NUM_THREADS];
 	CUDA_SHARED double v_all[3 * NUM_THREADS];
@@ -156,6 +141,7 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
     double* v = &v_all[3 * threadIdx.x];
     #endif
 
+    // setup loops for GPU or CPU
     int start, end, increment;
 
     #ifdef __CUDACC__
@@ -175,6 +161,8 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
     for (int bin_i = start; bin_i < end; bin_i += increment)
     {
 
+        // CPU placeholders for GPU shared memory
+        // must be declared inside openMP loop to not have memory access issues
         #ifdef __CUDACC__
         #else
 
@@ -186,31 +174,31 @@ void get_basis_tensors(double* eplus, double* ecross, double* DPr, double* DPi, 
 
         #endif
 
+        // get k, u, v
         get_basis_vecs(k, u, v, lam[bin_i], beta[bin_i], bin_i, num_bin); //Gravitational Wave source basis vectors
 
-        //printf("%d %d %d\n", jj, j, num_modes);
+        // get the transfer constants
         set_const_trans_eccTrip(DPr, DPi, DCr, DCi, amp[bin_i], cosiota[bin_i], psi[bin_i], beta1[bin_i], e1[bin_i], mode_j, bin_i, num_bin);  // set the constant pieces of transfer function
-
 
         //GW polarization basis tensors
         for(int i = 0; i < 3; i++)
         {
             for(int j = 0; j < 3; j++)
             {
-                //wfm->eplus[i][j]  = u[i]*u[j] - v[i]*v[j];
                 eplus[(i*3 + j) * num_bin + bin_i]  = v[i]*v[j] - u[i]*u[j];
                 ecross[(i*3 + j) * num_bin + bin_i] = u[i]*v[j] + v[i]*u[j];
-
-                //wfm->ecross[i][j] = -u[i]*v[j] - v[i]*u[j];
             }
         }
     }
 }
 
+// Wrap for call in Cython
+// get the basis tensors and transfer constants
 void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* DPi, double* DCr, double* DCi, double* k,
                             double* amp, double* cosiota, double* psi, double* lam, double* beta, double* e1, double* beta1, int mode_j, int num_bin)
 {
 
+    // change based on GPU or CPU
     #ifdef __CUDACC__
 
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
@@ -233,10 +221,13 @@ void get_basis_tensors_wrap(double* eplus, double* ecross, double* DPr, double* 
 }
 
 
-
+// get x, y, z of spacecraft at a given time t
 CUDA_CALLABLE_MEMBER
 void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 {
+    // n and N are left debugging purposes
+
+    // kappa and lambda are constants determined in the Constants.h file
 	double alpha;
 	double beta1, beta2, beta3;
 	double sa, sb, ca, cb;
@@ -250,18 +241,21 @@ void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 	sa = sin(alpha);
 	ca = cos(alpha);
 
+    // spacecraft 1
 	sb = sin(beta1);
 	cb = cos(beta1);
 	x[0] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
 	y[0] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
 	z[0] = -SQ3*AU*ec*(ca*cb + sa*sb);
 
+    // spacecraft 2
     sb = sin(beta2);
 	cb = cos(beta2);
 	x[1] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
 	y[1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb);
 	z[1] = -SQ3*AU*ec*(ca*cb + sa*sb);
 
+    // spacecraft 3
 	sb = sin(beta3);
 	cb = cos(beta3);
 	x[2] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb);
@@ -269,6 +263,8 @@ void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 	z[2] = -SQ3*AU*ec*(ca*cb + sa*sb);
 }
 
+// get u for inversion of Kepler's equation in relation to third body orbit
+// TODO: change integration to actually integrating orbit?
 CUDA_CALLABLE_MEMBER
 double get_u(double l, double e)
 {
@@ -350,6 +346,7 @@ double get_u(double l, double e)
 	return u;
 }
 
+// get phi value for Line-of-sight velocity. See arXiv:1806.00500
 CUDA_CALLABLE_MEMBER
 double get_phi(double t, double T, double e, double n)
 {
@@ -359,23 +356,26 @@ double get_phi(double t, double T, double e, double n)
 
 	if (e == 0.) return u;
 
+    // adjust if not circular
 	beta = (1. - sqrt(1. - e*e))/e;
 
 	return u + 2.*atan2( beta*sin(u), 1. - beta*cos(u));
 }
 
+// calculate the line-of-site velocity
+// see equation 13 in arXiv:1806.00500
 CUDA_CALLABLE_MEMBER
 double get_vLOS(double A2, double omegabar, double e2, double n2, double T2, double t)
 {
  	double phi2;
 
-    T2 *= YEAR;
-	phi2 = get_phi(t, T2, e2, n2); //if (t == 0.) fprintf(stdout, "phi2_{0}: %f\n", phi2);
+	phi2 = get_phi(t, T2, e2, n2);
 
 	return A2*(sin(phi2 + omegabar) + e2*sin(omegabar));
 }
 
-
+// Calculate xi (delay to spacecraft) and fonfs (f over the LISA transfer frequency)
+// call changes based on whether there is a third body
 CUDA_CALLABLE_MEMBER
 #ifdef __THIRD__
 void calc_xi_f_eccTrip(double* x, double* y, double* z, double* k, double* xi, double* fonfs,
@@ -390,34 +390,39 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
 
 	double kdotx_temp, f_temp, xi_temp;
 
+    // rescale frequency information
 	f0_0       = f0/T;
 	dfdt_0   = dfdt/T/T;
 	d2fdt2_0 = 11./3.*dfdt_0*dfdt_0/f0_0;
 
+    // get spacecraft positions
 	spacecraft(t, x, y, z, n, N); // Calculate position of each spacecraft at time t
 	for(int i = 0; i < 3; i++)
 	{
+        // sky position dotted with spacecraft location
 		kdotx_temp = (x[i] * k[0] + y[i] * k[1] + z[i] * k[2])/C;
+
 		//Wave arrival time at spacecraft i
 		xi_temp    = t - kdotx_temp;
         xi[i] = xi_temp;
 
-        //FIXME
-		//xi[i]    = t + kdotx[i];
-		//First order approximation to frequency at spacecraft i
+		//Second order approximation to frequency at spacecraft i
 		f_temp     = f0_0 + dfdt_0 * xi_temp + 0.5 * d2fdt2_0 * xi_temp * xi_temp;
+
+        // Add LOS velocity contribution to the frequency
+        // Also adjust for j mode in eccentricity expansion
         #ifdef __THIRD__
         f_temp     *= (1. + get_vLOS(A2, omegabar, e2, n2, T2, xi_temp)/C)*(double)j/2.;
         #else
         f_temp     *= (double)j/2.;
         #endif
+
 		//Ratio of true frequency to transfer frequency
 		fonfs[i] = f_temp/fstar;
-
 	}
 }
 
-
+// Get the LISA spacecraft separation vectors
 CUDA_CALLABLE_MEMBER
 void calc_sep_vecs(double *r12, double *r21, double *r13, double *r31, double *r23, double *r32,
                    double *x, double *y, double *z,
@@ -444,7 +449,7 @@ void calc_sep_vecs(double *r12, double *r21, double *r13, double *r31, double *r
 	}
 }
 
-
+// get sky position dotted with the spacecraft separation vectors
 CUDA_CALLABLE_MEMBER
 void calc_kdotr(double* k, double *kdotr, double *r12, double *r21, double *r13, double *r31, double *r23, double *r32)
 {
@@ -470,6 +475,7 @@ void calc_kdotr(double* k, double *kdotr, double *r12, double *r21, double *r13,
 	kdotr[(2*3 + 1)] = -kdotr[(1*3 + 2)];
 }
 
+// get matrices describing transform through projections along arms
 CUDA_CALLABLE_MEMBER
 void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecross,
                      double *r12, double *r21, double *r13, double *r31, double *r23, double *r32, int n)
@@ -513,73 +519,7 @@ void calc_d_matrices(double *dplus, double *dcross, double* eplus, double* ecros
 	dplus[(2*3 + 0)] = dplus[(0*3 + 2)];  dcross[(2*3 + 0)] = dcross[(0*3 + 2)];
 }
 
-/*
-CUDA_CALLABLE_MEMBER
-void get_transfer(int q, double f0, double dfdt, double d2fdt2, double phi0,
-                 double T, double t, int n, int N,
-                 double *kdotr, double *TR, double *TI,
-                 double *dplus, double *dcross,
-				 double *xi, double *fonfs,
-                 double DPr, double DPi, double DCr, double DCi)
-{
-	double tran1r, tran1i;
-	double tran2r, tran2i;
-	double aevol;			// amplitude evolution factor
-	double arg1, arg2, sinc;
-	double f0_0, dfdt_0, d2fdt2_0;
-	double df;
-
-	f0       = f0/T;
-	dfdt_0   = dfdt/T/T;
-    d2fdt2_0 = d2fdt2/T/T/T;
-
-	df = PI2*(((double)q)/T);
-
-	for(int i = 0; i < 3; i++)
-	{
-		for(int j = 0; j < 3; j++)
-		{
-			if(i!=j)
-			{
-				//Argument of transfer function
-				// FIXME
-				//arg1 = 0.5*fonfs[i]*(1. - kdotr[i][j]);
-				arg1 = 0.5*fonfs[i]*(1. + kdotr[(i*3 + j)]);
-
-				//Argument of complex exponentials
-				arg2 = PI2*f0*xi[i] + phi0 - df*t + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0 ;
-
-				//Transfer function
-				sinc = 0.25*sin(arg1)/arg1;
-
-				//Evolution of amplitude
-				aevol = 1.0 + 0.66666666666666666666*dfdt_0/f0*xi[i];
-
-				///Real and imaginary pieces of time series (no complex exponential)
-				tran1r = aevol*(dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
-				tran1i = aevol*(dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
-
-				//Real and imaginry components of complex exponential
-				tran2r = cos(arg1 + arg2);
-				tran2i = sin(arg1 + arg2);
-
-				//Real & Imaginary part of the slowly evolving signal
-				TR[(i*3 + j)] = sinc*(tran1r*tran2r - tran1i*tran2i);
-				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
-
-                //if ((i == 0) && (j == 1) && (t == 1.536000000000000000e+05))
-                //    printf("%.18e %.18e %.18e %.18e\n", kdotr[(i*3 + j)], fonfs[i], xi[i], phi0);
-			}
-            else
-            {
-                TR[(i*3 + j)] = 0.0;
-				TI[(i*3 + j)] = 0.0;
-            }
-		}
-	}
-}
-*/
-
+// get frqeuency of GW at time t to second order
 CUDA_CALLABLE_MEMBER
 double get_fGW(double f0, double dfdt, double d2fdt2, double T, double t)
 {
@@ -592,12 +532,15 @@ double get_fGW(double f0, double dfdt, double d2fdt2, double T, double t)
 	return f0 + dfdt_0*t + 0.5*d2fdt2_0*t*t;
 }
 
+// Get step in integration functin of third body orbit
+// Was a parabolic integration
+// now uses trapezoidal integration
 CUDA_CALLABLE_MEMBER
 double parab_step_ET(double f0, double dfdt, double d2fdt2, double A2, double omegabar, double e2, double n2, double T2, double t0, double t0_old, int j, double T)
 {
-	// step in an integral using parabolic approximation to integrand
+	// step in an integral using trapezoidal approximation to integrand
 	// g1 starting point
-	// g2 mid-point
+    // g2 is midpoint if wanted to switch back to parabolic
 	// g3 end-point
 
 	double g1, g2, g3;
@@ -608,11 +551,12 @@ double parab_step_ET(double f0, double dfdt, double d2fdt2, double A2, double om
 	//g2 = get_vLOS(A2, omegabar, e2, n2, T2, (t0 + t0_old)/2.)*get_fGW(f0,  dfdt,  d2fdt2, T, (t0 + t0_old)/2.);
 	g3 = get_vLOS(A2, omegabar, e2, n2, T2, t0)*get_fGW(f0,  dfdt,  d2fdt2, T, t0);
 
+    // return area from trapezoidal rule
     return (dtt * (g1 + g3)/2.*PI2/C)*(double)j/2.;
-	//return (dtt * (g1 + g2)/2.*PI2/C)*(double)j/2.;
 }
 
-
+// get the transfer function
+// call changes based on if there is a third body or not
 CUDA_CALLABLE_MEMBER
 #ifdef __THIRD__
 void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
@@ -638,16 +582,19 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 	double f0_0, dfdt_0, d2fdt2_0;
 	double df;
 
+    // rescale parameters
 	f0       = f0/T;
 	dfdt_0   = dfdt/T/T;
 
     // TODO: make adjustable again
     d2fdt2_0 = 11./3.*dfdt_0*dfdt_0/f0;
 
+    // adjusted df based on the frequency this waveform is occuring at
 	df = PI2*(((double)q)/T);
 
 	for(int i = 0; i < 3; i++)
 	{
+        // if there is a third body, need to take an integration step
         #ifdef __THIRD__
         sum[i] += parab_step_ET(f0 * T, dfdt,  d2fdt2,  A2,  omegabar,  e2,  n2,  T2,  xi[i], prev_xi[i], mode_j, T);
         #endif
@@ -657,29 +604,24 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 			if(i!=j)
 			{
 				//Argument of transfer function
-				// FIXME
-				//arg1 = 0.5*fonfs[i]*(1. - kdotr[i][j]);
 				double arg1 = 0.5*fonfs[i]*(1. - kdotr[(i*3 + j)]);
 
 				//Argument of complex exponentials
 				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * (double)mode_j/2. - df*t ;
 
+                // Add contribution from third body if needed
                 #ifdef __THIRD__
                 if (xi[i] > 0.0) arg2 += sum[i];
                 #endif
 
-                //if ((i == 2) && (bin_i == 0) && (j == 1)) printf(" %d %d %e %.18e %e %d\n", i, j, xi[i], arg2, sum[i], mode_j);
-
-
-                //if ((i == 0) && (j == 1))printf("%d %d %e\n", n, i, xi[i]);
-				//Transfer function
+                //Transfer function
 				double sinc = 0.25*sin(arg1)/arg1;
 
 				//Evolution of amplitude
 				aevol = 1.0 + 0.66666666666666666666*dfdt_0/f0*xi[i];
 
 				///Real and imaginary pieces of time series (no complex exponential)
-                // -plus due to difference with original fastGB
+                // -dplus due to difference with original fastGB
 
 				tran1r = aevol*(-dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
 				tran1i = aevol*(-dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
@@ -692,9 +634,8 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 				TR[(i*3 + j)] = sinc*(tran1r*tran2r - tran1i*tran2i);
 				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
 
-                //if ((i == 0) && (j == 1) && (t == 1.536000000000000000e+05))
-                //if ((i == 2) && (bin_i == 0) && (j == 1)) printf("%.18e %.18e %.18e %.18e\n", TR[(i*3 + j)], TI[(i*3 + j)], xi[i], phi0);
-			}
+            }
+            // fill with zeros in diagonal terms
             else
             {
                 TR[(i*3 + j)] = 0.0;
@@ -704,8 +645,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 	}
 }
 
-
-
+// fill the complex time series with terms from the transfer functions
 CUDA_CALLABLE_MEMBER
 void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *TI,
 					  cmplx *data12, cmplx *data21, cmplx *data13,
@@ -719,12 +659,13 @@ void fill_time_series(int bin_i, int num_bin, int n, int N, double *TR, double *
 	data32[n * num_bin + bin_i]   = cmplx(TR[(2*3 + 1)], TI[(2*3 + 1)]);
 }
 
-
+// define number of threads for the GenWave kernel
+// Needs to be small to accomodate all the shared memory
 #define NUM_THREADS_2 32
 
-
+// Generate the time domain waveform information
+// Call changes if there is a third body present
 CUDA_KERNEL
-
 #ifdef __THIRD__
 void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
@@ -743,7 +684,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 #endif
 {
 
-
+    // declare all of the shared memory to be used
     #ifdef __CUDACC__
     CUDA_SHARED double x_all[3 * NUM_THREADS_2];
     CUDA_SHARED double y_all[3 * NUM_THREADS_2];
@@ -767,6 +708,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
     CUDA_SHARED double TR_all[9 * NUM_THREADS_2];
     CUDA_SHARED double TI_all[9 * NUM_THREADS_2];
 
+    // get shared arrays for the specific thread on the GPU
     double* x = &x_all[3 * threadIdx.x];
     double* y = &y_all[3 * threadIdx.x];
     double* z = &z_all[3 * threadIdx.x];
@@ -791,8 +733,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
     #endif
 
-    double dtt = T/(double)(N-1);
-
+    // prepare loops for CPU/GPU
     int start, end, increment;
     #ifdef __CUDACC__
 
@@ -815,7 +756,8 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
         #ifdef __CUDACC__
         #else
-
+        // CPU placeholders for GPU shared memory
+        // must be declared in the loop to avoid openMP issues
         double x_all[3];
         double y_all[3];
         double z_all[3];
@@ -863,20 +805,26 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
 
         #endif
 
+        // prepare sum for thir body
+        #ifdef __THIRD__
         for (int i = 0; i < 3; i += 1)
         {
             sum[i] = 0.0;
         }
+        #endif
 
+        // sky location vector
         k[0] = k_in[0 * num_bin + bin_i];
         k[1] = k_in[1 * num_bin + bin_i];
         k[2] = k_in[2 * num_bin + bin_i];
 
+        // get all the parameters
         double f0 = f0_all[bin_i];
         double dfdt = dfdt_all[bin_i];
         double d2fdt2 = d2fdt2_all[bin_i];
         double phi0 = phi0_all[bin_i];
 
+        // get all third body parameters
         #ifdef __THIRD__
         double A2 = A2_all[bin_i];
         double omegabar = omegabar_all[bin_i];
@@ -890,18 +838,20 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
         }
         #endif
 
+        // get transfer information
+        double DPr = DPr_all[bin_i];
+        double DPi = DPi_all[bin_i];
+        double DCr = DCr_all[bin_i];
+        double DCi = DCi_all[bin_i];
+
+        int q = (int) f0*(double)mode_j/2.;
+
+        // loop over points in the TD waveform information
         for (int n = 0;
     			 n < N;
     			 n += 1)
         {
-
-            double DPr = DPr_all[bin_i];
-            double DPi = DPi_all[bin_i];
-            double DCr = DCr_all[bin_i];
-            double DCi = DCi_all[bin_i];
-
-            int q = (int) f0*(double)mode_j/2.;
-
+            // get the polarization tensors
             for (int i = 0; i < 3; i ++)
             {
                 for (int j = 0; j < 3; j++)
@@ -911,18 +861,25 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
                 }
             }
 
+            // get the time
             double t = T*(double)(n)/(double)N;
 
+            // get xi and fonfs
             #ifdef __THIRD__
             calc_xi_f_eccTrip(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N, mode_j, A2, omegabar, e2, n2, T2); // calc frequency and time variables
             #else
             calc_xi_f(x, y, z, k, xi, fonfs, f0, dfdt, d2fdt2, T, t, n, N, mode_j); // calc frequency and time variables
             #endif
 
+            // separation vectors of spacecraft
             calc_sep_vecs(r12, r21, r13, r31, r23, r32, x, y, z, n, N);       // calculate the S/C separation vectors
+            // get projection matrices
             calc_d_matrices(dplus, dcross, eplus, ecross, r12, r21, r13, r31, r23, r32, n);    // calculate pieces of waveform
+            // sky location dotted with separation vectors
             calc_kdotr(k, kdotr, r12, r21, r13, r31, r23, r32);    // calculate dot product
 
+            // build the transfer functions
+            // changes based on if there is a third body or not
             #ifdef __THIRD__
             get_transfer_ET(q, f0, dfdt, d2fdt2, phi0,
                           T, t, n, N,
@@ -939,8 +896,11 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
                               xi, fonfs,
                           DPr, DPi, DCr, DCi, mode_j, bin_i);     // Calculating Transfer function
             #endif
+
+            // Fill the time series with transfer information
             fill_time_series(bin_i, num_bin, n, N, TR, TI, data12, data21, data13, data31, data23, data32); // Fill  time series data arrays with slowly evolving signal.
 
+            // if integrating over third body orbit, store previous xi values
             #ifdef __THIRD__
             for (int i = 0; i < 3; i += 1)
             {
@@ -951,6 +911,7 @@ void GenWave(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *
     }
 }
 
+// Wrapping function
 #ifdef __THIRD__
 void GenWaveThird_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,
@@ -967,7 +928,7 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
 #endif
 
 {
-
+    // adjust call based on third body and/or GPU
     #ifdef __CUDACC__
 
     int num_blocks = std::ceil((num_bin + NUM_THREADS_2 -1)/NUM_THREADS_2);
@@ -1016,64 +977,13 @@ void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cm
     #endif
 }
 
-
-/*
-void fft_data_wrap(double *data12, double *data21, double *data13, double *data31, double *data23, double *data32, int num_bin, int N)
-{
-
-    cufftHandle plan;
-
-    if (cufftPlan1d(&plan, N, CUFFT_Z2Z, num_bin) != CUFFT_SUCCESS){
-          	fprintf(stderr, "CUFFT error: Plan creation failed");
-          	return;	}
-
-    if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data12, (cufftDoubleComplex*)data12, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data21, (cufftDoubleComplex*)data21, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data31, (cufftDoubleComplex*)data31, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data13, (cufftDoubleComplex*)data13, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data23, (cufftDoubleComplex*)data23, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-	if (cufftExecZ2Z(plan, (cufftDoubleComplex*)data32, (cufftDoubleComplex*)data32, -1) != CUFFT_SUCCESS){
-	fprintf(stderr, "CUFFT error: ExecZ2Z Forward failed");
-	return;}
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-
-    cufftDestroy(plan);
-}
-*/
-
-
+// prepare the data for TDI calculations
 CUDA_KERNEL
 void unpack_data_1(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                    int N, int num_bin)
 {
 
-
+    // prepare the loop for CPU / GPU
     int start, end, increment;
 
     int ind_st = N/2;
@@ -1141,9 +1051,11 @@ void unpack_data_1(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, c
     }
 }
 
+// wrap function for unpacking
 void unpack_data_1_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
                    int N, int num_bin)
 {
+    // call changes for GPU/CPU
     #ifdef __CUDACC__
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
@@ -1163,8 +1075,7 @@ void unpack_data_1_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data
     #endif
 }
 
-
-
+// Get XYZ
 CUDA_CALLABLE_MEMBER
 void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32, double f0, int q, int M, double dt, double Tobs, double *XLS_r, double *YLS_r, double *ZLS_r,
 					double* XSL_r, double* YSL_r, double* ZSL_r, double *XLS_i, double *YLS_i, double *ZLS_i, double *XSL_i, double *YSL_i, double *ZSL_i)
@@ -1174,152 +1085,109 @@ void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, 
 	double f;
 	double phiLS, cLS, sLS, phiSL, cSL, sSL;
 
-	double X_1, X_2, Y_1, Y_2, Z_1, Z_2;
+	double X_re, X_im, Y_re, Y_im, Z_re, Z_im;
 
-	// YLS = malloc(2*M*sizeof(double));
-	// ZLS = malloc(2*M*sizeof(double));
-
+    // TDI phasing
 	phiLS = PI2*f0*(dt/2.0-Larm/C);
 
 	cLS = cos(phiLS);
 	sLS = sin(phiLS);
 
-	//double phiLS = 2.0*pi*f0*(dt/2.0-L/clight);
-	//double cLS = cos(phiLS); double sLS = sin(phiLS);
-
 	phiSL = M_PI/2.0-2.0*M_PI*f0*(Larm/C);
 	cSL = cos(phiSL);
 	sSL = sin(phiSL);
 
-  //printf("Stas, q=%ld, f0=%f, check: %f, %f \n", q, f0, q/Tobs, Tobs);
+	f = ((double)(q + i - M/2))/Tobs;
 
-		f = ((double)(q + i - M/2))/Tobs;
-		//if (i == 0){
-		//		double f1 = ((double)(q + i -1 - M/2))/Tobs;
-		//		double f2 = ((double)(q + i - M/2))/Tobs;
-				//printf("%e, %e, %ld, %ld, %ld\n", f, f2 - f1, q, i, M/2);
-		//}
-		fonfs = f/fstar;
+	fonfs = f/fstar;
 
-        //if (i == 0) printf("%.18e %.18e %.18e %.18e %d %d \n", fonfs, f, fstar, Tobs, q, M/2);
-		//printf("Stas fonfs = %f, %f, %f, %f \n", fonfs, f, fstar, Tobs);
-		c3 = cos(3.*fonfs);  c2 = cos(2.*fonfs);  c1 = cos(1.*fonfs);
-		s3 = sin(3.*fonfs);  s2 = sin(2.*fonfs);  s1 = sin(1.*fonfs);
+    c3 = cos(3.*fonfs);  c2 = cos(2.*fonfs);  c1 = cos(1.*fonfs);
+	s3 = sin(3.*fonfs);  s2 = sin(2.*fonfs);  s1 = sin(1.*fonfs);
 
-        cmplx temp;
+    cmplx temp;
 
-        temp = a12[i * num_bin + bin_i];
-        double a12_r = temp.real();
-        double a12_i = temp.imag();
+    temp = a12[i * num_bin + bin_i];
+    double a12_r = temp.real();
+    double a12_i = temp.imag();
 
-        temp = a21[i * num_bin + bin_i];
-        double a21_r = temp.real();
-        double a21_i = temp.imag();
+    temp = a21[i * num_bin + bin_i];
+    double a21_r = temp.real();
+    double a21_i = temp.imag();
 
-        temp = a13[i * num_bin + bin_i];
-        double a13_r = temp.real();
-        double a13_i = temp.imag();
+    temp = a13[i * num_bin + bin_i];
+    double a13_r = temp.real();
+    double a13_i = temp.imag();
 
-        temp = a31[i * num_bin + bin_i];
-        double a31_r = temp.real();
-        double a31_i = temp.imag();
+    temp = a31[i * num_bin + bin_i];
+    double a31_r = temp.real();
+    double a31_i = temp.imag();
 
-        temp = a23[i * num_bin + bin_i];
-        double a23_r = temp.real();
-        double a23_i = temp.imag();
+    temp = a23[i * num_bin + bin_i];
+    double a23_r = temp.real();
+    double a23_i = temp.imag();
 
-        temp = a32[i * num_bin + bin_i];
-        double a32_r = temp.real();
-        double a32_i = temp.imag();
+    temp = a32[i * num_bin + bin_i];
+    double a32_r = temp.real();
+    double a32_i = temp.imag();
 
-		X_1   = (a12_r-a13_r)*c3 + (a12_i-a13_i)*s3 +
-		           (a21_r-a31_r)*c2 + (a21_i-a31_i)*s2 +
-		           (a13_r-a12_r)*c1 + (a13_i-a12_i)*s1 +
-		           (a31_r-a21_r);
+	X_re   = (a12_r-a13_r)*c3 + (a12_i-a13_i)*s3 +
+	           (a21_r-a31_r)*c2 + (a21_i-a31_i)*s2 +
+	           (a13_r-a12_r)*c1 + (a13_i-a12_i)*s1 +
+	           (a31_r-a21_r);
 
-		X_2 = (a12_i-a13_i)*c3 - (a12_r-a13_r)*s3 +
-		           (a21_i-a31_i)*c2 - (a21_r-a31_r)*s2 +
-		           (a13_i-a12_i)*c1 - (a13_r-a12_r)*s1 +
-		           (a31_i-a21_i);
+	X_im = (a12_i-a13_i)*c3 - (a12_r-a13_r)*s3 +
+	           (a21_i-a31_i)*c2 - (a21_r-a31_r)*s2 +
+	           (a13_i-a12_i)*c1 - (a13_r-a12_r)*s1 +
+	           (a31_i-a21_i);
 
-		Y_1   = (a23_r-a21_r)*c3 + (a23_i-a21_i)*s3 +
-		           (a32_r-a12_r)*c2 + (a32_i-a12_i)*s2+
-		           (a21_r-a23_r)*c1 + (a21_i-a23_i)*s1+
-		           (a12_r-a32_r);
+	Y_re   = (a23_r-a21_r)*c3 + (a23_i-a21_i)*s3 +
+	           (a32_r-a12_r)*c2 + (a32_i-a12_i)*s2+
+	           (a21_r-a23_r)*c1 + (a21_i-a23_i)*s1+
+	           (a12_r-a32_r);
 
-		Y_2 = (a23_i-a21_i)*c3 - (a23_r-a21_r)*s3+
-		           (a32_i-a12_i)*c2 - (a32_r-a12_r)*s2+
-		           (a21_i-a23_i)*c1 - (a21_r-a23_r)*s1+
-		           (a12_i-a32_i);
+	Y_im = (a23_i-a21_i)*c3 - (a23_r-a21_r)*s3+
+	           (a32_i-a12_i)*c2 - (a32_r-a12_r)*s2+
+	           (a21_i-a23_i)*c1 - (a21_r-a23_r)*s1+
+	           (a12_i-a32_i);
 
-		Z_1   = (a31_r-a32_r)*c3 + (a31_i-a32_i)*s3+
-		           (a13_r-a23_r)*c2 + (a13_i-a23_i)*s2+
-		           (a32_r-a31_r)*c1 + (a32_i-a31_i)*s1+
-		           (a23_r-a13_r);
+	Z_re   = (a31_r-a32_r)*c3 + (a31_i-a32_i)*s3+
+	           (a13_r-a23_r)*c2 + (a13_i-a23_i)*s2+
+	           (a32_r-a31_r)*c1 + (a32_i-a31_i)*s1+
+	           (a23_r-a13_r);
 
-		Z_2 = (a31_i-a32_i)*c3 - (a31_r-a32_r)*s3+
-		           (a13_i-a23_i)*c2 - (a13_r-a23_r)*s2+
-		           (a32_i-a31_i)*c1 - (a32_r-a31_r)*s1+
-		           (a23_i-a13_i);
+	Z_im = (a31_i-a32_i)*c3 - (a31_r-a32_r)*s3+
+	           (a13_i-a23_i)*c2 - (a13_r-a23_r)*s2+
+	           (a32_i-a31_i)*c1 - (a32_r-a31_r)*s1+
+	           (a23_i-a13_i);
 
-		// XLS_r   =  (X_1*cLS - X_2*sLS);
-		// XLS_i = -(X_1*sLS + X_2*cLS);
-		// YLS_r   =  (Y_1*cLS - Y_2*sLS);
-		// YLS_i = -(Y_1*sLS + Y_2*cLS);
-		// ZLS_r   =  (Z_1*cLS - Z_2*sLS);
-		// ZLS_i = -(Z_1*sLS + Z_2*cLS);
-    //
-		// XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
-		// XSL_i = -2.0*fonfs*(X_1*sSL + X_2*cSL);
-		// YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
-		// YSL_i = -2.0*fonfs*(Y_1*sSL + Y_2*cSL);
-		// ZSL_r   =  2.0*fonfs*(Z_1*cSL - Z_2*sSL);
-		// ZSL_i = -2.0*fonfs*(Z_1*sSL + Z_2*cSL);
+	// Alternative polarization definition
+	*XLS_r   =  (X_re*cLS - X_im*sLS);
+	*XLS_i =  -(X_re*sLS + X_im*cLS);
+	*YLS_r   =  (Y_re*cLS - Y_im*sLS);
+	*YLS_i =  -(Y_re*sLS + Y_im*cLS);
+	*ZLS_r   =  (Z_re*cLS - Z_im*sLS);
+	*ZLS_i =  -(Z_re*sLS + Z_im*cLS);
 
-		// Alternative polarization definition
-		*XLS_r   =  (X_1*cLS - X_2*sLS);
-		*XLS_i =  -(X_1*sLS + X_2*cLS);
-		*YLS_r   =  (Y_1*cLS - Y_2*sLS);
-		*YLS_i =  -(Y_1*sLS + Y_2*cLS);
-		*ZLS_r   =  (Z_1*cLS - Z_2*sLS);
-		*ZLS_i =  -(Z_1*sLS + Z_2*cLS);
-
-        //if ((bin_i) && (i == 0)) printf("%e %e %e %e\n", f0, dt, phiLS, f);
-
-		*XSL_r   =  2.0*fonfs*(X_1*cSL - X_2*sSL);
-		*XSL_i =  2.0*fonfs*(X_1*sSL + X_2*cSL);
-		*YSL_r   =  2.0*fonfs*(Y_1*cSL - Y_2*sSL);
-		*YSL_i =  2.0*fonfs*(Y_1*sSL + Y_2*cSL);
-		*ZSL_r   =  2.0*fonfs*(Z_1*cSL - Z_2*sSL);
-		*ZSL_i =  2.0*fonfs*(Z_1*sSL + Z_2*cSL);
-
-	// for(i=0; i<2*M; i++)
-	// {
-	// 	// A channel
-	// 	ALS[i] = (2.0*XLS[i] - YLS[i] - ZLS[i])/3.0;
-	// 	// E channel
-	// 	ELS[i] = (ZLS[i]-YLS[i])/SQ3;
-	// }
-
-
-	//free(YLS);
-	//free(ZLS);
+    // original fastGB polarization (?)
+	*XSL_r   =  2.0*fonfs*(X_re*cSL - X_im*sSL);
+	*XSL_i =  2.0*fonfs*(X_re*sSL + X_im*cSL);
+	*YSL_r   =  2.0*fonfs*(Y_re*cSL - Y_im*sSL);
+	*YSL_i =  2.0*fonfs*(Y_re*sSL + Y_im*cSL);
+	*ZSL_r   =  2.0*fonfs*(Z_re*cSL - Z_im*sSL);
+	*ZSL_i =  2.0*fonfs*(Z_re*sSL + Z_im*cSL);
 
 	return;
 }
 
+// main function for computing TDIs
 CUDA_KERNEL
 void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
               double *f0_all,
               int num_bin, int N, double dt, double T, double df, int mode_j){
 
-	int add_ind;
-	double asd1, asd2, asd3;
-
-    double *temp_XLS, *temp_YLS, *temp_ZLS;
-
     int M = (int) N;
 
+    // prepare loop for GPU/CPU
     int start, end, increment;
     #ifdef __CUDACC__
 
@@ -1340,6 +1208,7 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
 			 bin_i += increment)
     {
 
+        // get initial frequency information
         double f0 = f0_all[bin_i] * (double)mode_j/2;
         int q = (int) f0;
 
@@ -1348,20 +1217,19 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
 				 i += 1)
 		{
 
-
 	        double XLS_r, YLS_r, ZLS_r, XSL_r, YSL_r, ZSL_r, XLS_i, YLS_i, ZLS_i, XSL_i, YSL_i, ZSL_i;
 
+            // get sub
     		XYZ_sub(i, bin_i, num_bin, a12, a21, a13, a31, a23, a32, f0/T, q, N, dt, T,
     				&XLS_r, &YLS_r, &ZLS_r, &XSL_r, &YSL_r, &ZSL_r, &XLS_i, &YLS_i, &ZLS_i, &XSL_i, &YSL_i, &ZSL_i);
 
-    		//add_ind = (wfm->q + i - M/2);
-
-            /*XLS[bin_i*(2*M) + 2*i] = XLS_r;
-            XLS[bin_i*(2*M) + 2*i+1] = XLS_i;
-            YLS[bin_i*(2*M) + 2*i] = YLS_r;
-            YLS[bin_i*(2*M) + 2*i+1] = YLS_i;
-            ZLS[bin_i*(2*M) + 2*i] = ZLS_r;
-            ZLS[bin_i*(2*M) + 2*i+1] = ZLS_i;*/
+            // For reading out X, Y , Z
+            //XLS[bin_i*(2*M) + 2*i] = XLS_r;
+            //XLS[bin_i*(2*M) + 2*i+1] = XLS_i;
+            //YLS[bin_i*(2*M) + 2*i] = YLS_r;
+            //YLS[bin_i*(2*M) + 2*i+1] = YLS_i;
+            //ZLS[bin_i*(2*M) + 2*i] = ZLS_r;
+            //ZLS[bin_i*(2*M) + 2*i+1] = ZLS_i;
 
             double A_r, E_r, T_r, A_i, E_i, T_i;
 
@@ -1371,39 +1239,22 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
             E_r = (ZLS_r-YLS_r) * invsqrt3;
             E_i = (ZLS_i-YLS_i) * invsqrt3;
 
+            // read out
+            // reuses memory to save memory
+            // multiply by sqrt(T)
             a12[i * num_bin + bin_i] = sqrt(T) * cmplx(XLS_r, XLS_i);
             a21[i * num_bin + bin_i] = sqrt(T) * cmplx(A_r, A_i);
             a13[i * num_bin + bin_i] = sqrt(T) * cmplx(E_r, E_i);
-
-    		//atomicAddDouble(&XLS[2*add_ind], XLS_r/asd1);
-    		//atomicAddDouble(&XLS[2*add_ind+1], XLS_i/asd1);
-
-    		//atomicAddDouble(&YLS[2*add_ind], YLS_r/asd2);
-    		//atomicAddDouble(&YLS[2*add_ind+1], YLS_i/asd2);
-
-    		//atomicAddDouble(&ZLS[2*add_ind], ZLS_r/asd3);
-    		//atomicAddDouble(&ZLS[2*add_ind+1], ZLS_i/asd3);
-
-    		/*atomicAddDouble(&XSL[2*add_ind], XSL_r/asd1);
-    		atomicAddDouble(&XSL[2*add_ind+1], XSL_i)/asd1;
-
-    		atomicAddDouble(&YSL[2*add_ind], YSL_r/asd2);
-    		atomicAddDouble(&YSL[2*add_ind+1], YSL_i/asd2);
-
-    		atomicAddDouble(&YSL[2*add_ind], ZSL_r/asd3);
-    		atomicAddDouble(&ZSL[2*add_ind+1], ZSL_i/asd3);*/
-
-
         }
     }
 }
 
-
+// wrapper for TDI computation
 void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
               double *f0_all,
               int num_bin, int N, double dt, double T, double df, int mode_j)
 {
-
+    // Analyze based on GPU/CPU
     #ifdef __CUDACC__
 
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
@@ -1427,10 +1278,11 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
     #endif
 }
 
-
+// calculate batched log likelihood
 CUDA_KERNEL
 void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
 {
+    // prepare loop based on CPU/GPU
     int start, end, increment;
     #ifdef __CUDACC__
 
@@ -1451,42 +1303,44 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
 			 bin_i += increment)
     {
 
+        // get start index in frequency array
         int start_ind = start_ind_all[bin_i];
 
+        // initialize likelihood
         double like_temp = 0.0;
 		for (int i = 0;
 				 i < M;
 				 i += 1)
 		{
-            //if ((bin_i == 20)) printf("before %e %e\n", like_temp, like_temp);
-
             int j = start_ind + i;
 
+            // calculate h term
             cmplx h_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
             cmplx h_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
 
+            // get d - h term
             cmplx d_minus_h_A = A_data[j] - h_A;
             cmplx d_minus_h_E = E_data[j] - h_E;
 
-            //if ((bin_i == 20)) printf("%d %e %e\n", i, d_minus_h_E.real(), d_minus_h_E.imag());
-
-
-            //if (bin_i == 0) printf("%d %e %e\n", i, A_template[i * num_bin + bin_i].real(), A_noise_factor[j]);
+            // add in contributions
             like_temp += gcmplx::real(gcmplx::conj(d_minus_h_A) * d_minus_h_A);
             like_temp += gcmplx::real(gcmplx::conj(d_minus_h_E) * d_minus_h_E);
         }
 
-
+        // read out
         like_out[bin_i] += like_temp;
     }
 }
 
+
+// wrapper for log likelihood
 void get_ll_wrap(double* like_out,
                  cmplx* A_template, cmplx* E_template,
                  cmplx* A_data, cmplx* E_data,
                  double* A_noise_factor, double* E_noise_factor,
                  int* start_ind, int M, int num_bin)
 {
+    // GPU / CPU difference
     #ifdef __CUDACC__
 
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
