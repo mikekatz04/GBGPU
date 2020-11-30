@@ -80,7 +80,7 @@ python setup.py install
 
 In the main directory of the package run in the terminal:
 ```
-python -m unittest discover
+python -m unittest gbgpu/tests/test_gbgpu.py
 ```
 
 ## Versioning
