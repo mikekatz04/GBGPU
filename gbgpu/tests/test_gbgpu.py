@@ -335,7 +335,6 @@ class WaveformTest(unittest.TestCase):
         ]
 
         A_inj, E_inj = gb.inject_signal(
-            Tobs,
             amp,
             f0,
             fdot,
