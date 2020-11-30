@@ -159,6 +159,27 @@ class GBGPU(object):
 
             Raises:
                 ValueError: Length of *args is not 0, 2, 5, or 7.
+
+            Attributes:
+                xp (obj): NumPy if on CPU. CuPy if on GPU.
+                use_gpu (bool): Use GPU if True.
+                shift_ind (int): Indices to shift during likelihood calculation. See argument string above.
+                get_basis_tensors (obj): Cython function.
+                GenWave (obj): Cython function.
+                GenWaveThird (obj): Cython function.
+                unpack_data_1 (obj): Cython function.
+                XYZ (obj): Cython function.
+                get_ll_func (obj): Cython function.
+                num_bin (int): Number of binaries in the current calculation.
+                N_max (int): Maximum points in a waveform based on maximum harmonic mode considered.
+                start_inds (list of 1D int xp.ndarray): Start indices into data stream array. q - N/2.
+                df (double): Fourier bin spacing.
+                X_out, A_out, E_out (list of 1D complex xp.ndarrays): X, A, or E channel TDI templates.
+                    This list is over the modes examined. Within each list entry is a 2D complex array
+                    of shape (number of points, number of binaries) that is flattened. These can be
+                    accessed in python with the properties :code:`X`, :code:`A`, :code:`E`.
+                Ns (list): List of the number of points in each mode examined.
+
         """
 
         # if given scalar parameters, make sure at least 1D
@@ -425,8 +446,6 @@ class GBGPU(object):
                 data12, data21, data13, data31, data23, data32, N, num_bin
             )
 
-            df = 1 / T
-
             # get TDIs
             self.XYZ(
                 data12,
@@ -463,6 +482,17 @@ class GBGPU(object):
     def E(self):
         """return E channel reshaped based on number of binaries"""
         return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.E_out, self.Ns)]
+
+    @property
+    def freqs(self):
+        """Return frequencies associated with each signal"""
+        freqs_out = []
+        for start_inds, N in zip(self.start_inds, self.Ns):
+            freqs_temp = np.zeros((len(start_inds), N))
+            for i, start_ind in enumerate(start_inds):
+                freqs_temp[i] = np.arange(start_ind, start_ind + N) * self.df
+            freqs_out.append(freqs_temp)
+        return freqs_out
 
     def get_ll(self, params, data, noise_factor, **kwargs):
         """Get batched log likelihood
