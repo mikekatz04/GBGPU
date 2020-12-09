@@ -633,6 +633,7 @@ class GBGPU(object):
         inds=None,
         N=1024,
         psd_kwargs={},
+        return_gpu=False,
         **kwargs,
     ):
         """Get the fisher matrix for a batch.
@@ -664,6 +665,8 @@ class GBGPU(object):
                 this may be implemented. Default is 1024.
             psd_kwargs (dict, optional): Keyword arguments for the TDI noise generator
                 from tdi.py (noisepsd_AE). Default is None.
+            return_gpu (False, optional): If True and self.use_gpu is True, return fisher
+                matrices in cupy array. Default is False.
 
         """
 
@@ -752,5 +755,9 @@ class GBGPU(object):
 
                 # symmetry
                 fish_matrix[:, i, j] = fish_matrix[:, j, i] = inner_prod
+
+        # copy to cpu if needed
+        if self.use_gpu and return_gpu is False:
+            fish_matrix = fish_matrix.get()
 
         return fish_matrix
