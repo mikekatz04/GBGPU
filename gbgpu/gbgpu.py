@@ -733,6 +733,9 @@ class GBGPU(object):
                 12 * eps
             )
 
+            if len(dh_I.shape) == 2:
+                dh_I = dh_I[:, self.xp.newaxis, :]
+
             # plug into derivative holder
             dh[:, i] = self.xp.transpose(dh_I, (1, 0, 2))
 
