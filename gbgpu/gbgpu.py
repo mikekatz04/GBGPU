@@ -589,10 +589,10 @@ class GBGPU(object):
         like_out = self.d_d + h_h - 2 * d_h
         # back to CPU if on GPU
         try:
-            return -like_out.get()
+            return like_out.get()
 
         except AttributeError:
-            return -like_out
+            return like_out
 
     def inject_signal(
         self, *args, fmax=1e-1, T=4.0 * YEAR, dt=10.0, noise_factor=True, **kwargs
