@@ -1280,7 +1280,7 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
 
 // calculate batched log likelihood
 CUDA_KERNEL
-void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
+void get_ll(double* d_h, double* h_h, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
 {
     // prepare loop based on CPU/GPU
     int start, end, increment;
@@ -1307,7 +1307,8 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
         int start_ind = start_ind_all[bin_i];
 
         // initialize likelihood
-        double like_temp = 0.0;
+        double h_h_temp = 0.0;
+        double d_h_temp = 0.0;
 		for (int i = 0;
 				 i < M;
 				 i += 1)
@@ -1318,23 +1319,24 @@ void get_ll(double* like_out, cmplx* A_template, cmplx* E_template, cmplx* A_dat
             cmplx h_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
             cmplx h_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
 
-            // get d - h term
-            cmplx d_minus_h_A = A_data[j] - h_A;
-            cmplx d_minus_h_E = E_data[j] - h_E;
+            // get <d|h> term
+            d_h_temp += gcmplx::real(gcmplx::conj(A_data[j]) * h_A);
+            d_h_temp += gcmplx::real(gcmplx::conj(E_data[j]) * h_E);
 
-            // add in contributions
-            like_temp += gcmplx::real(gcmplx::conj(d_minus_h_A) * d_minus_h_A);
-            like_temp += gcmplx::real(gcmplx::conj(d_minus_h_E) * d_minus_h_E);
+            // <h|h>
+            h_h_temp += gcmplx::real(gcmplx::conj(h_A) * h_A);
+            h_h_temp += gcmplx::real(gcmplx::conj(h_E) * h_E);
         }
 
         // read out
-        like_out[bin_i] +=  1./2. * (4. * like_temp);
+        d_h[bin_i] =  4. * d_h_temp;
+        h_h[bin_i] =  4. * h_h_temp;
     }
 }
 
 
 // wrapper for log likelihood
-void get_ll_wrap(double* like_out,
+void get_ll_wrap(double* d_h, double* h_h,
                  cmplx* A_template, cmplx* E_template,
                  cmplx* A_data, cmplx* E_data,
                  double* A_noise_factor, double* E_noise_factor,
@@ -1346,7 +1348,7 @@ void get_ll_wrap(double* like_out,
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
     get_ll<<<num_blocks, NUM_THREADS>>>(
-        like_out, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
+        d_h, h_h, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -1354,7 +1356,7 @@ void get_ll_wrap(double* like_out,
     #else
 
     get_ll(
-        like_out, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
+        d_h, h_h, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
     );
 
     #endif

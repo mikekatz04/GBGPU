@@ -23,7 +23,7 @@ cdef extern from "new_fastGB.hh":
                  double *f0_all,
                  int num_bin, int N, double dt, double T, double df, int mode_j);
 
-    void get_ll_wrap(double* like_out,
+    void get_ll_wrap(double* d_h_in, double* h_h_in,
                    cmplx* A_template, cmplx* E_template,
                    cmplx* A_data, cmplx* E_data,
                    double* A_noise_factor, double* E_noise_factor,
@@ -118,13 +118,14 @@ def XYZ(a12, a21, a13, a31, a23, a32,
 
 
 @pointer_adjust
-def get_ll(like_out,
+def get_ll(d_h, h_h,
               A_template, E_template,
               A_data, E_data,
               A_noise_factor, E_noise_factor,
               start_ind, M, num_bin):
 
-    cdef size_t like_out_in = like_out
+    cdef size_t d_h_in = d_h
+    cdef size_t h_h_in = h_h
     cdef size_t A_template_in = A_template
     cdef size_t E_template_in = E_template
     cdef size_t A_data_in = A_data
@@ -133,7 +134,7 @@ def get_ll(like_out,
     cdef size_t E_noise_factor_in = E_noise_factor
     cdef size_t start_ind_in = start_ind
 
-    get_ll_wrap(<double*> like_out_in,
+    get_ll_wrap(<double*> d_h_in, <double*> h_h_in,
             <cmplx*> A_template_in, <cmplx*> E_template_in,
             <cmplx*> A_data_in, <cmplx*> E_data_in,
             <double*> A_noise_factor_in, <double*> E_noise_factor_in,

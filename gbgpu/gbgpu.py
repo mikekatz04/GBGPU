@@ -56,6 +56,31 @@ class GBGPU(object):
             the DC component. Default is 2 for right summation and DC removal.
         use_gpu (bool, optional): If True, run on GPUs. Default is False.
 
+    Attributes:
+        xp (obj): NumPy if on CPU. CuPy if on GPU.
+        use_gpu (bool): Use GPU if True.
+        shift_ind (int): Indices to shift during likelihood calculation. See argument string above.
+        get_basis_tensors (obj): Cython function.
+        GenWave (obj): Cython function.
+        GenWaveThird (obj): Cython function.
+        unpack_data_1 (obj): Cython function.
+        XYZ (obj): Cython function.
+        get_ll_func (obj): Cython function.
+        num_bin (int): Number of binaries in the current calculation.
+        N_max (int): Maximum points in a waveform based on maximum harmonic mode considered.
+        start_inds (list of 1D int xp.ndarray): Start indices into data stream array. q - N/2.
+        df (double): Fourier bin spacing.
+        X_out, A_out, E_out (list of 1D complex xp.ndarrays): X, A, or E channel TDI templates.
+            This list is over the modes examined. Within each list entry is a 2D complex array
+            of shape (number of points, number of binaries) that is flattened. These can be
+            accessed in python with the properties :code:`X`, :code:`A`, :code:`E`.
+        Ns (list): List of the number of points in each mode examined.
+        d_d (double): <d|d> term in the likelihood.
+        injection_params (tuple, list or 1D double array): last set of params used
+            for injection (TODO: improve this method)
+        running_d_d (bool): Is the likelihood currently run on injeciton. This needs to
+            be improved with injection_params above.
+
     """
 
     def __init__(self, shift_ind=2, use_gpu=False):
@@ -81,6 +106,9 @@ class GBGPU(object):
             self.unpack_data_1 = unpack_data_1_cpu
             self.XYZ = XYZ_cpu
             self.get_ll_func = get_ll_cpu
+
+        self.d_d = None
+        self.running_d_d = False
 
     def run_wave(
         self,
@@ -161,26 +189,6 @@ class GBGPU(object):
 
             Raises:
                 ValueError: Length of *args is not 0, 2, 5, or 7.
-
-            Attributes:
-                xp (obj): NumPy if on CPU. CuPy if on GPU.
-                use_gpu (bool): Use GPU if True.
-                shift_ind (int): Indices to shift during likelihood calculation. See argument string above.
-                get_basis_tensors (obj): Cython function.
-                GenWave (obj): Cython function.
-                GenWaveThird (obj): Cython function.
-                unpack_data_1 (obj): Cython function.
-                XYZ (obj): Cython function.
-                get_ll_func (obj): Cython function.
-                num_bin (int): Number of binaries in the current calculation.
-                N_max (int): Maximum points in a waveform based on maximum harmonic mode considered.
-                start_inds (list of 1D int xp.ndarray): Start indices into data stream array. q - N/2.
-                df (double): Fourier bin spacing.
-                X_out, A_out, E_out (list of 1D complex xp.ndarrays): X, A, or E channel TDI templates.
-                    This list is over the modes examined. Within each list entry is a 2D complex array
-                    of shape (number of points, number of binaries) that is flattened. These can be
-                    accessed in python with the properties :code:`X`, :code:`A`, :code:`E`.
-                Ns (list): List of the number of points in each mode examined.
 
         """
 
@@ -493,13 +501,16 @@ class GBGPU(object):
         """Return frequencies associated with each signal"""
         freqs_out = []
         for start_inds, N in zip(self.start_inds, self.Ns):
-            freqs_temp = np.zeros((len(start_inds), N))
+            freqs_temp = self.xp.zeros((len(start_inds), N))
             for i, start_ind in enumerate(start_inds):
-                freqs_temp[i] = np.arange(start_ind, start_ind + N) * self.df
+                if isinstance(start_ind, self.xp.ndarray):
+                    start_ind = start_ind.item()
+
+                freqs_temp[i] = self.xp.arange(start_ind, start_ind + N) * self.df
             freqs_out.append(freqs_temp)
         return freqs_out
 
-    def get_ll(self, params, data, noise_factor, **kwargs):
+    def get_ll(self, params, data, noise_factor, calc_d_d=False, **kwargs):
         """Get batched log likelihood
 
         Generate the log likelihood for a batched set of Galactic binaries. This is
@@ -526,6 +537,15 @@ class GBGPU(object):
 
         """
 
+        # TODO: fix how this is dealt with
+        if (calc_d_d or self.d_d is None) and self.running_d_d is False:
+            self.running_d_d = True
+            self.get_ll(
+                self.injection_params, data, noise_factor, calc_d_d=False, **kwargs
+            )
+            self.running_d_d = False
+            self.d_d = self.h_h
+
         # produce TDI templates
         self.run_wave(*params, **kwargs)
 
@@ -535,7 +555,8 @@ class GBGPU(object):
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
-        like_out = xp.zeros(self.num_bin)
+        d_h = xp.zeros(self.num_bin)
+        h_h = xp.zeros(self.num_bin)
 
         # calculate each mode separately
         for X, A, E, start_inds, N in zip(
@@ -546,7 +567,8 @@ class GBGPU(object):
 
             # get ll
             self.get_ll_func(
-                like_out,
+                d_h,
+                h_h,
                 A,
                 E,
                 data[0],
@@ -558,6 +580,13 @@ class GBGPU(object):
                 self.num_bin,
             )
 
+        self.h_h = h_h
+        self.d_h = d_h
+
+        if self.running_d_d:
+            return
+
+        like_out = self.d_d + h_h - 2 * d_h
         # back to CPU if on GPU
         try:
             return -like_out.get()
@@ -565,7 +594,9 @@ class GBGPU(object):
         except AttributeError:
             return -like_out
 
-    def inject_signal(self, *args, fmax=1e-1, T=4.0 * YEAR, dt=10.0, **kwargs):
+    def inject_signal(
+        self, *args, fmax=1e-1, T=4.0 * YEAR, dt=10.0, noise_factor=True, **kwargs
+    ):
         """Inject a single signal
 
         Provides the injection of a single signal into a data stream with frequencies
@@ -603,6 +634,8 @@ class GBGPU(object):
 
         # build the templates
         self.run_wave(*args, **kwargs)
+
+        self.injection_params = args
 
         # add each mode to the templates
         for X, A, E, start_inds, N in zip(
@@ -742,8 +775,14 @@ class GBGPU(object):
         # get frequencies for each binary
         freqs = self.freqs[0]
 
+        try:
+            freqs_temp = freqs.get()
+
+        except AttributeError:
+            freqs_temp = freqs
+
         # get PSD
-        psd = tdi.noisepsd_AE(freqs, **psd_kwargs)
+        psd = self.xp.asarray(tdi.noisepsd_AE(freqs, **psd_kwargs))
 
         # noise factor
         noise_factor = self.xp.asarray(1.0 / psd * freqs)[:, self.xp.newaxis, :]

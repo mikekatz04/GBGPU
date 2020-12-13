@@ -29,7 +29,7 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
              double *f0_all,
              int num_bin, int N, double dt, double T, double df, int mode_j);
 
-void get_ll_wrap(double* like_out,
+void get_ll_wrap(double* d_h, double* h_h,
                   cmplx* A_template, cmplx* E_template,
                   cmplx* A_data, cmplx* E_data,
                   double* A_noise_factor, double* E_noise_factor,
