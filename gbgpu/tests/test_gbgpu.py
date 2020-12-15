@@ -24,7 +24,7 @@ class WaveformTest(unittest.TestCase):
         gb = GBGPU(use_gpu=gpu_available)
 
         dt = 15.0
-        N = int(128)
+        N = None
         Tobs = 4.0 * YEAR
         num_bin = 10
         amp = 1e-22  # amplitude

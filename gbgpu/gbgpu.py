@@ -123,7 +123,7 @@ class GBGPU(object):
         beta,
         *args,
         modes=np.array([2]),
-        N=int(2 ** 10),
+        N=None,
         T=4 * YEAR,
         dt=10.0,
     ):
@@ -182,8 +182,8 @@ class GBGPU(object):
                 the main mode.
             N (int, optional): Number of points to produce for the base j=1 mode. Therefore,
                 with the default j = 2 mode, the waveform will be 2 * N in length.
-                This should be determined by the initial frequency, f0. In the future,
-                this may be implemented. Default is 1024.
+                This should be determined by the initial frequency, f0. Default is None.
+                If None, will use a function to determine proper N.
             T (double, optional): Observation time in seconds. Default is 4 years.
             dt (double, optional): Observation cadence in seconds. Default is 10.0 seconds.
 
@@ -207,6 +207,10 @@ class GBGPU(object):
         psi = np.atleast_1d(psi)
         lam = np.atleast_1d(lam)
         beta = np.atleast_1d(beta)
+
+        if N is None:
+            N_temp = self._get_N(amp, f0, T)
+            N = N_temp.max()
 
         # if eccentric
         if len(args) == 2:
@@ -480,6 +484,54 @@ class GBGPU(object):
             self.X_out.append(data12)
             self.A_out.append(data21)
             self.E_out.append(data13)
+
+    def _get_N(self, amp, f0, Tobs):
+        """Determine proper sampling in time domain."""
+
+        mult = 8
+
+        if (Tobs / YEAR) <= 1.0:
+            mult = 1
+
+        elif (Tobs / YEAR) <= 2.0:
+            mult = 2
+
+        elif (Tobs / YEAR) <= 4.0:
+            mult = 4
+
+        elif (Tobs / YEAR) <= 2.0:
+            mult = 8
+
+        mult = np.full_like(f0, mult, dtype=np.int32)
+
+        N = 32 * mult
+
+        N[f0 >= 0.1] = 1024 * mult[f0 >= 0.1]
+        N[(f0 >= 0.03) & (f0 < 0.1)] = 512 * mult[(f0 >= 0.03) & (f0 < 0.1)]
+        N[(f0 >= 0.01) & (f0 < 0.3)] = 256 * mult[(f0 >= 0.01) & (f0 < 0.3)]
+        N[(f0 >= 0.001) & (f0 < 0.01)] = 64 * mult[(f0 >= 0.001) & (f0 < 0.01)]
+
+        # TODO: add amplitude into N calculation
+        # fonfs = f0 / fstar
+
+        # SnX = np.sqrt(tdi.noisepsd_X(f0))
+
+        #  calculate michelson noise
+        # Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
+
+        # Acut = amp * np.sqrt(Tobs / Sm)
+
+        # M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
+
+        # M = M * (M > N) + N * (M < N)
+        # N = M * (M > N) + N * (M < N)
+
+        # M[M > 8192] = 8192
+
+        # N = M
+
+        # for j = 1 mode, so N/2 not N
+        return (N / 2).astype(int)
 
     @property
     def X(self):

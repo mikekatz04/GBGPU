@@ -234,9 +234,9 @@ void spacecraft(double t, double* x, double* y, double* z, int n, int N)
 
 	alpha = 2.*M_PI*fm*t + kappa;
 
-	beta1 = 0. + lambda;
-	beta2 = 2.*M_PI/3. + lambda;
-	beta3 = 4.*M_PI/3. + lambda;
+	beta1 = 0. + lambda0;
+	beta2 = 2.*M_PI/3. + lambda0;
+	beta3 = 4.*M_PI/3. + lambda0;
 
 	sa = sin(alpha);
 	ca = cos(alpha);
