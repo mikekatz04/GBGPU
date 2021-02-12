@@ -23,6 +23,10 @@ cdef extern from "new_fastGB.hh":
                  double *f0_all,
                  int num_bin, int N, double dt, double T, double df, int mode_j);
 
+    void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,
+                             double* A_noise_factor, double* E_noise_factor,
+                             int* start_ind_all, int M, int num_bin, int per_group, int data_length);
+
     void get_ll_wrap(double* d_h_in, double* h_h_in,
                    cmplx* A_template, cmplx* E_template,
                    cmplx* A_data, cmplx* E_data,
@@ -139,3 +143,22 @@ def get_ll(d_h, h_h,
             <cmplx*> A_data_in, <cmplx*> E_data_in,
             <double*> A_noise_factor_in, <double*> E_noise_factor_in,
             <int*> start_ind_in, M, num_bin);
+
+@pointer_adjust
+def fill_global(A_glob, E_glob,
+              A_template, E_template,
+              A_noise_factor, E_noise_factor,
+              start_ind, M, num_bin, per_group, data_length):
+
+    cdef size_t A_template_in = A_template
+    cdef size_t E_template_in = E_template
+    cdef size_t A_glob_in = A_glob
+    cdef size_t E_glob_in = E_glob
+    cdef size_t A_noise_factor_in = A_noise_factor
+    cdef size_t E_noise_factor_in = E_noise_factor
+    cdef size_t start_ind_in = start_ind
+
+    fill_global_wrap(<cmplx*> A_glob_in, <cmplx*> E_glob_in,
+            <cmplx*> A_template_in, <cmplx*> E_template_in,
+            <double*> A_noise_factor_in, <double*> E_noise_factor_in,
+            <int*> start_ind_in, M, num_bin, per_group, data_length);

@@ -37,7 +37,7 @@
 #define AU 1.49597870660e11
 
 #define MSUN 1.989e30
-
+#define Mjup 1.898e27
 #define G 6.67e-11
 
 

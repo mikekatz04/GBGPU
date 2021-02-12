@@ -1278,6 +1278,121 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
     #endif
 }
 
+
+
+// Add functionality for proper summation in the kernel
+#ifdef __CUDACC__
+__device__ double atomicAddDouble(double* address, double val)
+{
+    unsigned long long* address_as_ull =
+                              (unsigned long long*)address;
+    unsigned long long old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(val +
+                               __longlong_as_double(assumed)));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
+
+// Add functionality for proper summation in the kernel
+CUDA_CALLABLE_MEMBER
+void atomicAddComplex(cmplx* a, cmplx b){
+  //transform the addresses of real and imag. parts to double pointers
+  double *x = (double*)a;
+  double *y = x+1;
+  //use atomicAdd for double variables
+
+  #ifdef __CUDACC__
+  atomicAddDouble(x, b.real());
+  atomicAddDouble(y, b.imag());
+  #else
+  #pragma omp atomic
+  *x += b.real();
+  #pragma omp atomic
+  *y += b.imag();
+  #endif
+}
+
+
+
+// calculate batched log likelihood
+CUDA_KERNEL
+void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length)
+{
+    // prepare loop based on CPU/GPU
+    int start, end, increment;
+    #ifdef __CUDACC__
+
+    start = blockIdx.x * blockDim.x + threadIdx.x;
+    end = num_bin;
+    increment = blockDim.x * gridDim.x;
+
+    #else
+
+    start = 0;
+    end = num_bin;
+    increment = 1;
+
+    //#pragma omp parallel for
+    #endif
+	for (int bin_i = start;
+			 bin_i < end;
+			 bin_i += increment)
+    {
+
+        // get start index in frequency array
+        int start_ind = start_ind_all[bin_i];
+        int group_i = bin_i / per_group;
+        int num_groups = num_bin / per_group;
+
+		for (int i = 0;
+				 i < M;
+				 i += 1)
+		{
+            int j = start_ind + i;
+
+            cmplx temp_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
+            cmplx temp_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
+
+
+            atomicAddComplex(&A_glob[group_i * data_length + j], temp_A);
+            atomicAddComplex(&E_glob[group_i * data_length + j], temp_E);
+            //printf("CHECK: %d %e %e %d %d %d %d %d %d\n", bin_i, A_template[i * num_bin + bin_i], temp_A, group_i, data_length, j, num_groups, per_group, i);
+        }
+    }
+}
+
+
+// wrapper for log likelihood
+void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length)
+{
+    // GPU / CPU difference
+    #ifdef __CUDACC__
+
+    int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
+
+    fill_global<<<num_blocks, NUM_THREADS>>>(
+        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length
+    );
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaGetLastError());
+
+    #else
+
+    fill_global(
+        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length
+    );
+
+    #endif
+}
+
 // calculate batched log likelihood
 CUDA_KERNEL
 void get_ll(double* d_h, double* h_h, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)

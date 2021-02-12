@@ -12,13 +12,21 @@ from newfastgb_cpu import unpack_data_1 as unpack_data_1_cpu
 from newfastgb_cpu import XYZ as XYZ_cpu
 from newfastgb_cpu import get_ll as get_ll_cpu
 from newfastgbthird_cpu import GenWaveThird as GenWave_third_cpu
+from newfastgb_cpu import fill_global as fill_global_cpu
 
 import tdi
 
 # import for GPU if available
 try:
     import cupy as xp
-    from newfastgb import get_basis_tensors, GenWave, unpack_data_1, XYZ, get_ll
+    from newfastgb import (
+        get_basis_tensors,
+        GenWave,
+        unpack_data_1,
+        XYZ,
+        get_ll,
+        fill_global,
+    )
     from newfastgbthird import GenWaveThird as GenWave_third
 
 except (ModuleNotFoundError, ImportError):
@@ -97,6 +105,7 @@ class GBGPU(object):
             self.unpack_data_1 = unpack_data_1
             self.XYZ = XYZ
             self.get_ll_func = get_ll
+            self.fill_global_func = fill_global
 
         else:
             self.xp = np
@@ -106,6 +115,7 @@ class GBGPU(object):
             self.unpack_data_1 = unpack_data_1_cpu
             self.XYZ = XYZ_cpu
             self.get_ll_func = get_ll_cpu
+            self.fill_global_func = fill_global_cpu
 
         self.d_d = None
         self.running_d_d = False
@@ -562,7 +572,14 @@ class GBGPU(object):
             freqs_out.append(freqs_temp)
         return freqs_out
 
-    def get_ll(self, params, data, noise_factor, calc_d_d=False, **kwargs):
+    def get_ll(self, *args, global_fit=False, **kwargs):
+        if global_fit:
+            return self.get_ll_global(*args, **kwargs)
+
+        else:
+            return self.get_ll_singles(*args, **kwargs)
+
+    def get_ll_singles(self, params, data, noise_factor, calc_d_d=False, **kwargs):
         """Get batched log likelihood
 
         Generate the log likelihood for a batched set of Galactic binaries. This is
@@ -607,20 +624,24 @@ class GBGPU(object):
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
-        d_h = xp.zeros(self.num_bin)
-        h_h = xp.zeros(self.num_bin)
+        d_h = self.xp.zeros(self.num_bin)
+        h_h = self.xp.zeros(self.num_bin)
 
         # calculate each mode separately
+        # ASSUMES MODES DO NOT OVERLAP AT ALL
+        # makes the inner product the sum of products over modes
         for X, A, E, start_inds, N in zip(
             self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
         ):
+            d_h_temp = self.xp.zeros(self.num_bin)
+            h_h_temp = self.xp.zeros(self.num_bin)
             # shift start inds (see above)
             start_inds = (start_inds - self.shift_ind).astype(self.xp.int32)
 
             # get ll
             self.get_ll_func(
-                d_h,
-                h_h,
+                d_h_temp,
+                h_h_temp,
                 A,
                 E,
                 data[0],
@@ -631,6 +652,121 @@ class GBGPU(object):
                 N,
                 self.num_bin,
             )
+
+            d_h += d_h_temp
+            h_h += h_h_temp
+
+        self.h_h = h_h
+        self.d_h = d_h
+
+        if self.running_d_d:
+            return
+
+        like_out = self.d_d + h_h - 2 * d_h
+        # back to CPU if on GPU
+        try:
+            return like_out.get()
+
+        except AttributeError:
+            return like_out
+
+    def get_ll_global(
+        self, params, data, noise_factor, per_group=None, calc_d_d=False, **kwargs
+    ):
+        """Get batched log likelihood for global fit
+
+        Generate the log likelihood for a batched set of Galactic binaries. This is
+        also GPU/CPU agnostic.
+
+        Args:
+            params (list, tuple or array of 1D double np.ndarrays): Array-like object containing
+                the parameters of all binaries to be calculated. The shape is
+                (number of parameters, number of binaries).
+            data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
+                stream. These should be CuPy arrays if running on the GPU, NumPy
+                arrays if running on a CPU. The list should be [A channel, E channel].
+            noise_factor (length 2 list of 1D double xp.ndarrays): List of arrays representing
+                the noise factor for weighting. This is typically something like 1/PSD(f) * sqrt(df).
+                These should be CuPy arrays if running on the GPU, NumPy
+                arrays if running on a CPU. The list should be [A channel, E channel].
+            **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
+
+        Raises:
+            TypeError: If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.
+
+        Returns:
+            1D double np.ndarray: Log likelihood values associated with each binary.
+
+        """
+
+        # TODO: fix how this is dealt with
+        if (calc_d_d or self.d_d is None) and self.running_d_d is False:
+            self.running_d_d = True
+            self.get_ll(
+                self.injection_params, data, noise_factor, calc_d_d=False, **kwargs
+            )
+            self.running_d_d = False
+            self.d_d = self.h_h
+
+        if per_group is None:
+            per_group = 1
+        elif isinstance(per_group, np.int) is False or per_group < 1:
+            raise ValueError("group number must be an integer greater than 1.")
+
+        ndim_times_per_group, num_group = params.shape
+        ndim = int(ndim_times_per_group / per_group)
+
+        group_num = params.shape[1]
+        params = params.T.reshape(-1, ndim).T
+        # produce TDI templates
+        self.run_wave(*params, **kwargs)
+
+        # check if arrays are of same type
+        if isinstance(data[0], self.xp.ndarray) is False:
+            raise TypeError(
+                "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
+            )
+
+        data_length = len(data[0])
+        template_A = self.xp.zeros((group_num * data_length), dtype=self.xp.complex128)
+        template_E = self.xp.zeros((group_num * data_length), dtype=self.xp.complex128)
+
+        # calculate each mode separately
+        # ASSUMES MODES DO NOT OVERLAP AT ALL
+        # makes the inner product the sum of products over modes
+        for X, A, E, start_inds, N in zip(
+            self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
+        ):
+            # shift start inds (see above)
+            start_inds = (start_inds - self.shift_ind).astype(self.xp.int32)
+
+            # get ll
+            self.fill_global_func(
+                template_A,
+                template_E,
+                A,
+                E,
+                noise_factor[0],
+                noise_factor[1],
+                start_inds,
+                N,
+                self.num_bin,
+                per_group,
+                data_length,
+            )
+
+        template_A = template_A.reshape(group_num, -1)
+        template_E = template_E.reshape(group_num, -1)
+
+        d_h = 4 * self.xp.real(
+            self.xp.sum(data[0][np.newaxis, :] * template_A.conj(), axis=1)
+            + self.xp.sum(data[1][np.newaxis, :] * template_E.conj(), axis=1)
+        )
+
+        h_h = 4 * self.xp.real(
+            self.xp.sum(template_A.conj() * template_A, axis=1)
+            + self.xp.sum(template_E.conj() * template_E, axis=1)
+        )
 
         self.h_h = h_h
         self.d_h = d_h
