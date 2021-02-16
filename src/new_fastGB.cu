@@ -1282,7 +1282,8 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
 
 // Add functionality for proper summation in the kernel
 #ifdef __CUDACC__
-__device__ double atomicAddDouble(double* address, double val)
+CUDA_DEVICE
+double atomicAddDouble(double* address, double val)
 {
     unsigned long long* address_as_ull =
                               (unsigned long long*)address;
@@ -1302,7 +1303,7 @@ __device__ double atomicAddDouble(double* address, double val)
 #endif
 
 // Add functionality for proper summation in the kernel
-CUDA_CALLABLE_MEMBER
+CUDA_DEVICE
 void atomicAddComplex(cmplx* a, cmplx b){
   //transform the addresses of real and imag. parts to double pointers
   double *x = (double*)a;
