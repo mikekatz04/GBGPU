@@ -1242,9 +1242,9 @@ void XYZ(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx *a32,
             // read out
             // reuses memory to save memory
             // multiply by sqrt(T)
-            a12[i * num_bin + bin_i] = sqrt(T) * cmplx(XLS_r, XLS_i);
-            a21[i * num_bin + bin_i] = sqrt(T) * cmplx(A_r, A_i);
-            a13[i * num_bin + bin_i] = sqrt(T) * cmplx(E_r, E_i);
+            a12[i * num_bin + bin_i] = T * cmplx(XLS_r, XLS_i);
+            a21[i * num_bin + bin_i] = T * cmplx(A_r, A_i);
+            a13[i * num_bin + bin_i] = T * cmplx(E_r, E_i);
         }
     }
 }
