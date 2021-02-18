@@ -11,9 +11,12 @@
 #include "omp.h"
 
 #ifdef __CUDACC__
+#include "cuComplex.h"
+#include "cublas_v2.h"
 #else
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_bessel.h>
+#include <gsl/gsl_cblas.h>
 #endif
 
 // Get constants that determine eccentricity weighting of each harmonic
@@ -400,7 +403,7 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
 	for(int i = 0; i < 3; i++)
 	{
         // sky position dotted with spacecraft location
-		kdotx_temp = (x[i] * k[0] + y[i] * k[1] + z[i] * k[2])/C;
+		kdotx_temp = (x[i] * k[0] + y[i] * k[1] + z[i] * k[2])/Clight;
 
 		//Wave arrival time at spacecraft i
 		xi_temp    = t - kdotx_temp;
@@ -412,7 +415,7 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
         // Add LOS velocity contribution to the frequency
         // Also adjust for j mode in eccentricity expansion
         #ifdef __THIRD__
-        f_temp     *= (1. + get_vLOS(A2, omegabar, e2, n2, T2, xi_temp)/C)*(double)j/2.;
+        f_temp     *= (1. + get_vLOS(A2, omegabar, e2, n2, T2, xi_temp)/Clight)*(double)j/2.;
         #else
         f_temp     *= (double)j/2.;
         #endif
@@ -552,7 +555,7 @@ double parab_step_ET(double f0, double dfdt, double d2fdt2, double A2, double om
 	g3 = get_vLOS(A2, omegabar, e2, n2, T2, t0)*get_fGW(f0,  dfdt,  d2fdt2, T, t0);
 
     // return area from trapezoidal rule
-    return (dtt * (g1 + g3)/2.*PI2/C)*(double)j/2.;
+    return (dtt * (g1 + g3)/2.*PI2/Clight)*(double)j/2.;
 }
 
 // get the transfer function
@@ -1088,12 +1091,12 @@ void XYZ_sub(int i, int bin_i, int num_bin, cmplx *a12, cmplx *a21, cmplx *a13, 
 	double X_re, X_im, Y_re, Y_im, Z_re, Z_im;
 
     // TDI phasing
-	phiLS = PI2*f0*(dt/2.0-Larm/C);
+	phiLS = PI2*f0*(dt/2.0-Larm/Clight);
 
 	cLS = cos(phiLS);
 	sLS = sin(phiLS);
 
-	phiSL = M_PI/2.0-2.0*M_PI*f0*(Larm/C);
+	phiSL = M_PI/2.0-2.0*M_PI*f0*(Larm/Clight);
 	cSL = cos(phiSL);
 	sSL = sin(phiSL);
 
@@ -1325,7 +1328,7 @@ void atomicAddComplex(cmplx* a, cmplx b){
 
 // calculate batched log likelihood
 CUDA_KERNEL
-void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length)
+void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length, int start_freq_ind)
 {
     // prepare loop based on CPU/GPU
     int start, end, increment;
@@ -1362,9 +1365,10 @@ void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_templ
             cmplx temp_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
             cmplx temp_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
 
+            int ind_out = group_i * data_length + (j - start_freq_ind);
 
-            atomicAddComplex(&A_glob[group_i * data_length + j], temp_A);
-            atomicAddComplex(&E_glob[group_i * data_length + j], temp_E);
+            atomicAddComplex(&A_glob[ind_out], temp_A);
+            atomicAddComplex(&E_glob[ind_out], temp_E);
             //printf("CHECK: %d %e %e %d %d %d %d %d %d\n", bin_i, A_template[i * num_bin + bin_i], temp_A, group_i, data_length, j, num_groups, per_group, i);
         }
     }
@@ -1372,7 +1376,7 @@ void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_templ
 
 
 // wrapper for log likelihood
-void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length)
+void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length, int start_freq_ind)
 {
     // GPU / CPU difference
     #ifdef __CUDACC__
@@ -1380,7 +1384,7 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
     fill_global<<<num_blocks, NUM_THREADS>>>(
-        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length
+        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length, start_freq_ind
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -1388,7 +1392,7 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
     #else
 
     fill_global(
-        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length
+        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length, start_freq_ind
     );
 
     #endif
@@ -1477,3 +1481,146 @@ void get_ll_wrap(double* d_h, double* h_h,
 
     #endif
 }
+
+
+#ifdef __CUDACC__
+void direct_like(double* d_h, double* h_h,
+                 cmplx* A_template, cmplx* E_template,
+                 cmplx* A_data, cmplx* E_data,
+                 int data_length, int start_freq_ind, int nwalkers)
+{
+
+    cudaStream_t streams[nwalkers];
+    cublasHandle_t handle;
+
+    cuDoubleComplex result_d_h[nwalkers];
+    cuDoubleComplex result_h_h[nwalkers];
+
+    cublasStatus_t stat = cublasCreate(&handle);
+    if (stat != CUBLAS_STATUS_SUCCESS)
+    {
+      printf ("CUBLAS initialization failed\n");
+      exit(0);
+    }
+
+    #pragma omp parallel for
+    for (int walker_i = 0; walker_i < nwalkers; walker_i += 1)
+    {
+
+        cudaStreamCreate(&streams[walker_i]);
+
+        cublasSetStream(handle, streams[walker_i]);
+        stat = cublasZdotc(handle, data_length,
+                          (cuDoubleComplex*)&A_data[start_freq_ind], 1,
+                          (cuDoubleComplex*)&A_template[walker_i * data_length], 1,
+                          &result_d_h[walker_i]);
+        cudaStreamSynchronize(streams[walker_i]);
+        if (stat != CUBLAS_STATUS_SUCCESS)
+        {
+            exit(0);
+        }
+
+        d_h[walker_i] += 4.0 * cuCreal(result_d_h[walker_i]);
+
+        cublasSetStream(handle, streams[walker_i]);
+        stat = cublasZdotc(handle, data_length,
+                          (cuDoubleComplex*)&A_template[walker_i * data_length], 1,
+                          (cuDoubleComplex*)&A_template[walker_i * data_length], 1,
+                          &result_h_h[walker_i]);
+        cudaStreamSynchronize(streams[walker_i]);
+        if (stat != CUBLAS_STATUS_SUCCESS)
+        {
+            exit(0);
+        }
+
+
+        h_h[walker_i] += 4.0 * cuCreal(result_h_h[walker_i]);
+
+        cublasSetStream(handle, streams[walker_i]);
+        stat = cublasZdotc(handle, data_length,
+                          (cuDoubleComplex*)&E_data[start_freq_ind], 1,
+                          (cuDoubleComplex*)&E_template[walker_i * data_length], 1,
+                          &result_d_h[walker_i]);
+        cudaStreamSynchronize(streams[walker_i]);
+        if (stat != CUBLAS_STATUS_SUCCESS)
+        {
+            exit(0);
+        }
+
+        d_h[walker_i] += 4.0 * cuCreal(result_d_h[walker_i]);
+
+        cublasSetStream(handle, streams[walker_i]);
+        stat = cublasZdotc(handle, data_length,
+                          (cuDoubleComplex*)&E_template[walker_i * data_length], 1,
+                          (cuDoubleComplex*)&E_template[walker_i * data_length], 1,
+                          &result_h_h[walker_i]);
+        cudaStreamSynchronize(streams[walker_i]);
+        if (stat != CUBLAS_STATUS_SUCCESS)
+        {
+            exit(0);
+        }
+
+
+        h_h[walker_i] += 4.0 * cuCreal(result_h_h[walker_i]);
+
+    }
+
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaGetLastError());
+
+    #pragma omp parallel for
+    for (int walker_i = 0; walker_i < nwalkers; walker_i += 1)
+    {
+        //destroy the streams
+        cudaStreamDestroy(streams[walker_i]);
+    }
+    cublasDestroy(handle);
+
+}
+
+#else
+void direct_like(double* d_h, double* h_h,
+                 cmplx* A_template, cmplx* E_template,
+                 cmplx* A_data, cmplx* E_data,
+                 int data_length, int start_freq_ind, int nwalkers)
+{
+
+    cmplx result_d_h[nwalkers];
+    cmplx result_h_h[nwalkers];
+
+    #pragma omp parallel for
+    for (int walker_i = 0; walker_i < nwalkers; walker_i += 1)
+    {
+
+        cblas_zdotc_sub(data_length,
+                          (void*)&A_data[start_freq_ind], 1,
+                          (void*)&A_template[walker_i * data_length], 1,
+                          (void*)&result_d_h[walker_i]);
+
+        d_h[walker_i] += 4.0 * result_d_h[walker_i].real();
+
+        cblas_zdotc_sub(data_length,
+                          (void*)&A_template[walker_i * data_length], 1,
+                          (void*)&A_template[walker_i * data_length], 1,
+                          (void*)&result_h_h[walker_i]);
+
+        h_h[walker_i] += 4.0 * result_h_h[walker_i].real();
+
+        cblas_zdotc_sub(data_length,
+                          (void*)&E_data[start_freq_ind], 1,
+                          (void*)&E_template[walker_i * data_length], 1,
+                          (void*)&result_d_h[walker_i]);
+
+        d_h[walker_i] += 4.0 * result_d_h[walker_i].real();
+
+        cblas_zdotc_sub(data_length,
+                          (void*)&E_template[walker_i * data_length], 1,
+                          (void*)&E_template[walker_i * data_length], 1,
+                          (void*)&result_h_h[walker_i]);
+
+        h_h[walker_i] += 4.0 * result_h_h[walker_i].real();
+        //printf("%e %e\n", cuCreal(result_h_h[walker_i]), cuCreal(result_d_h[walker_i]));
+
+    }
+}
+#endif

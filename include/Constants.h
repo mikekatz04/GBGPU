@@ -22,7 +22,7 @@
 /* ----------------  NATURAL CONSTANTS  ----------------- */
 
 /* Speed of light (m/s) */
-#define C 299792458.
+#define Clight 299792458.
 
 /* Mass of the Sun (s) */
 #define TSUN  4.9169e-6

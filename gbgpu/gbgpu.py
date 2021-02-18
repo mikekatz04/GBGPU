@@ -13,6 +13,7 @@ from newfastgb_cpu import XYZ as XYZ_cpu
 from newfastgb_cpu import get_ll as get_ll_cpu
 from newfastgbthird_cpu import GenWaveThird as GenWave_third_cpu
 from newfastgb_cpu import fill_global as fill_global_cpu
+from newfastgb_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 import tdi
 
@@ -26,6 +27,7 @@ try:
         XYZ,
         get_ll,
         fill_global,
+        direct_like_wrap,
     )
     from newfastgbthird import GenWaveThird as GenWave_third
 
@@ -106,6 +108,7 @@ class GBGPU(object):
             self.XYZ = XYZ
             self.get_ll_func = get_ll
             self.fill_global_func = fill_global
+            self.global_get_ll_func = direct_like_wrap
 
         else:
             self.xp = np
@@ -116,6 +119,7 @@ class GBGPU(object):
             self.XYZ = XYZ_cpu
             self.get_ll_func = get_ll_cpu
             self.fill_global_func = fill_global_cpu
+            self.global_get_ll_func = direct_like_wrap_cpu
 
         self.d_d = None
         self.running_d_d = False
@@ -671,7 +675,16 @@ class GBGPU(object):
             return like_out
 
     def get_ll_global(
-        self, params, data, noise_factor, per_group=None, calc_d_d=False, **kwargs
+        self,
+        params,
+        data,
+        noise_factor,
+        per_group=None,
+        calc_d_d=False,
+        start_freq_ind=None,
+        data_length=None,
+        min_ind=None,
+        **kwargs,
     ):
         """Get batched log likelihood for global fit
 
@@ -727,7 +740,16 @@ class GBGPU(object):
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
-        data_length = len(data[0])
+        if start_freq_ind is not None or data_length is not None:
+            if start_freq_ind is None or data_length is None:
+                raise ValueError(
+                    "If providing a start_freq_ind or num_freqs, need to provide both."
+                )
+
+        else:
+            data_length = len(data[0])
+            start_freq_ind = 0
+
         template_A = self.xp.zeros((group_num * data_length), dtype=self.xp.complex128)
         template_E = self.xp.zeros((group_num * data_length), dtype=self.xp.complex128)
 
@@ -753,19 +775,22 @@ class GBGPU(object):
                 self.num_bin,
                 per_group,
                 data_length,
+                start_freq_ind,
             )
 
-        template_A = template_A.reshape(group_num, -1)
-        template_E = template_E.reshape(group_num, -1)
+        d_h = np.zeros(group_num)
+        h_h = np.zeros(group_num)
 
-        d_h = 4 * self.xp.real(
-            self.xp.sum(data[0][np.newaxis, :] * template_A.conj(), axis=1)
-            + self.xp.sum(data[1][np.newaxis, :] * template_E.conj(), axis=1)
-        )
-
-        h_h = 4 * self.xp.real(
-            self.xp.sum(template_A.conj() * template_A, axis=1)
-            + self.xp.sum(template_E.conj() * template_E, axis=1)
+        self.global_get_ll_func(
+            d_h,
+            h_h,
+            template_A,
+            template_E,
+            data[0],
+            data[1],
+            data_length,
+            start_freq_ind,
+            group_num,
         )
 
         self.h_h = h_h
@@ -774,7 +799,7 @@ class GBGPU(object):
         if self.running_d_d:
             return
 
-        like_out = self.d_d + h_h - 2 * d_h
+        like_out = self.d_d.get() + h_h - 2 * d_h
         # back to CPU if on GPU
         try:
             return like_out.get()
