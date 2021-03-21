@@ -808,7 +808,7 @@ class GBGPU(object):
             return like_out
 
     def inject_signal(
-        self, *args, fmax=1e-1, T=4.0 * YEAR, dt=10.0, noise_factor=True, **kwargs
+        self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, noise_factor=True, **kwargs
     ):
         """Inject a single signal
 
@@ -831,6 +831,9 @@ class GBGPU(object):
         """
 
         # get binspacing
+        if fmax is None:
+            fmax = 1 / (2 * dt)
+
         N_obs = int(T / dt)
         T = N_obs * dt
         kwargs["T"] = T
@@ -838,7 +841,7 @@ class GBGPU(object):
         df = 1 / T
 
         # create frequencies
-        f = np.arange(0.0, fmax, df)
+        f = np.arange(0.0, fmax + df, df)
         num = len(f)
 
         # NumPy arrays for data streams of injections
