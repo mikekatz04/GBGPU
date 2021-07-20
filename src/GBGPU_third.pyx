@@ -15,6 +15,8 @@ cdef extern from "new_fastGB.hh":
                  double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
                  double* k_all, double T, int N, int mode_j, int num_bin);
 
+    void get_vLOS_wrap(double* vLOS, double* A2, double* omegabar, double* e2, double* n2, double* T2, double* t, int num);
+
 @pointer_adjust
 def GenWaveThird(data12, data21, data13, data31, data23, data32,
             eplus, ecross,
@@ -53,3 +55,18 @@ def GenWaveThird(data12, data21, data13, data31, data23, data32,
                  <double*> A2_all_in, <double*> omegabar_all_in, <double*> e2_all_in, <double*> n2_all_in, <double*> T2_all_in,
                  <double*>DPr_all_in, <double*>DPi_all_in, <double*>DCr_all_in, <double*>DCi_all_in,
                  <double*>k_all_in, T, N, mode_j, num_bin)
+
+def third_body_vLOS(np.ndarray[ndim=1, dtype=np.float64_t] A2,
+                    np.ndarray[ndim=1, dtype=np.float64_t] omegabar,
+                    np.ndarray[ndim=1, dtype=np.float64_t] e2,
+                    np.ndarray[ndim=1, dtype=np.float64_t] n2,
+                    np.ndarray[ndim=1, dtype=np.float64_t] T2,
+                    np.ndarray[ndim=1, dtype=np.float64_t] t):
+
+    num = len(A2)
+
+    cdef np.ndarray[ndim=1, dtype=np.float64_t] vLOS = np.zeros(num, dtype=np.float64)
+
+    get_vLOS_wrap(&vLOS[0], &A2[0], &omegabar[0], &e2[0], &n2[0], &T2[0], &t[0], num)
+
+    return vLOS

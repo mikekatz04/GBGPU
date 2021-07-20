@@ -373,9 +373,20 @@ double get_vLOS(double A2, double omegabar, double e2, double n2, double T2, dou
  	double phi2;
 
 	phi2 = get_phi(t, T2, e2, n2);
-
 	return A2*(sin(phi2 + omegabar) + e2*sin(omegabar));
 }
+
+#ifdef __THIRD__
+void get_vLOS_wrap(double* vLOS, double* A2, double* omegabar, double* e2, double* n2, double* T2, double* t, int num)
+{
+    #pragma omp parallel for
+    for (int i = 0; i < num; i += 1)
+    {
+        vLOS[i] = get_vLOS(A2[i], omegabar[i], e2[i], n2[i], T2[i], t[i]);
+    }
+
+}
+#endif
 
 // Calculate xi (delay to spacecraft) and fonfs (f over the LISA transfer frequency)
 // call changes based on whether there is a third body
@@ -396,7 +407,7 @@ void calc_xi_f(double* x, double* y, double* z, double* k, double* xi, double* f
     // rescale frequency information
 	f0_0       = f0/T;
 	dfdt_0   = dfdt/T/T;
-	d2fdt2_0 = 11./3.*dfdt_0*dfdt_0/f0_0;
+	d2fdt2_0 = d2fdt2/T/T/T; // 11./3.*dfdt_0*dfdt_0/f0_0;
 
     // get spacecraft positions
 	spacecraft(t, x, y, z, n, N); // Calculate position of each spacecraft at time t

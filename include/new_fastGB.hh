@@ -13,6 +13,7 @@ void GenWaveThird_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data3
              double* A2_all, double* omegabar_all, double* e2_all, double* n2_all, double* T2_all,
              double* DPr_all, double* DPi_all, double* DCr_all, double* DCi_all,
              double* k_all, double T, int N, int mode_j, int num_bin);
+void get_vLOS_wrap(double* vLOS, double* A2, double* omegabar, double* e2, double* n2, double* T2, double* t, int num);
 #else
 void GenWave_wrap(cmplx *data12, cmplx *data21, cmplx *data13, cmplx *data31, cmplx *data23, cmplx *data32,
              double* eplus_in, double* ecross_in,

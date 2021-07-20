@@ -666,7 +666,7 @@ class GBGPU(object):
         if self.running_d_d:
             return
 
-        like_out = self.d_d + h_h - 2 * d_h
+        like_out = 1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
         # back to CPU if on GPU
         try:
             return like_out.get()
@@ -799,7 +799,8 @@ class GBGPU(object):
         if self.running_d_d:
             return
 
-        like_out = self.d_d.get() + h_h - 2 * d_h
+        like_out = 1.0 / 2.0 * (self.d_d.item() + h_h - 2 * d_h).real
+
         # back to CPU if on GPU
         try:
             return like_out.get()
@@ -944,7 +945,12 @@ class GBGPU(object):
             params_up_2 = params.copy()
             params_up_2[ind] += 2 * eps
             for ind_trans, trans in parameter_transforms.items():
-                params_up_2[ind_trans] = trans(params_up_2[ind_trans])
+                if isinstance(ind_trans, int):
+                    params_up_2[ind_trans] = trans(params_up_2[ind_trans])
+                else:
+                    params_up_2[np.asarray(ind_trans)] = trans(
+                        *params_up_2[np.asarray(ind_trans)]
+                    )
 
             self.run_wave(*params_up_2, **kwargs)
 
@@ -954,7 +960,12 @@ class GBGPU(object):
             params_up_1 = params.copy()
             params_up_1[ind] += 1 * eps
             for ind_trans, trans in parameter_transforms.items():
-                params_up_1[ind_trans] = trans(params_up_1[ind_trans])
+                if isinstance(ind_trans, int):
+                    params_up_1[ind_trans] = trans(params_up_1[ind_trans])
+                else:
+                    params_up_1[np.asarray(ind_trans)] = trans(
+                        *params_up_1[np.asarray(ind_trans)]
+                    )
 
             self.run_wave(*params_up_1, **kwargs)
             h_I_up_eps = self.xp.asarray([self.A, self.E]).squeeze()
@@ -963,7 +974,12 @@ class GBGPU(object):
             params_down_2 = params.copy()
             params_down_2[ind] -= 2 * eps
             for ind_trans, trans in parameter_transforms.items():
-                params_down_2[ind_trans] = trans(params_down_2[ind_trans])
+                if isinstance(ind_trans, int):
+                    params_down_2[ind_trans] = trans(params_down_2[ind_trans])
+                else:
+                    params_down_2[np.asarray(ind_trans)] = trans(
+                        *params_down_2[np.asarray(ind_trans)]
+                    )
 
             self.run_wave(*params_down_2, **kwargs)
             h_I_down_2eps = self.xp.asarray([self.A, self.E]).squeeze()
@@ -972,7 +988,12 @@ class GBGPU(object):
             params_down_1 = params.copy()
             params_down_1[ind] -= 1 * eps
             for ind_trans, trans in parameter_transforms.items():
-                params_down_1[ind_trans] = trans(params_down_1[ind_trans])
+                if isinstance(ind_trans, int):
+                    params_down_1[ind_trans] = trans(params_down_1[ind_trans])
+                else:
+                    params_down_1[np.asarray(ind_trans)] = trans(
+                        *params_down_1[np.asarray(ind_trans)]
+                    )
 
             self.run_wave(*params_down_1, **kwargs)
             h_I_down_eps = self.xp.asarray([self.A, self.E]).squeeze()
