@@ -674,17 +674,8 @@ class GBGPU(object):
         except AttributeError:
             return like_out
 
-    def get_ll_global(
-        self,
-        params,
-        data,
-        noise_factor,
-        per_group=None,
-        calc_d_d=False,
-        start_freq_ind=None,
-        data_length=None,
-        min_ind=None,
-        **kwargs,
+    def generate_global_template(
+        self, params, group_index, templates, start_freq_ind=0, min_ind=None, **kwargs,
     ):
         """Get batched log likelihood for global fit
 
@@ -712,47 +703,26 @@ class GBGPU(object):
 
         """
 
-        # TODO: fix how this is dealt with
-        if (calc_d_d or self.d_d is None) and self.running_d_d is False:
-            self.running_d_d = True
-            self.get_ll(
-                self.injection_params, data, noise_factor, calc_d_d=False, **kwargs
-            )
-            self.running_d_d = False
-            self.d_d = self.h_h
+        total_groups, nchannels, data_length = templates.shape
+        ndim = params.shape[1]
+        group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
 
-        if per_group is None:
-            per_group = 1
-        elif isinstance(per_group, np.int) is False or per_group < 1:
-            raise ValueError("group number must be an integer greater than 1.")
+        if nchannels < 2:
+            raise ValueError("Calculates for A and E channels.")
+        elif nchannels > 2:
+            warnings.warn("Only calculating A and E channels here currently.")
 
-        ndim_times_per_group, num_group = params.shape
-        ndim = int(ndim_times_per_group / per_group)
-
-        group_num = params.shape[1]
-        params = params.T.reshape(-1, ndim).T
         # produce TDI templates
-        self.run_wave(*params, **kwargs)
+        self.run_wave(*params.T, **kwargs)
 
         # check if arrays are of same type
-        if isinstance(data[0], self.xp.ndarray) is False:
+        if isinstance(templates, self.xp.ndarray) is False:
             raise TypeError(
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
-        if start_freq_ind is not None or data_length is not None:
-            if start_freq_ind is None or data_length is None:
-                raise ValueError(
-                    "If providing a start_freq_ind or num_freqs, need to provide both."
-                )
-
-        else:
-            data_length = len(data[0])
-            start_freq_ind = 0
-
-        template_A = self.xp.zeros((group_num * data_length), dtype=self.xp.complex128)
-        template_E = self.xp.zeros((group_num * data_length), dtype=self.xp.complex128)
-
+        template_A = templates[:, 0].flatten()
+        template_E = templates[:, 1].flatten()
         # calculate each mode separately
         # ASSUMES MODES DO NOT OVERLAP AT ALL
         # makes the inner product the sum of products over modes
@@ -768,45 +738,18 @@ class GBGPU(object):
                 template_E,
                 A,
                 E,
-                noise_factor[0],
-                noise_factor[1],
                 start_inds,
                 N,
                 self.num_bin,
-                per_group,
+                group_index,
                 data_length,
                 start_freq_ind,
             )
 
-        d_h = np.zeros(group_num)
-        h_h = np.zeros(group_num)
+        templates[:, 0] = template_A.reshape(total_groups, data_length)
+        templates[:, 1] = template_E.reshape(total_groups, data_length)
 
-        self.global_get_ll_func(
-            d_h,
-            h_h,
-            template_A,
-            template_E,
-            data[0],
-            data[1],
-            data_length,
-            start_freq_ind,
-            group_num,
-        )
-
-        self.h_h = h_h
-        self.d_h = d_h
-
-        if self.running_d_d:
-            return
-
-        like_out = 1.0 / 2.0 * (self.d_d.item() + h_h - 2 * d_h).real
-
-        # back to CPU if on GPU
-        try:
-            return like_out.get()
-
-        except AttributeError:
-            return like_out
+        return
 
     def inject_signal(
         self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, noise_factor=True, **kwargs

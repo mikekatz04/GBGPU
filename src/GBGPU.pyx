@@ -24,8 +24,7 @@ cdef extern from "new_fastGB.hh":
                  int num_bin, int N, double dt, double T, double df, int mode_j);
 
     void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,
-                             double* A_noise_factor, double* E_noise_factor,
-                             int* start_ind_all, int M, int num_bin, int per_group, int data_length, int start_freq_ind);
+                             int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind);
 
     void get_ll_wrap(double* d_h_in, double* h_h_in,
                    cmplx* A_template, cmplx* E_template,
@@ -153,21 +152,18 @@ def get_ll(d_h, h_h,
 @pointer_adjust
 def fill_global(A_glob, E_glob,
               A_template, E_template,
-              A_noise_factor, E_noise_factor,
-              start_ind, M, num_bin, per_group, data_length, start_freq_ind):
+              start_ind, M, num_bin, group_index, data_length, start_freq_ind):
 
     cdef size_t A_template_in = A_template
     cdef size_t E_template_in = E_template
     cdef size_t A_glob_in = A_glob
     cdef size_t E_glob_in = E_glob
-    cdef size_t A_noise_factor_in = A_noise_factor
-    cdef size_t E_noise_factor_in = E_noise_factor
     cdef size_t start_ind_in = start_ind
+    cdef size_t group_index_in = group_index
 
     fill_global_wrap(<cmplx*> A_glob_in, <cmplx*> E_glob_in,
             <cmplx*> A_template_in, <cmplx*> E_template_in,
-            <double*> A_noise_factor_in, <double*> E_noise_factor_in,
-            <int*> start_ind_in, M, num_bin, per_group, data_length, start_freq_ind);
+            <int*> start_ind_in, M, num_bin, <int*>group_index_in, data_length, start_freq_ind);
 
 @pointer_adjust
 def direct_like_wrap(d_h, h_h,

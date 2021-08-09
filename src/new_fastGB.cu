@@ -1339,7 +1339,7 @@ void atomicAddComplex(cmplx* a, cmplx b){
 
 // calculate batched log likelihood
 CUDA_KERNEL
-void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length, int start_freq_ind)
+void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind)
 {
     // prepare loop based on CPU/GPU
     int start, end, increment;
@@ -1364,8 +1364,7 @@ void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_templ
 
         // get start index in frequency array
         int start_ind = start_ind_all[bin_i];
-        int group_i = bin_i / per_group;
-        int num_groups = num_bin / per_group;
+        int group_i = group_index[bin_i];
 
 		for (int i = 0;
 				 i < M;
@@ -1373,8 +1372,8 @@ void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_templ
 		{
             int j = start_ind + i;
 
-            cmplx temp_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
-            cmplx temp_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
+            cmplx temp_A = A_template[i * num_bin + bin_i];
+            cmplx temp_E = E_template[i * num_bin + bin_i];
 
             int ind_out = group_i * data_length + (j - start_freq_ind);
 
@@ -1387,7 +1386,7 @@ void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_templ
 
 
 // wrapper for log likelihood
-void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin, int per_group, int data_length, int start_freq_ind)
+void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template, int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind)
 {
     // GPU / CPU difference
     #ifdef __CUDACC__
@@ -1395,7 +1394,7 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
     fill_global<<<num_blocks, NUM_THREADS>>>(
-        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length, start_freq_ind
+        A_glob, E_glob, A_template, E_template, start_ind_all, M, num_bin, group_index, data_length, start_freq_ind
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -1403,7 +1402,7 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
     #else
 
     fill_global(
-        A_glob, E_glob, A_template, E_template, A_noise_factor, E_noise_factor, start_ind_all, M, num_bin, per_group, data_length, start_freq_ind
+        A_glob, E_glob, A_template, E_template, start_ind_all, M, num_bin, group_index, data_length, start_freq_ind
     );
 
     #endif

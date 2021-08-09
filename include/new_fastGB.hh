@@ -31,8 +31,7 @@ void XYZ_wrap(cmplx *a12, cmplx *a21, cmplx *a13, cmplx *a31, cmplx *a23, cmplx 
              int num_bin, int N, double dt, double T, double df, int mode_j);
 
 void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,
-                        double* A_noise_factor, double* E_noise_factor,
-                        int* start_ind_all, int M, int num_bin, int per_group, int data_length, int start_freq_ind);
+                        int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind);
 
 
 void get_ll_wrap(double* d_h, double* h_h,
