@@ -666,7 +666,7 @@ class GBGPU(object):
         if self.running_d_d:
             return
 
-        like_out = 1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
+        like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
         # back to CPU if on GPU
         try:
             return like_out.get()
