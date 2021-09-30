@@ -140,6 +140,7 @@ class GBGPU(object):
         N=None,
         T=4 * YEAR,
         dt=10.0,
+        oversample=1,
     ):
         """Create waveforms in batches.
 
@@ -200,6 +201,9 @@ class GBGPU(object):
                 If None, will use a function to determine proper N.
             T (double, optional): Observation time in seconds. Default is 4 years.
             dt (double, optional): Observation cadence in seconds. Default is 10.0 seconds.
+            oversample(int, optional): Oversampling factor compared to the determined :code:`N`
+                value. Final N will be :code:`oversample * N`. This is only used if N is
+                not provided. Default is 1.
 
             Raises:
                 ValueError: Length of *args is not 0, 2, 5, or 7.
@@ -223,7 +227,7 @@ class GBGPU(object):
         beta = np.atleast_1d(beta)
 
         if N is None:
-            N_temp = self._get_N(amp, f0, T)
+            N_temp = self._get_N(amp, f0, T, oversample=oversample)
             N = N_temp.max()
 
         # if eccentric
@@ -326,22 +330,22 @@ class GBGPU(object):
         if run_third:
 
             # cast to 1D if scalar
-            A2 = np.atleast_1d(A2)
-            omegabar = np.atleast_1d(omegabar)
-            e2 = np.atleast_1d(e2)
-            P2 = np.atleast_1d(P2)
-            T2 = np.atleast_1d(T2)
+            A2 = np.atleast_1d(A2).copy()
+            omegabar = np.atleast_1d(omegabar).copy()
+            e2 = np.atleast_1d(e2).copy()
+            P2 = np.atleast_1d(P2).copy()
+            T2 = np.atleast_1d(T2).copy()
 
             # get mean anomaly
             n2 = 2 * np.pi / (P2 * YEAR)
             T2 *= YEAR
 
             # copy to GPU if needed
-            A2 = self.xp.asarray(A2.copy())
-            omegabar = self.xp.asarray(omegabar.copy())
-            e2 = self.xp.asarray(e2.copy())
-            n2 = self.xp.asarray(n2.copy())
-            T2 = self.xp.asarray(T2.copy())
+            A2 = self.xp.asarray(A2)
+            omegabar = self.xp.asarray(omegabar)
+            e2 = self.xp.asarray(e2)
+            n2 = self.xp.asarray(n2)
+            T2 = self.xp.asarray(T2)
 
         # base N value
         N_base = N
@@ -499,7 +503,7 @@ class GBGPU(object):
             self.A_out.append(data21)
             self.E_out.append(data13)
 
-    def _get_N(self, amp, f0, Tobs):
+    def _get_N(self, amp, f0, Tobs, oversample=4):
         """Determine proper sampling in time domain."""
 
         mult = 8
@@ -526,26 +530,28 @@ class GBGPU(object):
         N[(f0 >= 0.001) & (f0 < 0.01)] = 64 * mult[(f0 >= 0.001) & (f0 < 0.01)]
 
         # TODO: add amplitude into N calculation
-        # fonfs = f0 / fstar
+        fonfs = f0 / fstar
 
-        # SnX = np.sqrt(tdi.noisepsd_X(f0))
+        SnX = np.sqrt(tdi.noisepsd_X(f0))
 
         #  calculate michelson noise
-        # Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
+        Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
 
-        # Acut = amp * np.sqrt(Tobs / Sm)
+        Acut = amp * np.sqrt(Tobs / Sm)
 
-        # M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
+        M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
 
-        # M = M * (M > N) + N * (M < N)
-        # N = M * (M > N) + N * (M < N)
+        M = M * (M > N) + N * (M < N)
+        N = M * (M > N) + N * (M < N)
 
-        # M[M > 8192] = 8192
+        M[M > 8192] = 8192
 
-        # N = M
+        N = M
 
         # for j = 1 mode, so N/2 not N
-        return (N / 2).astype(int)
+        N_out = ((N / 2) * oversample).astype(int)
+
+        return N_out
 
     @property
     def X(self):

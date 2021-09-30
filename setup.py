@@ -177,6 +177,7 @@ if run_cuda_install:
                 "-gencode=arch=compute_60,code=sm_60",
                 "-gencode=arch=compute_61,code=sm_61",
                 "-gencode=arch=compute_70,code=sm_70",
+                "-gencode=arch=compute_80,code=sm_80",
                 "--default-stream=per-thread",
                 "--ptxas-options=-v",
                 "-c",
