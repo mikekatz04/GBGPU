@@ -1530,7 +1530,8 @@ void direct_like(cmplx* d_h, cmplx* h_h,
             exit(0);
         }
 
-        d_h[walker_i] += 4.0 * result_d_h[walker_i];
+        cmplx* temp_results_d_h = (cmplx*) &result_d_h[walker_i];
+        d_h[walker_i] += 4.0 * (*temp_results_d_h);
 
         cublasSetStream(handle, streams[walker_i]);
         stat = cublasZdotc(handle, data_length,
@@ -1543,8 +1544,8 @@ void direct_like(cmplx* d_h, cmplx* h_h,
             exit(0);
         }
 
-
-        h_h[walker_i] += 4.0 * result_h_h[walker_i];
+        cmplx* temp_results_h_h = (cmplx*) &result_h_h[walker_i];
+        h_h[walker_i] += 4.0 * (*temp_results_h_h);
 
         cublasSetStream(handle, streams[walker_i]);
         stat = cublasZdotc(handle, data_length,
@@ -1557,7 +1558,8 @@ void direct_like(cmplx* d_h, cmplx* h_h,
             exit(0);
         }
 
-        d_h[walker_i] += 4.0 * (result_d_h[walker_i]);
+        temp_results_d_h = (cmplx*) &result_d_h[walker_i];
+        d_h[walker_i] += 4.0 * (*temp_results_d_h);
 
         cublasSetStream(handle, streams[walker_i]);
         stat = cublasZdotc(handle, data_length,
@@ -1570,8 +1572,8 @@ void direct_like(cmplx* d_h, cmplx* h_h,
             exit(0);
         }
 
-
-        h_h[walker_i] += 4.0 * (result_h_h[walker_i]);
+        temp_results_h_h = (cmplx*) &result_h_h[walker_i];
+        h_h[walker_i] += 4.0 * (*temp_results_h_h);
 
     }
 
