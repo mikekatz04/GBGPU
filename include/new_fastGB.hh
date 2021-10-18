@@ -34,13 +34,13 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
                         int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind);
 
 
-void get_ll_wrap(double* d_h, double* h_h,
+void get_ll_wrap(cmplx* d_h, cmplx* h_h,
                   cmplx* A_template, cmplx* E_template,
                   cmplx* A_data, cmplx* E_data,
                   double* A_noise_factor, double* E_noise_factor,
                   int* start_ind, int M, int num_bin);
 
-void direct_like(double* d_h, double* h_h,
+void direct_like(cmplx* d_h, cmplx* h_h,
                cmplx* A_template, cmplx* E_template,
                cmplx* A_data, cmplx* E_data,
                int data_length, int start_freq_ind, int nwalkers);

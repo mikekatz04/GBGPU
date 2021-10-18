@@ -1410,7 +1410,7 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
 
 // calculate batched log likelihood
 CUDA_KERNEL
-void get_ll(double* d_h, double* h_h, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
+void get_ll(cmplx* d_h, cmplx* h_h, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
 {
     // prepare loop based on CPU/GPU
     int start, end, increment;
@@ -1437,8 +1437,8 @@ void get_ll(double* d_h, double* h_h, cmplx* A_template, cmplx* E_template, cmpl
         int start_ind = start_ind_all[bin_i];
 
         // initialize likelihood
-        double h_h_temp = 0.0;
-        double d_h_temp = 0.0;
+        cmplx h_h_temp(0.0, 0.0);
+        cmplx d_h_temp(0.0, 0.0);
 		for (int i = 0;
 				 i < M;
 				 i += 1)
@@ -1450,12 +1450,12 @@ void get_ll(double* d_h, double* h_h, cmplx* A_template, cmplx* E_template, cmpl
             cmplx h_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
 
             // get <d|h> term
-            d_h_temp += gcmplx::real(gcmplx::conj(A_data[j]) * h_A);
-            d_h_temp += gcmplx::real(gcmplx::conj(E_data[j]) * h_E);
+            d_h_temp += gcmplx::conj(A_data[j]) * h_A;
+            d_h_temp += gcmplx::conj(E_data[j]) * h_E;
 
             // <h|h>
-            h_h_temp += gcmplx::real(gcmplx::conj(h_A) * h_A);
-            h_h_temp += gcmplx::real(gcmplx::conj(h_E) * h_E);
+            h_h_temp += gcmplx::conj(h_A) * h_A;
+            h_h_temp += gcmplx::conj(h_E) * h_E;
         }
 
         // read out
@@ -1466,7 +1466,7 @@ void get_ll(double* d_h, double* h_h, cmplx* A_template, cmplx* E_template, cmpl
 
 
 // wrapper for log likelihood
-void get_ll_wrap(double* d_h, double* h_h,
+void get_ll_wrap(cmplx* d_h, cmplx* h_h,
                  cmplx* A_template, cmplx* E_template,
                  cmplx* A_data, cmplx* E_data,
                  double* A_noise_factor, double* E_noise_factor,
@@ -1494,7 +1494,7 @@ void get_ll_wrap(double* d_h, double* h_h,
 
 
 #ifdef __CUDACC__
-void direct_like(double* d_h, double* h_h,
+void direct_like(cmplx* d_h, cmplx* h_h,
                  cmplx* A_template, cmplx* E_template,
                  cmplx* A_data, cmplx* E_data,
                  int data_length, int start_freq_ind, int nwalkers)
@@ -1530,7 +1530,7 @@ void direct_like(double* d_h, double* h_h,
             exit(0);
         }
 
-        d_h[walker_i] += 4.0 * cuCreal(result_d_h[walker_i]);
+        d_h[walker_i] += 4.0 * result_d_h[walker_i];
 
         cublasSetStream(handle, streams[walker_i]);
         stat = cublasZdotc(handle, data_length,
@@ -1544,7 +1544,7 @@ void direct_like(double* d_h, double* h_h,
         }
 
 
-        h_h[walker_i] += 4.0 * cuCreal(result_h_h[walker_i]);
+        h_h[walker_i] += 4.0 * result_h_h[walker_i];
 
         cublasSetStream(handle, streams[walker_i]);
         stat = cublasZdotc(handle, data_length,
@@ -1557,7 +1557,7 @@ void direct_like(double* d_h, double* h_h,
             exit(0);
         }
 
-        d_h[walker_i] += 4.0 * cuCreal(result_d_h[walker_i]);
+        d_h[walker_i] += 4.0 * (result_d_h[walker_i]);
 
         cublasSetStream(handle, streams[walker_i]);
         stat = cublasZdotc(handle, data_length,
@@ -1571,7 +1571,7 @@ void direct_like(double* d_h, double* h_h,
         }
 
 
-        h_h[walker_i] += 4.0 * cuCreal(result_h_h[walker_i]);
+        h_h[walker_i] += 4.0 * (result_h_h[walker_i]);
 
     }
 
@@ -1589,7 +1589,7 @@ void direct_like(double* d_h, double* h_h,
 }
 
 #else
-void direct_like(double* d_h, double* h_h,
+void direct_like(cmplx* d_h, cmplx* h_h,
                  cmplx* A_template, cmplx* E_template,
                  cmplx* A_data, cmplx* E_data,
                  int data_length, int start_freq_ind, int nwalkers)
@@ -1607,29 +1607,28 @@ void direct_like(double* d_h, double* h_h,
                           (void*)&A_template[walker_i * data_length], 1,
                           (void*)&result_d_h[walker_i]);
 
-        d_h[walker_i] += 4.0 * result_d_h[walker_i].real();
+        d_h[walker_i] += 4.0 * result_d_h[walker_i];
 
         cblas_zdotc_sub(data_length,
                           (void*)&A_template[walker_i * data_length], 1,
                           (void*)&A_template[walker_i * data_length], 1,
                           (void*)&result_h_h[walker_i]);
 
-        h_h[walker_i] += 4.0 * result_h_h[walker_i].real();
+        h_h[walker_i] += 4.0 * result_h_h[walker_i];
 
         cblas_zdotc_sub(data_length,
                           (void*)&E_data[start_freq_ind], 1,
                           (void*)&E_template[walker_i * data_length], 1,
                           (void*)&result_d_h[walker_i]);
 
-        d_h[walker_i] += 4.0 * result_d_h[walker_i].real();
+        d_h[walker_i] += 4.0 * result_d_h[walker_i];
 
         cblas_zdotc_sub(data_length,
                           (void*)&E_template[walker_i * data_length], 1,
                           (void*)&E_template[walker_i * data_length], 1,
                           (void*)&result_h_h[walker_i]);
 
-        h_h[walker_i] += 4.0 * result_h_h[walker_i].real();
-        //printf("%e %e\n", cuCreal(result_h_h[walker_i]), cuCreal(result_d_h[walker_i]));
+        h_h[walker_i] += 4.0 * result_h_h[walker_i];
 
     }
 }

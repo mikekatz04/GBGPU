@@ -26,13 +26,13 @@ cdef extern from "new_fastGB.hh":
     void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,
                              int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind);
 
-    void get_ll_wrap(double* d_h_in, double* h_h_in,
+    void get_ll_wrap(cmplx* d_h_in, cmplx* h_h_in,
                    cmplx* A_template, cmplx* E_template,
                    cmplx* A_data, cmplx* E_data,
                    double* A_noise_factor, double* E_noise_factor,
                    int* start_ind, int M, int num_bin);
 
-    void direct_like(double* d_h, double* h_h,
+    void direct_like(cmplx* d_h, cmplx* h_h,
                     cmplx* A_template, cmplx* E_template,
                     cmplx* A_data, cmplx* E_data,
                     int data_length, int start_freq_ind, int nwalkers);
@@ -143,7 +143,7 @@ def get_ll(d_h, h_h,
     cdef size_t E_noise_factor_in = E_noise_factor
     cdef size_t start_ind_in = start_ind
 
-    get_ll_wrap(<double*> d_h_in, <double*> h_h_in,
+    get_ll_wrap(<cmplx*> d_h_in, <cmplx*> h_h_in,
             <cmplx*> A_template_in, <cmplx*> E_template_in,
             <cmplx*> A_data_in, <cmplx*> E_data_in,
             <double*> A_noise_factor_in, <double*> E_noise_factor_in,
@@ -178,7 +178,7 @@ def direct_like_wrap(d_h, h_h,
     cdef size_t A_data_in = A_data
     cdef size_t E_data_in = E_data
 
-    direct_like(<double*> d_h_in, <double*> h_h_in,
+    direct_like(<cmplx*> d_h_in, <cmplx*> h_h_in,
                   <cmplx*> A_template_in, <cmplx*> E_template_in,
                   <cmplx*> A_data_in, <cmplx*> E_data_in,
                   data_length, start_freq_ind, nwalkers)
