@@ -226,16 +226,14 @@ class GBGPU(object):
         lam = np.atleast_1d(lam)
         beta = np.atleast_1d(beta)
 
-        if N is None:
-            N_temp = self._get_N(amp, f0, T, oversample=oversample)
-            N = N_temp.max()
-
         # if eccentric
         if len(args) == 2:
             e1, beta1 = args
 
             run_ecc = True
             run_third = False
+
+            P2 = None
 
         # if circular plus third body
         elif len(args) == 5:
@@ -255,6 +253,8 @@ class GBGPU(object):
             run_ecc = True
             run_third = True
 
+            P2 = None
+
         # if just circular
         elif len(args) == 0:
             # set eccentricity to zero
@@ -263,10 +263,16 @@ class GBGPU(object):
 
             run_ecc = False
             run_third = False
+
+            P2 = None
         else:
             raise ValueError(
                 "Wrong number of extra arguments. Needs to be 2 for eccentric inner binary, 5 for circular inner binary and a third body, or 7 for eccentric inner and third body."
             )
+
+        if N is None:
+            N_temp = self._get_N(amp, f0, T, oversample=oversample, P2=P2)
+            N = N_temp.max()
 
         # cast to 1D if given scalar
         e1 = np.atleast_1d(e1)
@@ -503,7 +509,7 @@ class GBGPU(object):
             self.A_out.append(data21)
             self.E_out.append(data13)
 
-    def _get_N(self, amp, f0, Tobs, oversample=4):
+    def _get_N(self, amp, f0, Tobs, oversample=4, P2=None):
         """Determine proper sampling in time domain."""
 
         mult = 8
@@ -547,6 +553,14 @@ class GBGPU(object):
         M[M > 8192] = 8192
 
         N = M
+
+        # check against exoplanet sampling
+        if P2 is not None:
+            freq_N = 1 / ((Tobs / YEAR) / N)
+            while np.any(freq_N < (2.0 / P2)):
+                inds_fix = freq_N < (2.0 / P2)
+                N = 2 * N * (inds_fix) + N * (~inds_fix)
+                freq_N = 1 / ((Tobs / YEAR) / N)
 
         # for j = 1 mode, so N/2 not N
         N_out = ((N / 2) * oversample).astype(int)
