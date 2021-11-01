@@ -1,4 +1,5 @@
 import time
+import warnings
 
 import numpy as np
 
@@ -15,7 +16,14 @@ from newfastgbthird_cpu import GenWaveThird as GenWave_third_cpu
 from newfastgb_cpu import fill_global as fill_global_cpu
 from newfastgb_cpu import direct_like_wrap as direct_like_wrap_cpu
 
-import tdi
+try:
+    import tdi
+
+    tdi_available = True
+
+except (ModuleNotFoundError, ImportError) as e:
+    tdi_available = False
+    warnings.warn("tdi module not found. No sensitivity information will be included.")
 
 # import for GPU if available
 try:
@@ -536,19 +544,25 @@ class GBGPU(object):
         N[(f0 >= 0.001) & (f0 < 0.01)] = 64 * mult[(f0 >= 0.001) & (f0 < 0.01)]
 
         # TODO: add amplitude into N calculation
-        fonfs = f0 / fstar
+        if tdi_available:
+            fonfs = f0 / fstar
 
-        SnX = np.sqrt(tdi.noisepsd_X(f0))
+            SnX = np.sqrt(tdi.noisepsd_X(f0))
 
-        #  calculate michelson noise
-        Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
+            #  calculate michelson noise
+            Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
 
-        Acut = amp * np.sqrt(Tobs / Sm)
+            Acut = amp * np.sqrt(Tobs / Sm)
 
-        M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
+            M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
 
-        M = M * (M > N) + N * (M < N)
-        N = M * (M > N) + N * (M < N)
+            M = M * (M > N) + N * (M < N)
+            N = M * (M > N) + N * (M < N)
+        else:
+            warnings.warn(
+                "Sensitivity information not available. The number of points in the waveform will not be determined byt the signal strength without the availability of the Sensitivity."
+            )
+            M = N
 
         M[M > 8192] = 8192
 
@@ -897,6 +911,11 @@ class GBGPU(object):
                 matrices in cupy array. Default is False.
 
         """
+        # check if sensitivity information is available
+        if not tdi_available:
+            raise NameError(
+                "tdi module is not available. Stock option for Fisher matrix will not work."
+            )
 
         kwargs["N"] = N
 
