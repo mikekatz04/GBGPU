@@ -165,10 +165,7 @@ class GBGPU(object):
             fdot (double or 1D double np.ndarray): Initial time derivative of the
                 frequency given as Hz^2.
             fddot (double or 1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz^3. **Note**: this
-                parameter is currently ignored in the guts of the C code. However,
-                It is left here for future use. Right now, the code assumes fddot
-                is 11./3.*dfdt*dfdt/f0.
+                respect to time of the frequency given in Hz^3.
             phi0 (double or 1D double np.ndarray): Initial phase angle of gravitational
                 wave given in radians.
             iota (double or 1D double np.ndarray): Inclination of the Galactic binary

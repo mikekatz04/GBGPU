@@ -540,7 +540,7 @@ double get_fGW(double f0, double dfdt, double d2fdt2, double T, double t)
     double dfdt_0, d2fdt2_0;
 	f0        = f0/T;
 	dfdt_0    = dfdt/T/T;
-	d2fdt2_0  = 11./3.*dfdt_0*dfdt_0/f0;
+	d2fdt2_0  = d2fdt2/T/T/T;
 
 	// assuming t0 = 0.
 	return f0 + dfdt_0*t + 0.5*d2fdt2_0*t*t;
@@ -601,7 +601,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 	dfdt_0   = dfdt/T/T;
 
     // TODO: make adjustable again
-    d2fdt2_0 = 11./3.*dfdt_0*dfdt_0/f0;
+    d2fdt2_0 = d2fdt2/T/T/T; // 11./3.*dfdt_0*dfdt_0/f0;
 
     // adjusted df based on the frequency this waveform is occuring at
 	df = PI2*(((double)q)/T);
