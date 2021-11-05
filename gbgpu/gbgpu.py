@@ -607,20 +607,14 @@ class GBGPU(object):
             freqs_out.append(freqs_temp)
         return freqs_out
 
-    def get_ll(self, *args, global_fit=False, **kwargs):
-        if global_fit:
-            return self.get_ll_global(*args, **kwargs)
-
-        else:
-            return self.get_ll_singles(*args, **kwargs)
-
-    def get_ll_singles(
+    def get_ll(
         self,
         params,
         data,
         noise_factor,
         calc_d_d=False,
         phase_marginalize=False,
+        start_freq_ind=0,
         **kwargs,
     ):
         """Get batched log likelihood
@@ -681,7 +675,9 @@ class GBGPU(object):
             d_h_temp = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
             h_h_temp = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
             # shift start inds (see above)
-            start_inds = (start_inds - self.shift_ind).astype(self.xp.int32)
+            start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
+                self.xp.int32
+            )
 
             # get ll
             self.get_ll_func(
@@ -767,8 +763,12 @@ class GBGPU(object):
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
-        template_A = templates[:, 0].flatten()
-        template_E = templates[:, 1].flatten()
+        template_A = self.xp.zeros_like(
+            templates[:, 0], dtype=self.xp.complex128
+        ).flatten()
+        template_E = self.xp.zeros_like(
+            templates[:, 1], dtype=self.xp.complex128
+        ).flatten()
         # calculate each mode separately
         # ASSUMES MODES DO NOT OVERLAP AT ALL
         # makes the inner product the sum of products over modes
@@ -776,7 +776,9 @@ class GBGPU(object):
             self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
         ):
             # shift start inds (see above)
-            start_inds = (start_inds - self.shift_ind).astype(self.xp.int32)
+            start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
+                self.xp.int32
+            )
 
             # get ll
             self.fill_global_func(
@@ -789,7 +791,6 @@ class GBGPU(object):
                 self.num_bin,
                 group_index,
                 data_length,
-                start_freq_ind,
             )
 
         templates[:, 0] = template_A.reshape(total_groups, data_length)

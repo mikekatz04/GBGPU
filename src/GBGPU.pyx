@@ -24,7 +24,7 @@ cdef extern from "new_fastGB.hh":
                  int num_bin, int N, double dt, double T, double df, int mode_j);
 
     void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,
-                             int* start_ind_all, int M, int num_bin, int* group_index, int data_length, int start_freq_ind);
+                             int* start_ind_all, int M, int num_bin, int* group_index, int data_length);
 
     void get_ll_wrap(cmplx* d_h_in, cmplx* h_h_in,
                    cmplx* A_template, cmplx* E_template,
@@ -152,7 +152,7 @@ def get_ll(d_h, h_h,
 @pointer_adjust
 def fill_global(A_glob, E_glob,
               A_template, E_template,
-              start_ind, M, num_bin, group_index, data_length, start_freq_ind):
+              start_ind, M, num_bin, group_index, data_length):
 
     cdef size_t A_template_in = A_template
     cdef size_t E_template_in = E_template
@@ -163,7 +163,7 @@ def fill_global(A_glob, E_glob,
 
     fill_global_wrap(<cmplx*> A_glob_in, <cmplx*> E_glob_in,
             <cmplx*> A_template_in, <cmplx*> E_template_in,
-            <int*> start_ind_in, M, num_bin, <int*>group_index_in, data_length, start_freq_ind);
+            <int*> start_ind_in, M, num_bin, <int*>group_index_in, data_length);
 
 @pointer_adjust
 def direct_like_wrap(d_h, h_h,
