@@ -42,6 +42,8 @@ try:
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
 
+from gbgpu.utils.utility import get_N
+
 
 class GBGPU(object):
     """Generate Galactic Binary Waveforms
@@ -514,69 +516,9 @@ class GBGPU(object):
             self.A_out.append(data21)
             self.E_out.append(data13)
 
-    def _get_N(self, amp, f0, Tobs, oversample=4, P2=None):
+    def _get_N(self, amp, f0, Tobs, oversample=1, P2=None):
         """Determine proper sampling in time domain."""
-
-        mult = 8
-
-        if (Tobs / YEAR) <= 1.0:
-            mult = 1
-
-        elif (Tobs / YEAR) <= 2.0:
-            mult = 2
-
-        elif (Tobs / YEAR) <= 4.0:
-            mult = 4
-
-        elif (Tobs / YEAR) <= 2.0:
-            mult = 8
-
-        mult = np.full_like(f0, mult, dtype=np.int32)
-
-        N = 32 * mult
-
-        N[f0 >= 0.1] = 1024 * mult[f0 >= 0.1]
-        N[(f0 >= 0.03) & (f0 < 0.1)] = 512 * mult[(f0 >= 0.03) & (f0 < 0.1)]
-        N[(f0 >= 0.01) & (f0 < 0.3)] = 256 * mult[(f0 >= 0.01) & (f0 < 0.3)]
-        N[(f0 >= 0.001) & (f0 < 0.01)] = 64 * mult[(f0 >= 0.001) & (f0 < 0.01)]
-
-        # TODO: add amplitude into N calculation
-        if tdi_available:
-            fonfs = f0 / fstar
-
-            SnX = np.sqrt(tdi.noisepsd_X(f0))
-
-            #  calculate michelson noise
-            Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
-
-            Acut = amp * np.sqrt(Tobs / Sm)
-
-            M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
-
-            M = M * (M > N) + N * (M < N)
-            N = M * (M > N) + N * (M < N)
-        else:
-            warnings.warn(
-                "Sensitivity information not available. The number of points in the waveform will not be determined byt the signal strength without the availability of the Sensitivity."
-            )
-            M = N
-
-        M[M > 8192] = 8192
-
-        N = M
-
-        # check against exoplanet sampling
-        if P2 is not None:
-            freq_N = 1 / ((Tobs / YEAR) / N)
-            while np.any(freq_N < (2.0 / P2)):
-                inds_fix = freq_N < (2.0 / P2)
-                N = 2 * N * (inds_fix) + N * (~inds_fix)
-                freq_N = 1 / ((Tobs / YEAR) / N)
-
-        # for j = 1 mode, so N/2 not N
-        N_out = ((N / 2) * oversample).astype(int)
-
-        return N_out
+        return get_N(amp, f0, Tobs, oversample=oversample, P2=P2)
 
     @property
     def X(self):
