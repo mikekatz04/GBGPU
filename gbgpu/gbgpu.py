@@ -639,18 +639,16 @@ class GBGPU(object):
             d_h += d_h_temp
             h_h += h_h_temp
 
-        self.h_h = h_h
-        self.d_h = d_h
-
         if self.running_d_d:
             return
 
         if phase_marginalize:
-            like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * self.xp.abs(d_h)).real
+            d_h = self.xp.abs(d_h)
 
-        else:
-            like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
+        like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
 
+        self.h_h = h_h
+        self.d_h = d_h
         # back to CPU if on GPU
         try:
             return like_out.get()

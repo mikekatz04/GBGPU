@@ -3,6 +3,15 @@ import numpy as np
 from gbgpu.utils.constants import *
 from newfastgbthird_cpu import third_body_vLOS
 
+try:
+    import tdi
+
+    tdi_available = True
+
+except (ModuleNotFoundError, ImportError) as e:
+    tdi_available = False
+    warnings.warn("tdi module not found. No sensitivity information will be included.")
+
 
 def get_chirp_mass(m1, m2):
     return (m1 * m2) ** (3 / 5) / (m1 + m2) ** (1 / 5)
@@ -191,6 +200,9 @@ def get_f_derivatives(f0, fdot, A2, omegabar, e2, P2, T2, eps=5e4, t=None):
 def get_N(amp, f0, Tobs, oversample=1, P2=None):
     """Determine proper sampling in time domain."""
 
+    amp = np.atleast_1d(amp)
+    f0 = np.atleast_1d(f0)
+
     mult = 8
 
     if (Tobs / YEAR) <= 1.0:
@@ -241,6 +253,8 @@ def get_N(amp, f0, Tobs, oversample=1, P2=None):
 
     # check against exoplanet sampling
     if P2 is not None:
+        P2 = np.atleast_1d(P2)
+
         freq_N = 1 / ((Tobs / YEAR) / N)
         while np.any(freq_N < (2.0 / P2)):
             inds_fix = freq_N < (2.0 / P2)
