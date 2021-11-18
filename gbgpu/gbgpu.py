@@ -594,7 +594,7 @@ class GBGPU(object):
                 self.injection_params, data, noise_factor, calc_d_d=False, **kwargs
             )
             self.running_d_d = False
-            self.d_d = self.h_h
+            # now sets self.d_d inside likelihood function
 
         # produce TDI templates
         self.run_wave(*params, **kwargs)
@@ -639,16 +639,17 @@ class GBGPU(object):
             d_h += d_h_temp
             h_h += h_h_temp
 
-        if self.running_d_d:
-            return
-
         if phase_marginalize:
             d_h = self.xp.abs(d_h)
 
-        like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
-
         self.h_h = h_h
         self.d_h = d_h
+
+        if self.running_d_d:
+            self.d_d = self.h_h.copy()
+
+        like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
+
         # back to CPU if on GPU
         try:
             return like_out.get()
