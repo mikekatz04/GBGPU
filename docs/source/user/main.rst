@@ -1,7 +1,7 @@
-Fast Response Function
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Fast GB Waveforms and Likelihoods
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-Response Function Wrapper
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+.. autoclass:: gbgpu.gbgpu.GBGPU
+    :members:
+    :show-inheritance:
+    :inherited-members:
