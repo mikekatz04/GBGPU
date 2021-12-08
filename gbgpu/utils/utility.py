@@ -39,9 +39,21 @@ def get_fdot(m1, m2, f):
     return fdot
 
 
+def get_chirp_mass_from_f_fdot(f, fdot):
+    Mc_SI = (
+        5.0
+        / 96.0
+        * np.pi ** (-8 / 3)
+        * (G / Clight ** 3) ** (-5 / 3)
+        * f ** (-11 / 3)
+        * fdot
+    ) ** (3 / 5)
+    Mc = Mc_SI / MSUN
+    return Mc
+
+
 def third_body_factors(
-    chirp_mass,
-    eta,
+    total_mass_inner,
     mc,
     orbit_period,
     orbit_eccentricity,
@@ -55,7 +67,7 @@ def third_body_factors(
     third_period_unit="years",
 ):
 
-    chirp_mass *= MSUN
+    total_mass_inner *= MSUN
 
     if third_mass_unit == "Mjup":
         factor = Mjup
@@ -69,11 +81,14 @@ def third_body_factors(
 
     if third_period_unit == "years":
         orbit_period *= YEAR
+
+    elif third_period_unit == "seconds":
+        pass
     else:
         raise NotImplementedError
 
     P = orbit_period
-    M = chirp_mass / eta ** (3 / 5)
+    M = total_mass_inner
     m2 = M + mc
     iota = orbit_inclination
     Omega2 = orbit_Omega2
@@ -99,17 +114,31 @@ def third_body_factors(
     # check factor of 0.77
     amp2 = (mc / m2) * np.sqrt(G * m2 / p2) * A_bar
 
+    T2 = get_T2(P, e2, phi2, third_period_unit="seconds")
+
+    return amp2, omega_bar, T2
+
+
+def get_T2(P2, e2, phi2, third_period_unit="years"):
+
+    if third_period_unit == "years":
+        P2 *= YEAR
+
+    elif third_period_unit == "seconds":
+        pass
+    else:
+        raise NotImplementedError
+
     # compute T2
     u2 = 2.0 * np.arctan(np.sqrt((1 - e2) / (1 + e2)) * np.tan(phi2 / 2.0))
 
-    n2 = 2 * np.pi / P
+    n2 = 2 * np.pi / P2
 
     temp_T2 = (u2 - e2 * np.sin(u2)) / n2
-    T2 = (temp_T2 / YEAR) * (temp_T2 >= 0.0) + ((P - np.abs(temp_T2)) / YEAR) * (
+    T2 = (temp_T2 / YEAR) * (temp_T2 >= 0.0) + ((P2 - np.abs(temp_T2)) / YEAR) * (
         temp_T2 < 0.0
     )
-
-    return amp2, omega_bar, T2
+    return T2
 
 
 def get_vLOS(A2, omegabar, e2, P2, T2, t):
