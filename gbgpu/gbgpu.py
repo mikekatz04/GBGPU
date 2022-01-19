@@ -17,7 +17,7 @@ from newfastgb_cpu import fill_global as fill_global_cpu
 from newfastgb_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 try:
-    import tdi
+    from lisatools import sensitivity as tdi
 
     tdi_available = True
 
