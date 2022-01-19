@@ -640,6 +640,12 @@ class GBGPU(object):
             h_h += h_h_temp
 
         if phase_marginalize:
+            self.non_marg_d_h = d_h.copy()
+            try:
+                self.non_marg_d_h = self.non_marg_d_h.get()
+            except AttributeError:
+                pass
+
             d_h = self.xp.abs(d_h)
 
         self.h_h = h_h

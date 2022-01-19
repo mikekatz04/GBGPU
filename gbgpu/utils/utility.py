@@ -1,11 +1,11 @@
 import numpy as np
+import warnings
 
 from gbgpu.utils.constants import *
 from newfastgbthird_cpu import third_body_vLOS
 
 try:
-    import tdi
-
+    from lisatools import sensitivity as tdi
     tdi_available = True
 
 except (ModuleNotFoundError, ImportError) as e:
