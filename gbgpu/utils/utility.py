@@ -28,8 +28,16 @@ def get_amplitude(m1, m2, f, d):
     return A
 
 
-def get_fdot(m1, m2, f):
-    Mc = get_chirp_mass(m1, m2) * MSUN
+def get_fdot(f, m1=None, m2=None, Mc=None):
+
+    if m1 is None and m2 is None and Mc is None:
+        raise ValueError("Must provide either m1 & m2 or Mc.")
+    elif m1 is not None or m2 is not None:
+        assert m1 is not None and m2 is not None
+        Mc = get_chirp_mass(m1, m2) * MSUN
+    elif Mc is not None:
+        Mc *= MSUN
+    
     fdot = (
         (96.0 / 5.0)
         * np.pi ** (8 / 3)
