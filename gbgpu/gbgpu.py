@@ -52,6 +52,134 @@ def AET(X, Y, Z):
         (X + Y + Z) / np.sqrt(3.0),
     )
 
+def get_u(l, e):
+
+    ######################/
+    ##
+    ## Invert Kepler's equation l = u - e sin(u)
+    ## Using Mikkola's method (1987)
+    ## referenced Tessmer & Gopakumar 2007
+    ##
+    ######################/
+
+    #double u0                            ## initial guess at eccentric anomaly
+    #double z, alpha, beta, s, w        ## auxiliary variables
+    #double mult                        ## multiple number of 2pi
+
+    #int neg         = 0                    // check if l is negative
+    #int over2pi  = 0                    // check if over 2pi
+    #int overpi     = 0                    // check if over pi but not 2pi
+
+    #double f, f1, f2, f3, f4            // pieces of root finder
+    #double u, u1, u2, u3, u4
+
+    # enforce the mean anomaly to be in the domain -pi < l < pi
+    neg = l < 0
+    l = l * np.sign(l)
+
+    over2pi = l > 2 * np.pi
+    mult = np.floor(l[over2pi] / (2 * np.pi))
+    l[over2pi] -= mult*2.*np.pi
+
+    overpi = l > np.pi
+    l[overpi]       = 2.*np.pi - l[overpi]
+    
+    #if (l < 0)
+    #{
+    #    neg = 1
+    #    l   = -l
+    #}
+    #if (l > 2.*M_PI)
+    #{
+    #    over2pi = 1
+    #    mult    = floor(l/(2.*M_PI))
+    #    l       -= mult*2.*M_PI
+    #}
+    #if (l > M_PI)
+    ##    overpi = 1
+    #    l       = 2.*M_PI - l
+    #}
+
+    alpha = (1. - e)/(4.*e + 0.5)
+    beta  = 0.5*l/(4.*e + 0.5)
+
+    z = np.sqrt(beta*beta + alpha*alpha*alpha)
+    z[:] = (beta - z) * (neg) + (beta + z) * (~neg)
+
+    #if (neg == 1) z = beta - z
+    #else          z = beta + z
+
+    # to handle nan's from negative arguments
+    #if (z < 0.) z = -pow(-z, 0.3333333333333333)
+    #else         z =  pow( z, 0.3333333333333333)
+    z[z < 0] = -(-z[z < 0]) ** (1/3)
+    z[z >= 0] = z[z >= 0] ** (1/3)
+    s  = z - alpha/z
+    w  = s - 0.078*s*s*s*s*s/(1. + e)
+
+    u0 = l + e*(3.*w - 4.*w*w*w)
+
+    # now this initial guess must be iterated once with a 4th order Newton root finder
+    f  = u0 - e*np.sin(u0) - l
+    f1 = 1. - e*np.cos(u0)
+    f2 = u0 - f - l
+    f3 = 1. - f1
+    f4 = -f2
+
+    f2 *= 0.5
+    f3 *= 0.166666666666667
+    f4 *= 0.0416666666666667
+
+    u1 = -f/f1
+    u2 = -f/(f1 + f2*u1)
+    u3 = -f/(f1 + f2*u2 + f3*u2*u2)
+    u4 = -f/(f1 + f2*u3 + f3*u3*u3 + f4*u3*u3*u3)
+
+    u = u0 + u4
+
+    u[overpi] = (2.*np.pi - u[overpi])
+    u[over2pi] = (2.*np.pi*mult + u[over2pi])
+    u[neg] *= -1
+
+    #if (overpi  == 1) u = 2.*M_PI - u
+    #if (over2pi == 1) u = 2.*M_PI*mult + u
+    #if (neg        == 1) u = -u
+
+    return u
+
+# get phi value for Line-of-sight velocity. See arXiv:1806.00500
+def get_phi( t,  T,  e,  n):
+    u = get_u(n[:, None, None]*(t-T[:, None, None]), e[:, None, None])
+
+    adjust =  (e > 1e-6)   # return u
+
+    # adjust if not circular
+    beta = (1. - np.sqrt(1. - e[adjust]*e[adjust]))/e[adjust]
+    u[adjust] += 2.*np.arctan2( beta[:, None, None]*np.sin(u[adjust]), 1. - beta[:, None, None]*np.cos(u[adjust]))
+    return u
+
+# calculate the line-of-site velocity
+# see equation 13 in arXiv:1806.00500
+def get_vLOS(t, A2,  omegabar,  e2,  n2,  T2):
+    phi2 = get_phi(t, T2, e2, n2)
+    return A2[:, None, None]*(np.sin(phi2 + omegabar[:, None, None]) + e2[:, None, None]*np.sin(omegabar[:, None, None]))
+
+def get_fGW(f0,  fdot,  fddot,  T,  t):
+    # assuming t0 = 0.
+    return f0[:, None, None] + fdot[:, None, None]*t + 0.5*fddot[:, None, None]*t*t
+
+def parab_step_ET(f0,  fdot,  fddot,  A2,  omegabar,  e2,  n2,  T2,  t0,  t0_old,  T):
+    dtt = t0 - t0_old
+    get_fGW( f0,  fdot,  fddot, T, t0_old)
+    g1 = get_vLOS(t0_old, A2, omegabar, e2, n2, T2) * get_fGW( f0,  fdot,  fddot, T, t0_old)
+    # g2 = get_vLOS(A2, omegabar, e2, n2, T2, (t0 + t0_old)/2.)*get_fGW(f0,  fdot,  fddot, T, (t0 + t0_old)/2.)
+    g3 = get_vLOS(t0, A2, omegabar, e2, n2, T2) * get_fGW(f0,  fdot,  fddot, T, t0)
+
+    # return area from trapezoidal rule
+    return (dtt * (g1 + g3)/2.*PI2/Clight)
+
+
+
 
 class GBGPU(object):
     """Generate Galactic Binary Waveforms
@@ -354,6 +482,13 @@ class GBGPU(object):
             n2 = self.xp.asarray(n2)
             T2 = self.xp.asarray(T2)
 
+            args_third = (A2, omegabar, e2, n2, T2)
+            self.is_third = True
+
+        else:
+            args_third = ()
+            self.is_third = False
+
         # base N value
         N_base = N
 
@@ -397,7 +532,7 @@ class GBGPU(object):
 
             Ps = self.spacecraft(tm)
 
-            Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, N=512)
+            Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third)
 
             XYZf, f0_out = self.computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
@@ -543,7 +678,7 @@ class GBGPU(object):
         P3[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
         return [P1, P2, P3]
 
-    def construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, N=512):
+    def construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third):
         P1, P2, P3 = Ps
         r = dict()
         r['12'] = (P2 - P1)/arm_length ## [3xNt]
@@ -563,6 +698,9 @@ class GBGPU(object):
         Nt = len(tm)
         xi = tm - kdotP
         fi = f0[:, None, None] + fdot[:, None, None] * xi + 1/2. * fddot[:, None, None] * xi ** 2
+        if self.is_third:
+            fi *= (1 + get_vLOS(xi, *args_third))
+        
         fonfs = fi/fstar #Ratio of true frequency to transfer frequency
 
         ### compute transfer f-n
@@ -593,6 +731,12 @@ class GBGPU(object):
         ## om*kdotP_i singed out for comparison with another code.
 
         argS =  phi0[:, None, None] + (om[:, None, None] - df[:, None, None])*tm[None, None, :] + np.pi*fdot[:, None, None]*(xi**2) + 1/3 * np.pi * fddot[:, None, None] * (xi ** 3)  # TODO: check fddot factors
+        if self.is_third:
+            input_tuple = (f0, fdot,  fddot) + args_third + (xi[:, :, 1:], xi[:, :, :-1], T)
+            third_body_term = self.xp.zeros_like(xi)
+            third_body_term[:, :, 1:] = self.xp.cumsum(parab_step_ET(*input_tuple), axis=-1)
+            argS += third_body_term
+            
         kdotP = om[:, None, None]*kdotP - argS
 
         Gs = dict()
@@ -607,15 +751,15 @@ class GBGPU(object):
         # args = 0.5*self.omL*(1.0 - kn)
         # arg12 = 0.5*fonfs[0,:] * (1 + kdotr12)
         # arg2_1 = 2.0*np.pi*f0*xi[0] + phi0 - df*tm + np.pi*self.fdot*(xi[0]**2)  -> om*k.Ri
-        # arg1 = 0.5*wfm->fonfs[i]*(1. + wfm->kdotr[i][j]);
-        # arg2 =  PI*2*f0*wfm->xi[i] + phi0 - df*t;
-        # sinc = 0.25*sin(arg1)/arg1;
-        # tran1r = aevol*(wfm->dplus[i][j]*wfm->DPr + wfm->dcross[i][j]*wfm->DCr);
-        # tran1i = aevol*(wfm->dplus[i][j]*wfm->DPi + wfm->dcross[i][j]*wfm->DCi);
-        # tran2r = cos(arg1 + arg2);
-        # tran2i = sin(arg1 + arg2);
-        # wfm->TR[i][j] = sinc*(tran1r*tran2r - tran1i*tran2i);
-        # wfm->TI[i][j] = sinc*(tran1r*tran2i + tran1i*tran2r);
+        # arg1 = 0.5*wfm->fonfs[i]*(1. + wfm->kdotr[i][j])
+        # arg2 =  PI*2*f0*wfm->xi[i] + phi0 - df*t
+        # sinc = 0.25*sin(arg1)/arg1
+        # tran1r = aevol*(wfm->dplus[i][j]*wfm->DPr + wfm->dcross[i][j]*wfm->DCr)
+        # tran1i = aevol*(wfm->dplus[i][j]*wfm->DPi + wfm->dcross[i][j]*wfm->DCi)
+        # tran2r = cos(arg1 + arg2)
+        # tran2i = sin(arg1 + arg2)
+        # wfm->TR[i][j] = sinc*(tran1r*tran2r - tran1i*tran2i)
+        # wfm->TI[i][j] = sinc*(tran1r*tran2i + tran1i*tran2r)
         return Gs, q
 
     def _get_N(self, amp, f0, Tobs, oversample=1, P2=None):
