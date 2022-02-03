@@ -45,6 +45,14 @@ except (ModuleNotFoundError, ImportError):
 from gbgpu.utils.utility import get_N
 
 
+def AET(X, Y, Z):
+    return (
+        (Z - X) / np.sqrt(2.0),
+        (X - 2.0 * Y + Z) / np.sqrt(6.0),
+        (X + Y + Z) / np.sqrt(3.0),
+    )
+
+
 class GBGPU(object):
     """Generate Galactic Binary Waveforms
 
@@ -151,6 +159,7 @@ class GBGPU(object):
         T=4 * YEAR,
         dt=10.0,
         oversample=1,
+        tdi2=False,
     ):
         """Create waveforms in batches.
 
@@ -260,8 +269,6 @@ class GBGPU(object):
             run_ecc = True
             run_third = True
 
-            P2 = None
-
         # if just circular
         elif len(args) == 0:
             # set eccentricity to zero
@@ -294,13 +301,13 @@ class GBGPU(object):
         j_max = np.max(modes)
 
         # transform inputs
-        f0 = f0 * T
-        fdot = fdot * T * T
-        fddot = fddot * T * T * T
+        # f0 = f0 * T
+        # fdot = fdot * T * T
+        # fddot = fddot * T * T * T
         theta = np.pi / 2 - beta
 
         # maximum number of points in waveform
-        self.N_max = N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params);
+        self.N_max = N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params)
 
         # start indices into frequency array of a full set of Fourier bins
         self.start_inds = []
@@ -387,29 +394,48 @@ class GBGPU(object):
             data32 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
 
             # figure out start inds
-            q_check = (f0 * j / 2.0).astype(np.int32)
+            q_check = (f0 * T * j / 2.0).astype(np.int32)
             self.start_inds.append((q_check - N / 2).astype(xp.int32))
 
-            # get the basis tensors
-            self.get_basis_tensors(
-                eplus,
-                ecross,
-                DPr,
-                DPi,
-                DCr,
-                DCi,
-                k,
-                amp,
-                cosiota,
-                psi,
-                lam,
-                theta,
-                e1,
-                beta1,
-                j,
-                num_bin,
-            )
+            cosiota = self.xp.cos(iota)
+            fstar = Clight/(Larm * 2 * np.pi)
+            cosps, sinps = self.xp.cos(2.*psi), self.xp.sin(2.*psi)
+            Aplus = amp *( 1.+ cosiota*cosiota)
+            Across = -2.0 * amp * cosiota
+            DP = Aplus * cosps - 1.0j * Across * sinps
+            DC = -Aplus * sinps - 1.0j * Across * cosps
 
+            sinth, costh = self.xp.sin(theta), self.xp.cos(theta)
+            sinph, cosph = self.xp.sin(phi0), self.xp.cos(phi0)
+            u = self.xp.array([costh*cosph, costh*sinph, -sinth]).T[:, None, :]
+            v = self.xp.array([sinph, -cosph, self.xp.zeros_like(cosph)]).T[:, None, :]
+            k = self.xp.array([-sinth*cosph, -sinth*sinph, -costh]).T[:, None, :]
+
+            eplus = self.xp.matmul(v.transpose(0, 2, 1), v) - self.xp.matmul(u.transpose(0, 2, 1), u)
+            ecross = self.xp.matmul(u.transpose(0, 2, 1), v) + self.xp.matmul(v.transpose(0, 2, 1), u)
+
+            tm = self.xp.linspace(0, T, num=N, endpoint=False)
+
+            Ps = self.spacecraft(tm)
+
+            Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fstar, phi0, k, DP, DC, eplus, ecross, N=512)
+
+            XYZf, f0_out = self.computeXYZ(T, Gs, f0, fdot, fstar, amp, q, tm)
+
+            df = 1/T 
+            kmin = np.round(f0_out/df).astype(int)
+            fctr = 0.5*T/N
+
+            if tdi2:
+                omegaL = 2*np.pi*f0_out*(Larm/Clight)
+                tdi2_factor = 2.j*self.xp.sin(2*omegaL)*self.xp.exp(-2j*omegaL)
+                fctr *= tdi2_factor
+
+            XYZf *= fctr
+
+            Af, Ef, Tf = AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])
+
+            """
             # Generate the TD information based on using a third body or not
             if run_third:
                 self.GenWaveThird(
@@ -465,56 +491,153 @@ class GBGPU(object):
                     num_bin,
                 )
 
-            # prepare data for FFT
-            data12 = data12.reshape(N, num_bin)
-            data21 = data21.reshape(N, num_bin)
-            data13 = data13.reshape(N, num_bin)
-            data31 = data31.reshape(N, num_bin)
-            data23 = data23.reshape(N, num_bin)
-            data32 = data32.reshape(N, num_bin)
-
-            # perform FFT
-            data12[:N] = self.xp.fft.fft(data12[:N], axis=0)
-            data21[:N] = self.xp.fft.fft(data21[:N], axis=0)
-            data13[:N] = self.xp.fft.fft(data13[:N], axis=0)
-            data31[:N] = self.xp.fft.fft(data31[:N], axis=0)
-            data23[:N] = self.xp.fft.fft(data23[:N], axis=0)
-            data32[:N] = self.xp.fft.fft(data32[:N], axis=0)
-
-            # flatten data for input back in C
-            data12 = data12.flatten()
-            data21 = data21.flatten()
-            data13 = data13.flatten()
-            data31 = data31.flatten()
-            data23 = data23.flatten()
-            data32 = data32.flatten()
-
-            # prepare the data for TDI calculation
-            self.unpack_data_1(
-                data12, data21, data13, data31, data23, data32, N, num_bin
-            )
-
-            # get TDIs
-            self.XYZ(
-                data12,
-                data21,
-                data13,
-                data31,
-                data23,
-                data32,
-                f0,
-                num_bin,
-                N,
-                dt,
-                T,
-                df,
-                j,
-            )
-
+            """
             # add to lists
-            self.X_out.append(data12)
-            self.A_out.append(data21)
-            self.E_out.append(data13)
+            self.X_out.append(XYZf[:, 0])
+            self.A_out.append(Af)
+            self.E_out.append(Ef)
+
+    def computeXYZ(self, T, Gs, f0, fdot, fstar, ampl, q, tm):
+        """ Compute TDI X, Y, Z from y_sr
+        """
+
+        f = f0[:, None] + fdot[:, None] *tm[None, :]
+        omL = f/fstar
+        SomL = self.xp.sin(omL)
+        fctr = self.xp.exp(-1.j*omL)
+        fctr2 = 4.0*omL*SomL*fctr/ampl[:, None]
+
+        ### I have factored out 1 - exp(1j*omL) and transformed to 
+        ### fractional frequency: those are in fctr2
+        ### I have rremoved Ampl to reduce dynamical range, will restore it later
+        Xsl =  Gs['21'] - Gs['31'] + (Gs['12'] - Gs['13'])*fctr
+        Ysl =  Gs['32'] - Gs['12'] + (Gs['23'] - Gs['21'])*fctr
+        Zsl =  Gs['13'] - Gs['23'] + (Gs['31'] - Gs['32'])*fctr
+
+        XYZsl = fctr2[:, None, :] * self.xp.array([Xsl, Ysl, Zsl]).transpose(1, 0, 2)
+        XYZf_slow = ampl[:, None, None]*self.xp.fft.fft(XYZsl, axis=-1)
+
+        #for testing
+        #Xtry = 4.0*(self.G21 - self.G31 + (self.G12 - self.G13)*fctr)/self.ampl
+
+        M = XYZf_slow.shape[2] #len(XYZf_slow)
+        XYZf = self.xp.fft.fftshift(XYZf_slow, axes=-1)
+        f0 = (q - M/2) / T # freq = (q + self.xp.arange(M) - M/2)/T
+        return XYZf, f0
+        
+    def spacecraft(self, t):
+        # kappa and lambda are constants determined in the Constants.h file
+
+        alpha = 2.* np.pi * fm * t + kappa
+
+        beta1 = 0. + lambda0
+        beta2 = 2.*np.pi/3. + lambda0
+        beta3 = 4.*np.pi/3. + lambda0
+
+        sa = self.xp.sin(alpha)
+        ca = self.xp.cos(alpha)
+
+        P1 = self.xp.zeros((len(t), 3))
+        P2 = self.xp.zeros((len(t), 3))
+        P3 = self.xp.zeros((len(t), 3))
+
+        # spacecraft 1
+        sb = self.xp.sin(beta1)
+        cb = self.xp.cos(beta1)
+
+        P1[:, 0] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb)
+        P1[:, 1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb)
+        P1[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
+
+        # spacecraft 2
+        sb = self.xp.sin(beta2)
+        cb = self.xp.cos(beta2)
+        P2[:, 0] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb)
+        P2[:, 1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb)
+        P2[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
+
+        # spacecraft 3
+        sb = self.xp.sin(beta3)
+        cb = self.xp.cos(beta3)
+        P3[:, 0]  = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb)
+        P3[:, 1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb)
+        P3[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
+        return [P1, P2, P3]
+
+    def construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fstar, phi0, k, DP, DC, eplus, ecross, N=512):
+        P1, P2, P3 = Ps
+        r = dict()
+        r['12'] = (P2 - P1)/arm_length ## [3xNt]
+        r['13'] = (P3 - P1)/arm_length
+        r['23'] = (P3 - P2)/arm_length
+        r['31'] = -r['13']
+
+        kdotr = dict()
+        for ij in ['12', '13', '23']:
+            kdotr[ij] = self.xp.dot(k.squeeze(), r[ij].T) ### should be size Nt
+            kdotr[ij[-1]+ij[0]] = -kdotr[ij]
+
+        kdotP = self.xp.array([self.xp.dot(k, P1.T), self.xp.dot(k, P2.T), self.xp.dot(k, P2.T)])[:, :, 0].transpose(1, 0, 2)
+
+        kdotP /= Clight
+        
+        Nt = len(tm)
+        xi = tm - kdotP
+        fi = f0[:, None, None] + fdot[:, None, None] * xi
+        fonfs = fi/fstar #Ratio of true frequency to transfer frequency
+
+        ### compute transfer f-n
+        q = np.rint(f0 * T) # index of nearest Fourier bin
+        df = 2.*np.pi*(q/T)
+        om = 2.0*np.pi*f0
+        ### The expressions below are arg2_i with om*kR_i factored out
+
+        A = dict()
+        for ij in ['12', '23', '31']:
+            aij = self.xp.dot(eplus,r[ij].T)*r[ij].T*DP[:, None, None]+self.xp.dot(ecross,r[ij].T)*r[ij].T*DC[:, None, None]
+            A[ij] = aij.sum(axis=1)
+        # These are wfm->TR + 1j*TI in c-code
+
+        # arg2_1 = 2.0*np.pi*f0*xi[0] + phi0 - df*tm + np.pi*fdot*(xi[0]**2)
+        # arg2_2 = 2.0*np.pi*f0*xi[1] + phi0 - df*tm + np.pi*fdot*(xi[1]**2)
+        # arg2_3 = 2.0*np.pi*f0*xi[2] + phi0 - df*tm + np.pi*fdot*(xi[2]**2)
+
+        ### These (y_sr) reproduce exactly the FastGB results 
+        #self.y12 = 0.25*np.sin(arg12)/arg12 * np.exp(1.j*(arg12 + arg2_1)) * ( Dp12*self.DP + Dc12*self.DC )
+        #self.y23 = 0.25*np.sin(arg23)/arg23 * np.exp(1.j*(arg23 + arg2_2)) * ( Dp23*self.DP + Dc23*self.DC )
+        #self.y31 = 0.25*np.sin(arg31)/arg31 * np.exp(1.j*(arg31 + arg2_3)) * ( Dp31*self.DP + Dc31*self.DC )
+        #self.y21 = 0.25*np.sin(arg21)/arg21 * np.exp(1.j*(arg21 + arg2_2)) * ( Dp12*self.DP + Dc12*self.DC )
+        #self.y32 = 0.25*np.sin(arg32)/arg32 * np.exp(1.j*(arg32 + arg2_3)) * ( Dp23*self.DP + Dc23*self.DC )
+        #self.y13 = 0.25*np.sin(arg13)/arg13 * np.exp(1.j*(arg13 + arg2_1)) * ( Dp31*self.DP + Dc31*self.DC )
+
+        ### Those are corrected values which match the time domain results.
+        ## om*kdotP_i singed out for comparison with another code.
+
+        argS =  phi0[:, None, None] + (om[:, None, None] - df[:, None, None])*tm[None, None, :] + np.pi*fdot[:, None, None]*(xi**2)
+        kdotP = om[:, None, None]*kdotP - argS
+
+        Gs = dict()
+        for ij, ij_sym, s in [('12', '12', 0), ('23', '23', 1), ('31', '31', 2),
+                            ('21', '12', 1), ('32', '23', 2), ('13', '31', 0)]:
+            
+            arg_ij = 0.5*fonfs[:, s,:] * (1 + kdotr[ij])
+            Gs[ij] = 0.25*np.sin(arg_ij)/arg_ij * np.exp(-1.j*(arg_ij + kdotP[:, s])) * A[ij_sym]
+
+        ### Lines blow are extractions from another python code and from C-code
+        # y = -0.5j*self.omL*A*sinc(args)*np.exp(-1.0j*(args + self.om*kq))
+        # args = 0.5*self.omL*(1.0 - kn)
+        # arg12 = 0.5*fonfs[0,:] * (1 + kdotr12)
+        # arg2_1 = 2.0*np.pi*f0*xi[0] + phi0 - df*tm + np.pi*self.fdot*(xi[0]**2)  -> om*k.Ri
+        # arg1 = 0.5*wfm->fonfs[i]*(1. + wfm->kdotr[i][j]);
+        # arg2 =  PI*2*f0*wfm->xi[i] + phi0 - df*t;
+        # sinc = 0.25*sin(arg1)/arg1;
+        # tran1r = aevol*(wfm->dplus[i][j]*wfm->DPr + wfm->dcross[i][j]*wfm->DCr);
+        # tran1i = aevol*(wfm->dplus[i][j]*wfm->DPi + wfm->dcross[i][j]*wfm->DCi);
+        # tran2r = cos(arg1 + arg2);
+        # tran2i = sin(arg1 + arg2);
+        # wfm->TR[i][j] = sinc*(tran1r*tran2r - tran1i*tran2i);
+        # wfm->TI[i][j] = sinc*(tran1r*tran2i + tran1i*tran2r);
+        return Gs, q
 
     def _get_N(self, amp, f0, Tobs, oversample=1, P2=None):
         """Determine proper sampling in time domain."""
