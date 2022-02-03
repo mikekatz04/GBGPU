@@ -317,19 +317,6 @@ class GBGPU(object):
 
         # instantiate GPU/CPU arrays
 
-        # polarization matrices
-        eplus = self.xp.zeros(3 * 3 * num_bin)
-        ecross = self.xp.zeros(3 * 3 * num_bin)
-
-        # transfer information
-        DPr = self.xp.zeros(num_bin)
-        DPi = self.xp.zeros(num_bin)
-        DCr = self.xp.zeros(num_bin)
-        DCi = self.xp.zeros(num_bin)
-
-        # sky location arrays
-        k = self.xp.zeros(3 * num_bin)
-
         # copy to GPU if needed
         amp = self.xp.asarray(amp.copy())
         f0 = self.xp.asarray(f0.copy())  # in mHz
@@ -384,14 +371,6 @@ class GBGPU(object):
             # specific number of samples for this mode
             N = int(2 ** (j - 1) * N_base)
             self.Ns.append(N)
-
-            # allocate arrays to hold data based on N
-            data12 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-            data21 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-            data13 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-            data31 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-            data23 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
-            data32 = self.xp.zeros(num_bin * N, dtype=self.xp.complex128)
 
             # figure out start inds
             q_check = (f0 * T * j / 2.0).astype(np.int32)
