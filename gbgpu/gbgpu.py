@@ -397,9 +397,9 @@ class GBGPU(object):
 
             Ps = self.spacecraft(tm)
 
-            Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fstar, phi0, k, DP, DC, eplus, ecross, N=512)
+            Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, N=512)
 
-            XYZf, f0_out = self.computeXYZ(T, Gs, f0, fdot, fstar, amp, q, tm)
+            XYZf, f0_out = self.computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
             df = 1/T 
             kmin = np.round(f0_out/df).astype(int)
@@ -476,11 +476,11 @@ class GBGPU(object):
             self.A_out.append(Af)
             self.E_out.append(Ef)
 
-    def computeXYZ(self, T, Gs, f0, fdot, fstar, ampl, q, tm):
+    def computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
         """ Compute TDI X, Y, Z from y_sr
         """
 
-        f = f0[:, None] + fdot[:, None] *tm[None, :]
+        f = f0[:, None] + fdot[:, None] *tm[None, :] + 1 / 2 * fddot[:, None] * tm[None, :] ** 2
         omL = f/fstar
         SomL = self.xp.sin(omL)
         fctr = self.xp.exp(-1.j*omL)
@@ -543,7 +543,7 @@ class GBGPU(object):
         P3[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
         return [P1, P2, P3]
 
-    def construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fstar, phi0, k, DP, DC, eplus, ecross, N=512):
+    def construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, N=512):
         P1, P2, P3 = Ps
         r = dict()
         r['12'] = (P2 - P1)/arm_length ## [3xNt]
@@ -562,7 +562,7 @@ class GBGPU(object):
         
         Nt = len(tm)
         xi = tm - kdotP
-        fi = f0[:, None, None] + fdot[:, None, None] * xi
+        fi = f0[:, None, None] + fdot[:, None, None] * xi + 1/2. * fddot[:, None, None] * xi ** 2
         fonfs = fi/fstar #Ratio of true frequency to transfer frequency
 
         ### compute transfer f-n
@@ -592,7 +592,7 @@ class GBGPU(object):
         ### Those are corrected values which match the time domain results.
         ## om*kdotP_i singed out for comparison with another code.
 
-        argS =  phi0[:, None, None] + (om[:, None, None] - df[:, None, None])*tm[None, None, :] + np.pi*fdot[:, None, None]*(xi**2)
+        argS =  phi0[:, None, None] + (om[:, None, None] - df[:, None, None])*tm[None, None, :] + np.pi*fdot[:, None, None]*(xi**2) + 1/3 * np.pi * fddot[:, None, None] * (xi ** 3)  # TODO: check fddot factors
         kdotP = om[:, None, None]*kdotP - argS
 
         Gs = dict()
@@ -600,7 +600,7 @@ class GBGPU(object):
                             ('21', '12', 1), ('32', '23', 2), ('13', '31', 0)]:
             
             arg_ij = 0.5*fonfs[:, s,:] * (1 + kdotr[ij])
-            Gs[ij] = 0.25*np.sin(arg_ij)/arg_ij * np.exp(-1.j*(arg_ij + kdotP[:, s])) * A[ij_sym]
+            Gs[ij] = 0.25*self.xp.sin(arg_ij)/arg_ij * self.xp.exp(-1.j*(arg_ij + kdotP[:, s])) * A[ij_sym]
 
         ### Lines blow are extractions from another python code and from C-code
         # y = -0.5j*self.omL*A*sinc(args)*np.exp(-1.0j*(args + self.om*kq))
