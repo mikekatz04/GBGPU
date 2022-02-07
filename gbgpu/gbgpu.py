@@ -520,7 +520,7 @@ class GBGPU(object):
             DC = -Aplus * sinps - 1.0j * Across * cosps
 
             sinth, costh = self.xp.sin(theta), self.xp.cos(theta)
-            sinph, cosph = self.xp.sin(phi0), self.xp.cos(phi0)
+            sinph, cosph = self.xp.sin(lam), self.xp.cos(lam)
             u = self.xp.array([costh*cosph, costh*sinph, -sinth]).T[:, None, :]
             v = self.xp.array([sinph, -cosph, self.xp.zeros_like(cosph)]).T[:, None, :]
             k = self.xp.array([-sinth*cosph, -sinth*sinph, -costh]).T[:, None, :]
@@ -533,7 +533,6 @@ class GBGPU(object):
             Ps = self.spacecraft(tm)
 
             Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third)
-
             XYZf, f0_out = self.computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
             df = 1/T 
@@ -691,7 +690,7 @@ class GBGPU(object):
             kdotr[ij] = self.xp.dot(k.squeeze(), r[ij].T) ### should be size Nt
             kdotr[ij[-1]+ij[0]] = -kdotr[ij]
 
-        kdotP = self.xp.array([self.xp.dot(k, P1.T), self.xp.dot(k, P2.T), self.xp.dot(k, P2.T)])[:, :, 0].transpose(1, 0, 2)
+        kdotP = self.xp.array([self.xp.dot(k, P1.T), self.xp.dot(k, P2.T), self.xp.dot(k, P3.T)])[:, :, 0].transpose(1, 0, 2)
 
         kdotP /= Clight
         
@@ -736,7 +735,7 @@ class GBGPU(object):
             third_body_term = self.xp.zeros_like(xi)
             third_body_term[:, :, 1:] = self.xp.cumsum(parab_step_ET(*input_tuple), axis=-1)
             argS += third_body_term
-            
+
         kdotP = om[:, None, None]*kdotP - argS
 
         Gs = dict()
