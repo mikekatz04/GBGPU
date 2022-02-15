@@ -1372,6 +1372,10 @@ void fill_global(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_templ
 		{
             int j = start_ind + i;
 
+            if ((j >= data_length) || (j < 0))
+            {
+                continue;
+            }
             cmplx temp_A = A_template[i * num_bin + bin_i];
             cmplx temp_E = E_template[i * num_bin + bin_i];
 
