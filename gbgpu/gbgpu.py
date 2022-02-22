@@ -606,9 +606,10 @@ class GBGPU(object):
 
             """
             # add to lists
-            self.X_out.append(XYZf[:, 0])
-            self.A_out.append(Af)
-            self.E_out.append(Ef)
+            self.X_out.append(XYZf[:, 0].T.flatten())
+            # TODO: update this setup
+            self.A_out.append(Af.T.flatten())
+            self.E_out.append(Ef.T.flatten())
 
     def computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
         """ Compute TDI X, Y, Z from y_sr
@@ -862,7 +863,7 @@ class GBGPU(object):
             d_h_temp = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
             h_h_temp = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
             # shift start inds (see above)
-            start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
+            start_inds_temp = (start_inds - start_freq_ind - self.shift_ind).astype(
                 self.xp.int32
             )
 
@@ -876,7 +877,7 @@ class GBGPU(object):
                 data[1],
                 noise_factor[0],
                 noise_factor[1],
-                start_inds,
+                start_inds_temp,
                 N,
                 self.num_bin,
             )
