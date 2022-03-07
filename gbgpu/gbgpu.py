@@ -939,7 +939,6 @@ class GBGPU(object):
         """
 
         total_groups, nchannels, data_length = templates.shape
-        ndim = params.shape[1]
         group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
 
         if nchannels < 2:
