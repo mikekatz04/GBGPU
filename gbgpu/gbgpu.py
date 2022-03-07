@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import time
 import warnings
 
@@ -968,6 +969,14 @@ class GBGPU(object):
             start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
                 self.xp.int32
             )
+
+            if A.ndim > 2 or E.ndim > 2:
+                raise ValueError("A_in, E_in have maximum allowable dimension of 2.")
+            elif A.ndim == 2:
+                assert E.ndim == 1
+                # assumes the shape is the same as self.A
+                A = A.T.flatten()
+                E = E.T.flatten()
 
             # get ll
             self.fill_global_func(
