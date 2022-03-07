@@ -909,10 +909,10 @@ class GBGPU(object):
         except AttributeError:
             return like_out
 
-    def generate_global_template(
-        self, params, group_index, templates, start_freq_ind=0, min_ind=None, **kwargs,
-    ):
+    def fill_global_template(self, group_index, templates, A_in, E_in, start_inds_in, Ns_in):
         """Get batched log likelihood for global fit
+
+        # TODO: Adjust
 
         Generate the log likelihood for a batched set of Galactic binaries. This is
         also GPU/CPU agnostic.
@@ -947,9 +947,6 @@ class GBGPU(object):
         elif nchannels > 2:
             warnings.warn("Only calculating A and E channels here currently.")
 
-        # produce TDI templates
-        self.run_wave(*params.T, **kwargs)
-
         # check if arrays are of same type
         if isinstance(templates, self.xp.ndarray) is False:
             raise TypeError(
@@ -965,8 +962,8 @@ class GBGPU(object):
         # calculate each mode separately
         # ASSUMES MODES DO NOT OVERLAP AT ALL
         # makes the inner product the sum of products over modes
-        for X, A, E, start_inds, N in zip(
-            self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
+        for A, E, start_inds, N in zip(
+            A_in, E_in, start_inds_in, Ns_in
         ):
             # shift start inds (see above)
             start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
@@ -989,6 +986,39 @@ class GBGPU(object):
         templates[:, 0] = template_A.reshape(total_groups, data_length)
         templates[:, 1] = template_E.reshape(total_groups, data_length)
 
+
+    def generate_global_template(
+        self, params, group_index, templates, start_freq_ind=0, min_ind=None, **kwargs,
+    ):
+        """Get batched log likelihood for global fit
+
+        Generate the log likelihood for a batched set of Galactic binaries. This is
+        also GPU/CPU agnostic.
+
+        Args:
+            params (list, tuple or array of 1D double np.ndarrays): Array-like object containing
+                the parameters of all binaries to be calculated. The shape is
+                (number of parameters, number of binaries).
+            data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
+                stream. These should be CuPy arrays if running on the GPU, NumPy
+                arrays if running on a CPU. The list should be [A channel, E channel].
+            noise_factor (length 2 list of 1D double xp.ndarrays): List of arrays representing
+                the noise factor for weighting. This is typically something like 1/PSD(f) * sqrt(df).
+                These should be CuPy arrays if running on the GPU, NumPy
+                arrays if running on a CPU. The list should be [A channel, E channel].
+            **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
+
+        Raises:
+            TypeError: If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.
+
+        Returns:
+            1D double np.ndarray: Log likelihood values associated with each binary.
+
+        """
+
+        # produce TDI templates
+        self.run_wave(*params.T, **kwargs)
+        self.fill_global_template(group_index, templates, self.A_out, self.E_out, self.start, self.Ns)
         return
 
     def inject_signal(
