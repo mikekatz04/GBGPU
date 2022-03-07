@@ -909,7 +909,7 @@ class GBGPU(object):
         except AttributeError:
             return like_out
 
-    def fill_global_template(self, group_index, templates, A_in, E_in, start_inds_in, Ns_in):
+    def fill_global_template(self, group_index, templates, A_in, E_in, start_inds_in, Ns_in, start_freq_ind=0):
         """Get batched log likelihood for global fit
 
         # TODO: Adjust
@@ -1017,7 +1017,7 @@ class GBGPU(object):
 
         # produce TDI templates
         self.run_wave(*params.T, **kwargs)
-        self.fill_global_template(group_index, templates, self.A_out, self.E_out, self.start, self.Ns)
+        self.fill_global_template(group_index, templates, self.A_out, self.E_out, self.start, self.Ns, start_freq_ind=start_freq_ind)
         return
 
     def inject_signal(
