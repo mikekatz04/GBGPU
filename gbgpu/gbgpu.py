@@ -973,7 +973,7 @@ class GBGPU(object):
             if A.ndim > 2 or E.ndim > 2:
                 raise ValueError("A_in, E_in have maximum allowable dimension of 2.")
             elif A.ndim == 2:
-                assert E.ndim == 1
+                assert E.ndim == 2
                 # assumes the shape is the same as self.A
                 A = A.T.flatten()
                 E = E.T.flatten()
