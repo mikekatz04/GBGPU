@@ -941,7 +941,7 @@ class GBGPU(object):
 
         total_groups, nchannels, data_length = templates.shape
         group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
-
+        num_bin = len(group_index)
         if nchannels < 2:
             raise ValueError("Calculates for A and E channels.")
         elif nchannels > 2:
@@ -986,7 +986,7 @@ class GBGPU(object):
                 E,
                 start_inds,
                 N,
-                self.num_bin,
+                num_bin,
                 group_index,
                 data_length,
             )
