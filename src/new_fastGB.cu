@@ -1413,7 +1413,7 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
 
 // calculate batched log likelihood
 CUDA_KERNEL
-void get_ll(cmplx* d_h, cmplx* h_h, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_noise_factor, double* E_noise_factor, int* start_ind_all, int M, int num_bin)
+void get_ll(cmplx* d_h, cmplx* h_h, cmplx* A_template, cmplx* E_template, cmplx* A_data, cmplx* E_data, double* A_psd, double* E_psd, double df, int* start_ind_all, int M, int num_bin, int* data_index, int* noise_index, int data_length)
 {
     // prepare loop based on CPU/GPU
     int start, end, increment;
@@ -1438,6 +1438,8 @@ void get_ll(cmplx* d_h, cmplx* h_h, cmplx* A_template, cmplx* E_template, cmplx*
 
         // get start index in frequency array
         int start_ind = start_ind_all[bin_i];
+        int data_index_bin_i = data_index[bin_i];
+        int noise_index_bin_i = noise_index[bin_i];
 
         // initialize likelihood
         cmplx h_h_temp(0.0, 0.0);
@@ -1448,22 +1450,28 @@ void get_ll(cmplx* d_h, cmplx* h_h, cmplx* A_template, cmplx* E_template, cmplx*
 		{
             int j = start_ind + i;
 
+            double A_noise = A_psd[noise_index_bin_i * data_length + j];
+            double E_noise = E_psd[noise_index_bin_i * data_length + j];
+
             // calculate h term
-            cmplx h_A = A_template[i * num_bin + bin_i] * A_noise_factor[j];
-            cmplx h_E = E_template[i * num_bin + bin_i] * E_noise_factor[j];
+            cmplx h_A = A_template[i * num_bin + bin_i];
+            cmplx h_E = E_template[i * num_bin + bin_i];
+
+            cmplx d_A = A_data[data_index_bin_i * data_length + j];
+            cmplx d_E = E_data[data_index_bin_i * data_length + j];
 
             // get <d|h> term
-            d_h_temp += gcmplx::conj(A_data[j]) * h_A;
-            d_h_temp += gcmplx::conj(E_data[j]) * h_E;
+            d_h_temp += gcmplx::conj(d_A) * h_A / A_noise;
+            d_h_temp += gcmplx::conj(d_E) * h_E / E_noise;
 
             // <h|h>
-            h_h_temp += gcmplx::conj(h_A) * h_A;
-            h_h_temp += gcmplx::conj(h_E) * h_E;
+            h_h_temp += gcmplx::conj(h_A) * h_A / A_noise;
+            h_h_temp += gcmplx::conj(h_E) * h_E / E_noise;
         }
 
         // read out
-        d_h[bin_i] =  4. * d_h_temp;
-        h_h[bin_i] =  4. * h_h_temp;
+        d_h[bin_i] =  4. * df * d_h_temp;
+        h_h[bin_i] =  4. * df * h_h_temp;
     }
 }
 
@@ -1472,8 +1480,8 @@ void get_ll(cmplx* d_h, cmplx* h_h, cmplx* A_template, cmplx* E_template, cmplx*
 void get_ll_wrap(cmplx* d_h, cmplx* h_h,
                  cmplx* A_template, cmplx* E_template,
                  cmplx* A_data, cmplx* E_data,
-                 double* A_noise_factor, double* E_noise_factor,
-                 int* start_ind, int M, int num_bin)
+                 double* A_psd, double* E_psd, double df,
+                 int* start_ind, int M, int num_bin, int* data_index, int* noise_index, int data_length)
 {
     // GPU / CPU difference
     #ifdef __CUDACC__
@@ -1481,7 +1489,7 @@ void get_ll_wrap(cmplx* d_h, cmplx* h_h,
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
 
     get_ll<<<num_blocks, NUM_THREADS>>>(
-        d_h, h_h, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
+        d_h, h_h, A_template, E_template, A_data, E_data, A_psd, E_psd, df, start_ind, M, num_bin, data_index, noise_index, data_length
     );
     cudaDeviceSynchronize();
     gpuErrchk(cudaGetLastError());
@@ -1489,7 +1497,7 @@ void get_ll_wrap(cmplx* d_h, cmplx* h_h,
     #else
 
     get_ll(
-        d_h, h_h, A_template, E_template, A_data, E_data, A_noise_factor, E_noise_factor, start_ind, M, num_bin
+        d_h, h_h, A_template, E_template, A_data, E_data, A_psd, E_psd, df, start_ind, M, num_bin, data_index, noise_index, data_length
     );
 
     #endif

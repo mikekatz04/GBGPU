@@ -800,10 +800,13 @@ class GBGPU(object):
         self,
         params,
         data,
-        noise_factor,
+        psd,
         calc_d_d=False,
         phase_marginalize=False,
         start_freq_ind=0,
+        data_index=None,
+        noise_index=None,
+        df=None,
         **kwargs,
     ):
         """Get batched log likelihood
@@ -818,8 +821,8 @@ class GBGPU(object):
             data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
                 stream. These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
-            noise_factor (length 2 list of 1D double xp.ndarrays): List of arrays representing
-                the noise factor for weighting. This is typically something like 1/PSD(f) * sqrt(df).
+            psd (length 2 list of 1D double xp.ndarrays): List of arrays representing
+                the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
                 These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
             phase_marginalize (bool, optional): If True, marginalize over the initial phase.
@@ -838,7 +841,7 @@ class GBGPU(object):
         if (calc_d_d or self.d_d is None) and self.running_d_d is False:
             self.running_d_d = True
             self.get_ll(
-                self.injection_params, data, noise_factor, calc_d_d=False, **kwargs
+                self.injection_params, data, psd, calc_d_d=False, **kwargs
             )
             self.running_d_d = False
             # now sets self.d_d inside likelihood function
@@ -846,11 +849,40 @@ class GBGPU(object):
         # produce TDI templates
         self.run_wave(*params, **kwargs)
 
+        df = self.df
+
         # check if arrays are of same type
         if isinstance(data[0], self.xp.ndarray) is False:
             raise TypeError(
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
+        
+        if data[0].ndim == 1:
+            if data_index is not None:
+                raise ValueError("If inputing 1D data, cannot use data_index kwarg.")
+            if noise_index is not None:
+                raise ValueError("If inputing 1D data, cannot use noise_index kwarg.")
+            
+            data_length = data[0].shape[0]
+
+        elif data[0].ndim == 2:
+            data_length = data[0].shape[1]
+            data = [dat.copy().flatten() for dat in data]
+
+        if psd[0].ndim == 2:
+            psd = [psd_i.copy().flatten() for psd_i in psd]
+        
+        if data_index is None:
+            data_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
+        if noise_index is None:
+            noise_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
+
+        assert len(data_index) == self.num_bin 
+        assert len(data_index) == len(noise_index)
+        assert data_index.dtype == self.xp.int32
+        assert noise_index.dtype == self.xp.int32
+        assert data_index.max() * data_length <= len(data[0])
+        assert noise_index.max() * data_length <= len(data[0])
 
         d_h = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
         h_h = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
@@ -876,11 +908,15 @@ class GBGPU(object):
                 E,
                 data[0],
                 data[1],
-                noise_factor[0],
-                noise_factor[1],
+                psd[0],
+                psd[1],
+                df,
                 start_inds_temp,
                 N,
                 self.num_bin,
+                data_index,
+                noise_index,
+                data_length
             )
 
             d_h += d_h_temp
@@ -925,8 +961,8 @@ class GBGPU(object):
             data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
                 stream. These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
-            noise_factor (length 2 list of 1D double xp.ndarrays): List of arrays representing
-                the noise factor for weighting. This is typically something like 1/PSD(f) * sqrt(df).
+            psd (length 2 list of 1D double xp.ndarrays): List of arrays representing
+                the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
                 These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
             **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
@@ -1010,8 +1046,8 @@ class GBGPU(object):
             data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
                 stream. These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
-            noise_factor (length 2 list of 1D double xp.ndarrays): List of arrays representing
-                the noise factor for weighting. This is typically something like 1/PSD(f) * sqrt(df).
+            psd (length 2 list of 1D double xp.ndarrays): List of arrays representing
+                the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
                 These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
             **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
@@ -1030,7 +1066,7 @@ class GBGPU(object):
         return
 
     def inject_signal(
-        self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, noise_factor=True, **kwargs
+        self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, psd=True, **kwargs
     ):
         """Inject a single signal
 
@@ -1060,7 +1096,7 @@ class GBGPU(object):
         T = N_obs * dt
         kwargs["T"] = T
         kwargs["dt"] = dt
-        df = 1 / T
+        self.df = df = 1 / T
 
         # create frequencies
         f = np.arange(0.0, fmax + df, df)
@@ -1244,18 +1280,18 @@ class GBGPU(object):
         except AttributeError:
             freqs_temp = freqs
 
-        # get PSD
+        # get psd
         psd = self.xp.asarray(tdi.noisepsd_AE(freqs, **psd_kwargs))
 
         # noise factor
-        noise_factor = self.xp.asarray(1.0 / psd * freqs)[:, self.xp.newaxis, :]
+        psd = self.xp.asarray(1.0 / psd * freqs)[:, self.xp.newaxis, :]
 
         # compute Fisher matrix
         for i in range(num_derivs):
             for j in range(i, num_derivs):
                 # innter product between derivatives
                 inner_prod = 4 * self.xp.sum(
-                    (dh[:, i].conj() * dh[:, j] * noise_factor).real, axis=(1, 2)
+                    (dh[:, i].conj() * dh[:, j] * psd).real, axis=(1, 2)
                 )
 
                 # symmetry
