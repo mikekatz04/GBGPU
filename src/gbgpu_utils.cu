@@ -4,7 +4,7 @@
 // imports
 #include "stdio.h"
 
-#include "new_fastGB.hh"
+#include "gbgpu_utils.hh"
 #include "global.h"
 #include "LISA.h"
 #include "cuda_complex.hpp"

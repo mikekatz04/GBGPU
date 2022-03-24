@@ -5,7 +5,7 @@ from gbgpu.utils.pointeradjust import pointer_adjust
 
 assert sizeof(int) == sizeof(np.int32_t)
 
-cdef extern from "new_fastGB.hh":
+cdef extern from "gbgpu_utils.hh":
     ctypedef void* cmplx 'cmplx'
 
     void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,

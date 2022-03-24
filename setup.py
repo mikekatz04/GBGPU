@@ -124,7 +124,7 @@ include_gsl_dir = "/opt/local/include"
 if run_cuda_install:
 
     ext_gpu_dict = dict(
-        sources=["src/new_fastGB.cu", "src/GBGPU.pyx"],
+        sources=["src/gbgpu_utils.cu", "src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
         libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
         language="c++",
@@ -157,7 +157,7 @@ if run_cuda_install:
     )
     ext_gpu = Extension("newfastgb", **ext_gpu_dict)
 
-cu_files = ["new_fastGB"]
+cu_files = ["gbgpu_utils"]
 pyx_files = ["GBGPU"]
 for fp in cu_files:
     shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
@@ -166,7 +166,7 @@ for fp in pyx_files:
     shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
 
 ext_cpu_dict = dict(
-    sources=["src/new_fastGB.cpp", "src/GBGPU_cpu.pyx"],
+    sources=["src/gbgpu_utils.cpp", "src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
     libraries=["gsl", "gslcblas", "gomp"],
     language="c++",
