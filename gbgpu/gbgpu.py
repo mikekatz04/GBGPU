@@ -283,7 +283,6 @@ class GBGPU(object):
         lam,
         beta,
         *args,
-        modes=np.array([2]),
         N=None,
         T=4 * YEAR,
         dt=10.0,
@@ -318,15 +317,8 @@ class GBGPU(object):
                 given in radians. This is converted to the spherical polar angle.
             *args (tuple, optional): Flexible parameter to allow for a flexible
                 number of argmuments. If running a circular Galactic binarys, :code:`args = ()`.
-                If running an eccentric binary, :code:`args = (e1, beta1)`. If running a
-                circular inner binary with an eccentric third body,
-                :code:`args = (A2, omegabar, e2, P2, T2)`. If running an eccentric
-                inner binary and eccentric third body,
-                :code:`args = (e1, beta1, A2, omegabar, e2, P2, T2)`.
-            e1 (double or 1D double np.ndarray): Eccentricity of the inner binary.
-                The code can handle e1 = 0.0. However, it is recommended to not input e1
-                if circular orbits are desired.
-            beta1 (double or 1D double np.ndarray): TODO: fill in.
+                If running a circular inner binary with an eccentric third body,
+                :code:`args = (A2, omegabar, e2, P2, T2)`.
             A2 (double or 1D double np.ndarray): Special amplitude parameter related to the
                 line-of-site velocity for the third body orbit as defined in the paper
                 given in the description above.
@@ -337,9 +329,6 @@ class GBGPU(object):
             P2 (double or 1D double np.ndarray): Period of the third body orbit in Years.
             T2 (double or 1D double np.ndarray): Time of pericenter passage of the third body in Years.
                 This parameter is effectively a constant of integration.
-            modes (int or 1D int np.ndarray, optional): j modes to use in the bessel function expansion
-                for the eccentricity of the inner binary orbit. Default is np.array([2]) for
-                the main mode.
             N (int, optional): Number of points to produce for the base j=1 mode. Therefore,
                 with the default j = 2 mode, the waveform will be 2 * N in length.
                 This should be determined by the initial frequency, f0. Default is None.
@@ -371,43 +360,16 @@ class GBGPU(object):
         lam = np.atleast_1d(lam)
         beta = np.atleast_1d(beta)
 
-        # if eccentric
-        if len(args) == 2:
-            e1, beta1 = args
-
-            run_ecc = True
-            run_third = False
-
-            P2 = None
-
         # if circular plus third body
-        elif len(args) == 5:
-            # set eccentricity to zero for inner binary
-            e1 = np.full_like(amp, 0.0)
-            beta1 = np.full_like(amp, 0.0)
-
+        if len(args) == 5:
             A2, omegabar, e2, P2, T2 = args
-
-            run_ecc = False
-            run_third = True
-
-        # if eccentric plus third body
-        elif len(args) == 7:
-            e1, beta1, A2, omegabar, e2, P2, T2 = args
-
-            run_ecc = True
             run_third = True
 
         # if just circular
         elif len(args) == 0:
-            # set eccentricity to zero
-            e1 = np.full_like(amp, 0.0)
-            beta1 = np.full_like(amp, 0.0)
-
-            run_ecc = False
             run_third = False
-
             P2 = None
+
         else:
             raise ValueError(
                 "Wrong number of extra arguments. Needs to be 2 for eccentric inner binary, 5 for circular inner binary and a third body, or 7 for eccentric inner and third body."
@@ -417,29 +379,12 @@ class GBGPU(object):
             N_temp = self._get_N(amp, f0, T, oversample=oversample, P2=P2)
             N = N_temp.max()
 
-        # cast to 1D if given scalar
-        e1 = np.atleast_1d(e1)
-        beta1 = np.atleast_1d(beta1)
-
         # number of binaries is determined from length of amp array
         self.num_bin = num_bin = len(amp)
 
         num_modes = len(modes)
 
-        # maximum mode index
-        j_max = np.max(modes)
-
-        # transform inputs
-        # f0 = f0 * T
-        # fdot = fdot * T * T
-        # fddot = fddot * T * T * T
         theta = np.pi / 2 - beta
-
-        # maximum number of points in waveform
-        self.N_max = N_max = int(2 ** (j_max - 1) * N)  # get_NN(gb->params)
-
-        # start indices into frequency array of a full set of Fourier bins
-        self.start_inds = []
 
         # bin spacing
         self.df = df = 1 / T
@@ -456,9 +401,6 @@ class GBGPU(object):
         psi = self.xp.asarray(psi.copy())
         lam = self.xp.asarray(lam.copy())
         theta = self.xp.asarray(theta.copy())
-
-        e1 = self.xp.asarray(e1.copy())
-        beta1 = self.xp.asarray(beta1.copy())
 
         cosiota = self.xp.cos(iota.copy())
 
@@ -490,129 +432,57 @@ class GBGPU(object):
             args_third = ()
             self.is_third = False
 
-        # base N value
-        N_base = N
-
-        # set up lists to hold output waveforms
-        self.X_out = []
-        self.A_out = []
-        self.E_out = []
-
         # get lengths of the output waveforms for each mode
-        self.Ns = []
+        self.N = N
 
-        # loop over modes
-        for j in modes:
+        # figure out start inds
+        q_check = (f0 * T * j / 2.0).astype(np.int32)
+        self.start_inds = (q_check - N / 2).astype(xp.int32)
 
-            # specific number of samples for this mode
-            N = int(2 ** (j - 1) * N_base)
-            self.Ns.append(N)
+        cosiota = self.xp.cos(iota)
+        fstar = Clight/(Larm * 2 * np.pi)
+        cosps, sinps = self.xp.cos(2.*psi), self.xp.sin(2.*psi)
+        Aplus = amp *( 1.+ cosiota*cosiota)
+        Across = -2.0 * amp * cosiota
+        DP = Aplus * cosps - 1.0j * Across * sinps
+        DC = -Aplus * sinps - 1.0j * Across * cosps
 
-            # figure out start inds
-            q_check = (f0 * T * j / 2.0).astype(np.int32)
-            self.start_inds.append((q_check - N / 2).astype(xp.int32))
+        sinth, costh = self.xp.sin(theta), self.xp.cos(theta)
+        sinph, cosph = self.xp.sin(lam), self.xp.cos(lam)
+        u = self.xp.array([costh*cosph, costh*sinph, -sinth]).T[:, None, :]
+        v = self.xp.array([sinph, -cosph, self.xp.zeros_like(cosph)]).T[:, None, :]
+        k = self.xp.array([-sinth*cosph, -sinth*sinph, -costh]).T[:, None, :]
 
-            cosiota = self.xp.cos(iota)
-            fstar = Clight/(Larm * 2 * np.pi)
-            cosps, sinps = self.xp.cos(2.*psi), self.xp.sin(2.*psi)
-            Aplus = amp *( 1.+ cosiota*cosiota)
-            Across = -2.0 * amp * cosiota
-            DP = Aplus * cosps - 1.0j * Across * sinps
-            DC = -Aplus * sinps - 1.0j * Across * cosps
+        eplus = self.xp.matmul(v.transpose(0, 2, 1), v) - self.xp.matmul(u.transpose(0, 2, 1), u)
+        ecross = self.xp.matmul(u.transpose(0, 2, 1), v) + self.xp.matmul(v.transpose(0, 2, 1), u)
 
-            sinth, costh = self.xp.sin(theta), self.xp.cos(theta)
-            sinph, cosph = self.xp.sin(lam), self.xp.cos(lam)
-            u = self.xp.array([costh*cosph, costh*sinph, -sinth]).T[:, None, :]
-            v = self.xp.array([sinph, -cosph, self.xp.zeros_like(cosph)]).T[:, None, :]
-            k = self.xp.array([-sinth*cosph, -sinth*sinph, -costh]).T[:, None, :]
+        tm = self.xp.linspace(0, T, num=N, endpoint=False)
 
-            eplus = self.xp.matmul(v.transpose(0, 2, 1), v) - self.xp.matmul(u.transpose(0, 2, 1), u)
-            ecross = self.xp.matmul(u.transpose(0, 2, 1), v) + self.xp.matmul(v.transpose(0, 2, 1), u)
+        Ps = self._spacecraft(tm)
 
-            tm = self.xp.linspace(0, T, num=N, endpoint=False)
+        Gs, q = self._construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third)
+        XYZf, f0_out = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
-            Ps = self.spacecraft(tm)
+        df = 1/T 
+        kmin = np.round(f0_out/df).astype(int)
+        fctr = 0.5*T/N
 
-            Gs, q = self.construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third)
-            XYZf, f0_out = self.computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
+        if tdi2:
+            omegaL = 2*np.pi*f0_out*(Larm/Clight)
+            tdi2_factor = 2.j*self.xp.sin(2*omegaL)*self.xp.exp(-2j*omegaL)
+            fctr *= tdi2_factor
 
-            df = 1/T 
-            kmin = np.round(f0_out/df).astype(int)
-            fctr = 0.5*T/N
+        XYZf *= fctr
 
-            if tdi2:
-                omegaL = 2*np.pi*f0_out*(Larm/Clight)
-                tdi2_factor = 2.j*self.xp.sin(2*omegaL)*self.xp.exp(-2j*omegaL)
-                fctr *= tdi2_factor
+        Af, Ef, Tf = AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])
 
-            XYZf *= fctr
+        # add to lists
+        self.X_out = XYZf[:, 0].T.flatten()
+        # TODO: update this setup
+        self.A_out = Af.T.flatten()
+        self.E_out = Ef.T.flatten()
 
-            Af, Ef, Tf = AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])
-
-            """
-            # Generate the TD information based on using a third body or not
-            if run_third:
-                self.GenWaveThird(
-                    data12,
-                    data21,
-                    data13,
-                    data31,
-                    data23,
-                    data32,
-                    eplus,
-                    ecross,
-                    f0,
-                    fdot,
-                    fddot,
-                    phi0,
-                    A2,
-                    omegabar,
-                    e2,
-                    n2,
-                    T2,
-                    DPr,
-                    DPi,
-                    DCr,
-                    DCi,
-                    k,
-                    T,
-                    N,
-                    j,
-                    num_bin,
-                )
-            else:
-                self.GenWave(
-                    data12,
-                    data21,
-                    data13,
-                    data31,
-                    data23,
-                    data32,
-                    eplus,
-                    ecross,
-                    f0,
-                    fdot,
-                    fddot,
-                    phi0,
-                    DPr,
-                    DPi,
-                    DCr,
-                    DCi,
-                    k,
-                    T,
-                    N,
-                    j,
-                    num_bin,
-                )
-
-            """
-            # add to lists
-            self.X_out.append(XYZf[:, 0].T.flatten())
-            # TODO: update this setup
-            self.A_out.append(Af.T.flatten())
-            self.E_out.append(Ef.T.flatten())
-
-    def computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
+    def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
         """ Compute TDI X, Y, Z from y_sr
         """
 
@@ -640,7 +510,7 @@ class GBGPU(object):
         f0 = (q - M/2) / T # freq = (q + self.xp.arange(M) - M/2)/T
         return XYZf, f0
         
-    def spacecraft(self, t):
+    def _spacecraft(self, t):
         # kappa and lambda are constants determined in the Constants.h file
 
         alpha = 2.* np.pi * fm * t + kappa
@@ -679,7 +549,7 @@ class GBGPU(object):
         P3[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
         return [P1, P2, P3]
 
-    def construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third):
+    def _construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third):
         P1, P2, P3 = Ps
         r = dict()
         r['12'] = (P2 - P1)/arm_length ## [3xNt]
@@ -770,30 +640,29 @@ class GBGPU(object):
     @property
     def X(self):
         """return X channel reshaped based on number of binaries"""
-        return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.X_out, self.Ns)]
+        return self.X_out.reshape(self.N, self.num_bin).T
 
     @property
     def A(self):
         """return A channel reshaped based on number of binaries"""
-        return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.A_out, self.Ns)]
+        return self.A_out.reshape(self.N, self.num_bin).T
 
     @property
     def E(self):
         """return E channel reshaped based on number of binaries"""
-        return [temp.reshape(N, self.num_bin).T for temp, N in zip(self.E_out, self.Ns)]
+        return self.E_out.reshape(self.N, self.num_bin).T
 
     @property
     def freqs(self):
         """Return frequencies associated with each signal"""
         freqs_out = []
-        for start_inds, N in zip(self.start_inds, self.Ns):
-            freqs_temp = self.xp.zeros((len(start_inds), N))
-            for i, start_ind in enumerate(start_inds):
-                if isinstance(start_ind, self.xp.ndarray):
-                    start_ind = start_ind.item()
+        freqs_temp = self.xp.zeros((len(self.start_inds), self.N))
+        for i, start_ind in enumerate(self.start_inds):
+            if isinstance(start_ind, self.xp.ndarray):
+                start_ind = start_ind.item()
 
-                freqs_temp[i] = self.xp.arange(start_ind, start_ind + N) * self.df
-            freqs_out.append(freqs_temp)
+            freqs_temp[i] = self.xp.arange(start_ind, start_ind + self.N) * self.df
+        freqs_out.append(freqs_temp)
         return freqs_out
 
     def get_ll(
@@ -890,37 +759,30 @@ class GBGPU(object):
         # calculate each mode separately
         # ASSUMES MODES DO NOT OVERLAP AT ALL
         # makes the inner product the sum of products over modes
-        for X, A, E, start_inds, N in zip(
-            self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
-        ):
-            d_h_temp = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-            h_h_temp = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-            # shift start inds (see above)
-            start_inds_temp = (start_inds - start_freq_ind - self.shift_ind).astype(
-                self.xp.int32
-            )
 
-            # get ll
-            self.get_ll_func(
-                d_h_temp,
-                h_h_temp,
-                A,
-                E,
-                data[0],
-                data[1],
-                psd[0],
-                psd[1],
-                df,
-                start_inds_temp,
-                N,
-                self.num_bin,
-                data_index,
-                noise_index,
-                data_length
-            )
+        # shift start inds (see above)
+        start_inds_temp = (self.start_inds - start_freq_ind - self.shift_ind).astype(
+            self.xp.int32
+        )
 
-            d_h += d_h_temp
-            h_h += h_h_temp
+        # get ll
+        self.get_ll_func(
+            d_h,
+            h_h,
+            self.A_out,
+            self.E_out,
+            data[0],
+            data[1],
+            psd[0],
+            psd[1],
+            df,
+            start_inds_temp,
+            self.N,
+            self.num_bin,
+            data_index,
+            noise_index,
+            data_length
+        )
 
         if phase_marginalize:
             self.non_marg_d_h = d_h.copy()
@@ -946,7 +808,7 @@ class GBGPU(object):
         except AttributeError:
             return like_out
 
-    def fill_global_template(self, group_index, templates, A_in, E_in, start_inds_in, Ns_in, start_freq_ind=0):
+    def fill_global_template(self, group_index, templates, A, E, start_inds, N, start_freq_ind=0):
         """Get batched log likelihood for global fit
 
         # TODO: Adjust
@@ -995,44 +857,38 @@ class GBGPU(object):
         template_E = self.xp.zeros_like(
             templates[:, 1], dtype=self.xp.complex128
         ).flatten()
-        # calculate each mode separately
-        # ASSUMES MODES DO NOT OVERLAP AT ALL
-        # makes the inner product the sum of products over modes
-        for A, E, start_inds, N in zip(
-            A_in, E_in, start_inds_in, Ns_in
-        ):
-            # shift start inds (see above)
-            start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
-                self.xp.int32
-            )
+        # shift start inds (see above)
+        start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
+            self.xp.int32
+        )
 
-            if A.ndim > 2 or E.ndim > 2:
-                raise ValueError("A_in, E_in have maximum allowable dimension of 2.")
-            elif A.ndim == 2:
-                assert E.ndim == 2
-                # assumes the shape is the same as self.A
-                A = A.T.flatten()
-                E = E.T.flatten()
+        if A.ndim > 2 or E.ndim > 2:
+            raise ValueError("A_in, E_in have maximum allowable dimension of 2.")
+        elif A.ndim == 2:
+            assert E.ndim == 2
+            # assumes the shape is the same as self.A
+            A = A.T.flatten()
+            E = E.T.flatten()
 
-            # get ll
-            self.fill_global_func(
-                template_A,
-                template_E,
-                A,
-                E,
-                start_inds,
-                N,
-                num_bin,
-                group_index,
-                data_length,
-            )
+        # get ll
+        self.fill_global_func(
+            template_A,
+            template_E,
+            A,
+            E,
+            start_inds,
+            N,
+            num_bin,
+            group_index,
+            data_length,
+        )
 
         templates[:, 0] = template_A.reshape(total_groups, data_length)
         templates[:, 1] = template_E.reshape(total_groups, data_length)
 
 
     def generate_global_template(
-        self, params, group_index, templates, start_freq_ind=0, min_ind=None, **kwargs,
+        self, params, group_index, templates, start_freq_ind=0, **kwargs,
     ):
         """Get batched log likelihood for global fit
 
@@ -1112,23 +968,20 @@ class GBGPU(object):
         self.injection_params = args
 
         # add each mode to the templates
-        for X, A, E, start_inds, N in zip(
-            self.X_out, self.A_out, self.E_out, self.start_inds, self.Ns
-        ):
-            start = start_inds[0]
+        start = self.start_inds[0]
 
-            # if using GPU, will return to CPU
-            if self.use_gpu:
-                A_temp = A.squeeze().get()
-                E_temp = E.squeeze().get()
+        # if using GPU, will return to CPU
+        if self.use_gpu:
+            A_temp = self.A_out.squeeze().get()
+            E_temp = self.E_out.squeeze().get()
 
-            else:
-                A_temp = A.squeeze()
-                E_temp = E.squeeze()
+        else:
+            A_temp = self.A_out.squeeze()
+            E_temp = self.E_out.squeeze()
 
-            # fill the data streams at the4 proper frqeuencies
-            A_out[start.item() : start.item() + N] = A_temp
-            E_out[start.item() : start.item() + N] = E_temp
+        # fill the data streams at the4 proper frqeuencies
+        A_out[start.item() : start.item() + self.N] = A_temp
+        E_out[start.item() : start.item() + self.N] = E_temp
 
         return A_out, E_out
 
