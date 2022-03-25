@@ -155,7 +155,7 @@ if run_cuda_install:
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
-    ext_gpu = Extension("newfastgb", **ext_gpu_dict)
+    ext_gpu = Extension("gbgpu_utils", **ext_gpu_dict)
 
 cu_files = ["gbgpu_utils"]
 pyx_files = ["GBGPU"]
@@ -170,10 +170,12 @@ ext_cpu_dict = dict(
     library_dirs=[lib_gsl_dir],
     libraries=["gsl", "gslcblas", "gomp"],
     language="c++",
-    extra_compile_args={"gcc": ["-std=c++11", "-fopenmp", "-fPIC"],},  # '-g'],
+    extra_compile_args={
+        "gcc": ["-std=c++11", "-fopenmp", "-fPIC"],
+    },  # '-g'],
     include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
-ext_cpu = Extension("newfastgb_cpu", **ext_cpu_dict)
+ext_cpu = Extension("gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
     extensions = [ext_gpu, ext_cpu]

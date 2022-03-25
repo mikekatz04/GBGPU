@@ -105,38 +105,27 @@
 <h1>Fast GB Waveforms and Likelihoods<a class="headerlink" href="#fast-gb-waveforms-and-likelihoods" title="Permalink to this headline"></a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shift_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Generate Galactic Binary Waveforms</p>
 <p>This class generates galactic binary waveforms in the frequency domain,
 in the form of LISA TDI channels X, A, and E. It generates waveforms in batches.
 It can also provide injection signals and calculate likelihoods in batches.
 These batches are run on GPUs or CPUs. When CPUs are used, all available threads
-are leveraged with OpenMP.</p>
-<p>This class can generate waveforms for four different types of GB sources:</p>
+are leveraged with OpenMP. To adjust the available threads, use <code class="docutils literal notranslate"><span class="pre">OMP_NUM_THREADS</span></code>
+environmental variable or <code class="xref py py-func docutils literal notranslate"><span class="pre">gbgpu.utils.set_omp_num_threads()</span></code>.</p>
+<p>This class can generate waveforms for two different types of GB sources:</p>
 <blockquote>
 <div><ul class="simple">
 <li><p>Circular Galactic binaries</p></li>
-<li><p>Eccentric Galactic binaries (see caveats below)</p></li>
 <li><p>Circular Galactic binaries with an eccentric third body</p></li>
-<li><p>Eccentric Galactic binaries with an eccentric third body</p></li>
 </ul>
 </div></blockquote>
 <p>The class determines which waveform is desired based on the number of argmuments
-input by the user (see the <a href="#id1"><span class="problematic" id="id2">*</span></a>args description below). The eccentric inner binary
-is only roughly valid. It uses a bessel function expansion to get the relative
-amplitudes of various modes (number and index of modes is a user defined quantity).
-Therefore, the inner eccentric binaries are only valid at low eccentricities.
-The eccentricity is also not evolved over time in the current implementation.</p>
+input by the user (see the <code class="docutils literal notranslate"><span class="pre">*args</span></code> description below).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>shift_ind</strong> (<em>int</em><em>, </em><em>optional</em>) – How many points to shift towards lower frequencies
-when calculating the likelihood. This helps to adjust for likelihoods
-that are calculated e.g. with the right summation rule and removing
-the DC component. Default is 2 for right summation and DC removal.</p></li>
-<li><p><strong>use_gpu</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, run on GPUs. Default is False.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>use_gpu</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, run on GPUs. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <dl class="py attribute">
@@ -157,17 +146,6 @@ the DC component. Default is 2 for right summation and DC removal.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Type</dt>
 <dd class="field-odd"><p>bool</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.shift_ind">
-<span class="sig-name descname"><span class="pre">shift_ind</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.shift_ind" title="Permalink to this definition"></a></dt>
-<dd><p>Indices to shift during likelihood calculation. See argument string above.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>int</p>
 </dd>
 </dl>
 </dd></dl>
@@ -286,23 +264,23 @@ the DC component. Default is 2 for right summation and DC removal.</p></li>
 <dt class="sig sig-object py">
 <span class="sig-name descname"><span class="pre">X_out,</span> <span class="pre">A_out,</span> <span class="pre">E_out</span></span></dt>
 <dd><p>X, A, or E channel TDI templates.
-This list is over the modes examined. Within each list entry is a 2D complex array
+Each array is a 2D complex array
 of shape (number of points, number of binaries) that is flattened. These can be
-accessed in python with the properties <code class="code docutils literal notranslate"><span class="pre">X</span></code>, <code class="code docutils literal notranslate"><span class="pre">A</span></code>, <code class="code docutils literal notranslate"><span class="pre">E</span></code>.</p>
+accessed in python with the properties <code class="docutils literal notranslate"><span class="pre">X</span></code>, <code class="docutils literal notranslate"><span class="pre">A</span></code>, <code class="docutils literal notranslate"><span class="pre">E</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>list of 1D complex xp.ndarrays</p>
+<dd class="field-odd"><p>1D complex xp.ndarrays</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.Ns">
-<span class="sig-name descname"><span class="pre">Ns</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.Ns" title="Permalink to this definition"></a></dt>
-<dd><p>List of the number of points in each mode examined.</p>
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.N">
+<span class="sig-name descname"><span class="pre">N</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N" title="Permalink to this definition"></a></dt>
+<dd><p>Last N value used.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>list</p>
+<dd class="field-odd"><p>int</p>
 </dd>
 </dl>
 </dd></dl>
@@ -318,38 +296,16 @@ accessed in python with the properties <code class="code docutils literal notran
 </dl>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.injection_params">
-<span class="sig-name descname"><span class="pre">injection_params</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.injection_params" title="Permalink to this definition"></a></dt>
-<dd><p>last set of params used
-for injection (TODO: improve this method)</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>tuple, list or 1D double array</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.running_d_d">
-<span class="sig-name descname"><span class="pre">running_d_d</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.running_d_d" title="Permalink to this definition"></a></dt>
-<dd><p>Is the likelihood currently run on injeciton. This needs to
-be improved with injection_params above.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>bool</p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.run_wave">
-<span class="sig-name descname"><span class="pre">run_wave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">array([2])</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tdi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.run_wave" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">run_wave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tdi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.run_wave" title="Permalink to this definition"></a></dt>
 <dd><p>Create waveforms in batches.</p>
-<p>This call actually creates the TDI templates in batches. It handles all
-four cases given above based on the number of <a href="#id3"><span class="problematic" id="id4">*</span></a>args provided by the user.</p>
-<p>The parameters and code below are based on an implementation by Travis Robson
-for the paper <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
+<p>This call creates the TDI templates in batches. It handles the
+two cases given above based on the number of <code class="docutils literal notranslate"><span class="pre">*args</span></code> provided by the user.</p>
+<p>The parameters and code below are based on an implementation of Fast GB
+in the LISA Data Challenges’ <code class="docutils literal notranslate"><span class="pre">ldc</span></code> package. The third-body components are originally
+by Travis Robson for the paper <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
+<p># TODO: add citation property</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -357,9 +313,9 @@ for the paper <a class="reference external" href="https://arxiv.org/pdf/1806.005
 <li><p><strong>f0</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial frequency of gravitational
 wave in Hz.</p></li>
 <li><p><strong>fdot</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial time derivative of the
-frequency given as Hz^2.</p></li>
+frequency given as Hz/s.</p></li>
 <li><p><strong>fddot</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial second derivative with
-respect to time of the frequency given in Hz^3.</p></li>
+respect to time of the frequency given in Hz/s^2.</p></li>
 <li><p><strong>phi0</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial phase angle of gravitational
 wave given in radians.</p></li>
 <li><p><strong>iota</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Inclination of the Galactic binary
@@ -371,16 +327,9 @@ given in radians.</p></li>
 <li><p><strong>beta</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Ecliptic Latitude of the source
 given in radians. This is converted to the spherical polar angle.</p></li>
 <li><p><strong>*args</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Flexible parameter to allow for a flexible
-number of argmuments. If running a circular Galactic binarys, <code class="code docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">()</span></code>.
-If running an eccentric binary, <code class="code docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">(e1,</span> <span class="pre">beta1)</span></code>. If running a
-circular inner binary with an eccentric third body,
-<code class="code docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">(A2,</span> <span class="pre">omegabar,</span> <span class="pre">e2,</span> <span class="pre">P2,</span> <span class="pre">T2)</span></code>. If running an eccentric
-inner binary and eccentric third body,
-<code class="code docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">(e1,</span> <span class="pre">beta1,</span> <span class="pre">A2,</span> <span class="pre">omegabar,</span> <span class="pre">e2,</span> <span class="pre">P2,</span> <span class="pre">T2)</span></code>.</p></li>
-<li><p><strong>e1</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Eccentricity of the inner binary.
-The code can handle e1 = 0.0. However, it is recommended to not input e1
-if circular orbits are desired.</p></li>
-<li><p><strong>beta1</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – TODO: fill in.</p></li>
+number of argmuments. If running a circular Galactic binarys, <code class="docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">()</span></code>.
+If running a circular inner binary with an eccentric third body,
+<code class="docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">(A2,</span> <span class="pre">omegabar,</span> <span class="pre">e2,</span> <span class="pre">P2,</span> <span class="pre">T2)</span></code>.</p></li>
 <li><p><strong>A2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Special amplitude parameter related to the
 line-of-site velocity for the third body orbit as defined in the paper
 given in the description above.</p></li>
@@ -391,28 +340,22 @@ given in the description above.</p></li>
 <li><p><strong>P2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Period of the third body orbit in Years.</p></li>
 <li><p><strong>T2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Time of pericenter passage of the third body in Years.
 This parameter is effectively a constant of integration.</p></li>
-<li><p><strong>modes</strong> (<em>int</em><em> or </em><em>1D int np.ndarray</em><em>, </em><em>optional</em>) – j modes to use in the bessel function expansion
-for the eccentricity of the inner binary orbit. Default is np.array([2]) for
-the main mode.</p></li>
-<li><p><strong>N</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of points to produce for the base j=1 mode. Therefore,
-with the default j = 2 mode, the waveform will be 2 * N in length.
-This should be determined by the initial frequency, f0. Default is None.
-If None, will use a function to determine proper N.</p></li>
-<li><p><strong>T</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation time in seconds. Default is 4 years.</p></li>
-<li><p><strong>dt</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation cadence in seconds. Default is 10.0 seconds.</p></li>
-<li><p><strong>oversample</strong> (<em>int</em><em>, </em><em>optional</em>) – Oversampling factor compared to the determined <code class="code docutils literal notranslate"><span class="pre">N</span></code>
-value. Final N will be <code class="code docutils literal notranslate"><span class="pre">oversample</span> <span class="pre">*</span> <span class="pre">N</span></code>. This is only used if N is
-not provided. Default is 1.</p></li>
-<li><p><strong>Raises</strong> – ValueError: Length of <a href="#id5"><span class="problematic" id="id6">*</span></a>args is not 0, 2, 5, or 7.</p></li>
+<li><p><strong>N</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of points in waveform.
+This should be determined by the initial frequency, <code class="docutils literal notranslate"><span class="pre">f0</span></code>. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, will use <code class="xref py py-func docutils literal notranslate"><span class="pre">gbgpu.utils.utility.get_N()</span></code> function to determine proper <code class="docutils literal notranslate"><span class="pre">N</span></code>.</p></li>
+<li><p><strong>T</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation time in seconds. Default is <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">*</span> <span class="pre">YEAR</span></code>.</p></li>
+<li><p><strong>dt</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation cadence in seconds. Default is <code class="docutils literal notranslate"><span class="pre">10.0</span></code> seconds.</p></li>
+<li><p><strong>oversample</strong> (<em>int</em><em>, </em><em>optional</em>) – Oversampling factor compared to the determined <code class="docutils literal notranslate"><span class="pre">N</span></code>
+value. Final N will be <code class="docutils literal notranslate"><span class="pre">oversample</span> <span class="pre">*</span> <span class="pre">N</span></code>. This is only used if N is
+not provided. Default is <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><strong>tdi2</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, produce the TDI channels for TDI 2nd-generation.
+If <code class="docutils literal notranslate"><span class="pre">False</span></code>, produce TDI 1st-generation. Technically, the current TDI computation
+is not valid for generic LISA orbits, which are dealth with with 2nd-generation TDI,
+only those with an “equal-arm length” condition. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>Raises</strong> – ValueError: Length of <code class="docutils literal notranslate"><span class="pre">*args</span></code> is not 0 or 5.</p></li>
 </ul>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.computeXYZ">
-<span class="sig-name descname"><span class="pre">computeXYZ</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Gs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fstar</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ampl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tm</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.computeXYZ" title="Permalink to this definition"></a></dt>
-<dd><p>Compute TDI X, Y, Z from y_sr</p>
 </dd></dl>
 
 <dl class="py property">
@@ -441,30 +384,53 @@ not provided. Default is 1.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.get_ll">
-<span class="sig-name descname"><span class="pre">get_ll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calc_d_d</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase_marginalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_ll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase_marginalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll" title="Permalink to this definition"></a></dt>
 <dd><p>Get batched log likelihood</p>
-<p>Generate the log likelihood for a batched set of Galactic binaries. This is
-also GPU/CPU agnostic.</p>
+<p>Generate the individual log likelihood for a batched set of Galactic binaries.
+This is also GPU/CPU agnostic.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>params</strong> (<em>list</em><em>, </em><em>tuple</em><em> or </em><em>array of 1D double np.ndarrays</em>) – Array-like object containing
-the parameters of all binaries to be calculated. The shape is
-(number of parameters, number of binaries).</p></li>
-<li><p><strong>data</strong> (<em>length 2 list of 1D complex128 xp.ndarrays</em>) – List of arrays representing the data
+<li><p><strong>params</strong> (<em>2D double np.ndarrays</em>) – Parameters of all binaries to be calculated.
+The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">binaries)</span></code>.</p></li>
+<li><p><strong>data</strong> (<em>length 2 list of 1D</em><em> or </em><em>2D complex128 xp.ndarrays</em>) – List of arrays representing the data
 stream. These should be CuPy arrays if running on the GPU, NumPy
-arrays if running on a CPU. The list should be [A channel, E channel].</p></li>
-<li><p><strong>psd</strong> (<em>length 2 list of 1D double xp.ndarrays</em>) – List of arrays representing
-the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
+arrays if running on a CPU. The list should be [A channel, E channel].
+Should be 1D if only one data stream is analyzed. If 2D, shape is
+<code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">data</span> <span class="pre">streams,</span> <span class="pre">data_length)</span></code>. If 2D,
+user must also provide <code class="docutils literal notranslate"><span class="pre">data_index</span></code> kwarg.</p></li>
+<li><p><strong>psd</strong> (<em>length 2 list of 1D</em><em> or </em><em>2D double xp.ndarrays</em>) – List of arrays representing
+the power spectral density (PSD) in the noise.
 These should be CuPy arrays if running on the GPU, NumPy
-arrays if running on a CPU. The list should be [A channel, E channel].</p></li>
+arrays if running on a CPU. The list should be [A channel, E channel].
+Should be 1D if only one PSD is analyzed. If 2D, shape is
+<code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">PSDs,</span> <span class="pre">data_length)</span></code>. If 2D,
+user must also provide <code class="docutils literal notranslate"><span class="pre">noise_index</span></code> kwarg.</p></li>
 <li><p><strong>phase_marginalize</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, marginalize over the initial phase.
 Default is False.</p></li>
-<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes keyword arguments to run_wave function above.</p></li>
+<li><p><strong>start_freq_ind</strong> (<em>int</em><em>, </em><em>optional</em>) – Starting index into the frequency-domain data stream
+for the first entry of <code class="docutils literal notranslate"><span class="pre">data</span></code>/<code class="docutils literal notranslate"><span class="pre">psd</span></code>. This is used if a subset of a full data stream
+is presented for the computation. If providing mutliple data streams in <code class="docutils literal notranslate"><span class="pre">data</span></code>, this single
+start index value will apply to all of them.</p></li>
+<li><p><strong>data_index</strong> (<em>1D xp.int32 array</em><em>, </em><em>optional</em>) – If providing 2D <code class="docutils literal notranslate"><span class="pre">data</span></code>, need to provide <code class="docutils literal notranslate"><span class="pre">data_index</span></code>
+to indicate the data stream associated with each waveform for which the log-Likelihood
+is being computed. For example, if you have 100 binaries with 5 different data streams,
+<code class="docutils literal notranslate"><span class="pre">data_index</span></code> will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
+data stream to use for each source.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, this will be filled with zeros and only analyzed with the first
+data stream given. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>noise_index</strong> (<em>1D xp.int32 array</em><em>, </em><em>optional</em>) – If providing 2D <code class="docutils literal notranslate"><span class="pre">psd</span></code>, need to provide <code class="docutils literal notranslate"><span class="pre">noise_index</span></code>
+to indicate the PSD associated with each waveform for which the log-Likelihood
+is being computed. For example, if you have 100 binaries with 5 different PSDs,
+<code class="docutils literal notranslate"><span class="pre">noise_index</span></code> will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
+PSD to use for each source.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, this will be filled with zeros and only analyzed with the first
+PSD given. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes keyword arguments to the <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> method.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises</dt>
-<dd class="field-even"><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.</p>
+<dd class="field-even"><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while template arrays are CuPy/NumPy.</p>
 </dd>
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>Log likelihood values associated with each binary.</p>
@@ -477,93 +443,94 @@ Default is False.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.fill_global_template">
-<span class="sig-name descname"><span class="pre">fill_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A_in</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E_in</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_inds_in</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Ns_in</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="Permalink to this definition"></a></dt>
-<dd><p>Get batched log likelihood for global fit</p>
-<p># TODO: Adjust</p>
-<p>Generate the log likelihood for a batched set of Galactic binaries. This is
-also GPU/CPU agnostic.</p>
+<span class="sig-name descname"><span class="pre">fill_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_inds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="Permalink to this definition"></a></dt>
+<dd><p>Fill many global templates with waveforms</p>
+<p>This method takes already generated waveforms (<code class="docutils literal notranslate"><span class="pre">A,</span> <span class="pre">E,</span> <span class="pre">start_inds</span></code>)
+and their associated grouping index (<code class="docutils literal notranslate"><span class="pre">group_index</span></code>) and fills
+buffer tempalte arrays (<code class="docutils literal notranslate"><span class="pre">templates</span></code>).</p>
+<p>This method combines waveforms that have already been created.
+When a user does not have the waveforms in hand, they should
+use the <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.generate_global_template" title="gbgpu.gbgpu.GBGPU.generate_global_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_global_template()</span></code></a> method.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>params</strong> (<em>list</em><em>, </em><em>tuple</em><em> or </em><em>array of 1D double np.ndarrays</em>) – Array-like object containing
-the parameters of all binaries to be calculated. The shape is
-(number of parameters, number of binaries).</p></li>
-<li><p><strong>data</strong> (<em>length 2 list of 1D complex128 xp.ndarrays</em>) – List of arrays representing the data
-stream. These should be CuPy arrays if running on the GPU, NumPy
-arrays if running on a CPU. The list should be [A channel, E channel].</p></li>
-<li><p><strong>psd</strong> (<em>length 2 list of 1D double xp.ndarrays</em>) – List of arrays representing
-the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
-These should be CuPy arrays if running on the GPU, NumPy
-arrays if running on a CPU. The list should be [A channel, E channel].</p></li>
-<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes keyword arguments to run_wave function above.</p></li>
+<li><p><strong>group_index</strong> (<em>1D double int32 xp.ndarray</em>) – Index indicating to which template each individual binary belongs.</p></li>
+<li><p><strong>templates</strong> (<em>3D complex128 xp.ndarray</em>) – Buffer array for template output to filled in place.
+The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">templates,</span> <span class="pre">2,</span> <span class="pre">data_length)</span></code>. The <code class="docutils literal notranslate"><span class="pre">2</span></code> is
+for the <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">E</span></code> TDI channels in that order.</p></li>
+<li><p><strong>A</strong> (<em>1D</em><em> or </em><em>2D complex128 xp.ndarray</em>) – TDI A channel template values for each individual binary.
+The shape if 2D is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">binaries,</span> <span class="pre">N)''.</span> <span class="pre">In</span> <span class="pre">1D,</span> <span class="pre">the</span> <span class="pre">array</span> <span class="pre">should</span> <span class="pre">be</span> <span class="pre">arranged</span> <span class="pre">so</span> <span class="pre">that</span>
+<span class="pre">it</span> <span class="pre">resembles</span> <span class="pre">``(number</span> <span class="pre">of</span> <span class="pre">binaries,</span> <span class="pre">N).transpose().flatten()</span></code>.
+After running waveforms, this is how <code class="docutils literal notranslate"><span class="pre">self.A_out</span></code> is arranged.</p></li>
+<li><p><strong>E</strong> (<em>1D 2D complex128 xp.ndarray</em>) – TDI E channel template values for each individual binary.
+The shape if 2D is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">binaries,</span> <span class="pre">N)''.</span> <span class="pre">In</span> <span class="pre">1D,</span> <span class="pre">the</span> <span class="pre">array</span> <span class="pre">should</span> <span class="pre">be</span> <span class="pre">arranged</span> <span class="pre">so</span> <span class="pre">that</span>
+<span class="pre">it</span> <span class="pre">resembles</span> <span class="pre">``(number</span> <span class="pre">of</span> <span class="pre">binaries,</span> <span class="pre">N).transpose().flatten()</span></code>.
+After running waveforms, this is how <code class="docutils literal notranslate"><span class="pre">self.E_out</span></code> is arranged.</p></li>
+<li><p><strong>start_inds</strong> (<em>1D int32 xp.ndarray</em>) – The start indices of each binary waveform
+in the full Fourier transform: <code class="docutils literal notranslate"><span class="pre">int(f0/T)</span> <span class="pre">-</span> <span class="pre">N/2</span></code>.</p></li>
+<li><p><strong>N</strong> (<em>int</em><em>, </em><em>optional</em>) – The length of the A and E channels for each individual binary.
+When <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">E</span></code> are 1D, <code class="docutils literal notranslate"><span class="pre">N</span></code> must be given. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>start_freq_ind</strong> (<em>int</em><em>, </em><em>optional</em>) – Starting index into the frequency-domain data stream
+for the first entry of <code class="docutils literal notranslate"><span class="pre">templates</span></code>. This is used if a subset of a full data stream
+is presented for the computation.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises</dt>
-<dd class="field-even"><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.</p>
-</dd>
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>Log likelihood values associated with each binary.</p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>1D double np.ndarray</p>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.</p></li>
+<li><p><strong>ValueError</strong> – Inputs are not correctly provided.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.generate_global_template">
-<span class="sig-name descname"><span class="pre">generate_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.generate_global_template" title="Permalink to this definition"></a></dt>
-<dd><p>Get batched log likelihood for global fit</p>
-<p>Generate the log likelihood for a batched set of Galactic binaries. This is
-also GPU/CPU agnostic.</p>
+<span class="sig-name descname"><span class="pre">generate_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.generate_global_template" title="Permalink to this definition"></a></dt>
+<dd><p>Generate global templates from binary parameters</p>
+<p>Generate waveforms in batches and then combine them into
+global fit templates. This method wraps <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="gbgpu.gbgpu.GBGPU.fill_global_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">fill_global_template()</span></code></a>
+by building the waveforms first.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>params</strong> (<em>list</em><em>, </em><em>tuple</em><em> or </em><em>array of 1D double np.ndarrays</em>) – Array-like object containing
-the parameters of all binaries to be calculated. The shape is
-(number of parameters, number of binaries).</p></li>
-<li><p><strong>data</strong> (<em>length 2 list of 1D complex128 xp.ndarrays</em>) – List of arrays representing the data
-stream. These should be CuPy arrays if running on the GPU, NumPy
-arrays if running on a CPU. The list should be [A channel, E channel].</p></li>
-<li><p><strong>psd</strong> (<em>length 2 list of 1D double xp.ndarrays</em>) – List of arrays representing
-the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
-These should be CuPy arrays if running on the GPU, NumPy
-arrays if running on a CPU. The list should be [A channel, E channel].</p></li>
-<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes keyword arguments to run_wave function above.</p></li>
+<li><p><strong>params</strong> (<em>2D double np.ndarrays</em>) – Parameters of all binaries to be calculated.
+The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">binaries)</span></code>.</p></li>
+<li><p><strong>group_index</strong> (<em>1D double int32 xp.ndarray</em>) – Index indicating to which template each individual binary belongs.</p></li>
+<li><p><strong>templates</strong> (<em>3D complex128 xp.ndarray</em>) – Buffer array for template output to filled in place.
+The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">templates,</span> <span class="pre">2,</span> <span class="pre">data_length)</span></code>. The <code class="docutils literal notranslate"><span class="pre">2</span></code> is
+for the <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">E</span></code> TDI channels in that order.</p></li>
+<li><p><strong>start_freq_ind</strong> (<em>int</em><em>, </em><em>optional</em>) – Starting index into the frequency-domain data stream
+for the first entry of <code class="docutils literal notranslate"><span class="pre">templates</span></code>. This is used if a subset of a full data stream
+is presented for the computation.</p></li>
+<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes keyword arguments to <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> function above.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Raises</dt>
-<dd class="field-even"><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.</p>
-</dd>
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>Log likelihood values associated with each binary.</p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>1D double np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.inject_signal">
-<span class="sig-name descname"><span class="pre">inject_signal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.inject_signal" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">inject_signal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.inject_signal" title="Permalink to this definition"></a></dt>
 <dd><p>Inject a single signal</p>
 <p>Provides the injection of a single signal into a data stream with frequencies
-spanning from 0.0 to fmax with 1/T spacing.</p>
+spanning from 0.0 to fmax with 1/T spacing (from Fourier transform).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>*args</strong> (<em>list</em><em>, </em><em>tuple</em><em>, or </em><em>1D double np.array</em>) – Arguments to provide to
-run_wave to build the TDI templates for injection.</p></li>
+<a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> to build the TDI templates for injection.</p></li>
 <li><p><strong>fmax</strong> (<em>double</em><em>, </em><em>optional</em>) – Maximum frequency to use in data stream.
-Default is 1e-1.</p></li>
-<li><p><strong>T</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation time in seconds. Default is 4 years.</p></li>
-<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes kwargs to run_wave.</p></li>
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, will use <code class="docutils literal notranslate"><span class="pre">1/(2</span> <span class="pre">*</span> <span class="pre">dt)</span></code>.
+Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>T</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation time in seconds. Default is <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">*</span> <span class="pre">YEAR</span></code>.</p></li>
+<li><p><strong>dt</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation cadence in seconds. Default is <code class="docutils literal notranslate"><span class="pre">10.0</span></code> seconds.</p></li>
+<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes kwargs to <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p><dl class="simple">
-<dt>NumPy arrays for the A channel and</dt><dd><p>E channel: (A channel, E channel). Need to conver to CuPy if working
+<dt>NumPy arrays for the A channel and</dt><dd><p>E channel: <code class="docutils literal notranslate"><span class="pre">(A</span> <span class="pre">channel,</span> <span class="pre">E</span> <span class="pre">channel)</span></code>. Need to convert to CuPy if working
 on GPU.</p>
 </dd>
 </dl>
@@ -592,7 +559,7 @@ rac{-h(lambda_i + 2epsilon) + h(lambda_i - 2epsilon) + 8(h(lambda_i + epsilon) -
 <div><dl class="simple">
 <dt>Args:</dt><dd><dl class="simple">
 <dt>params (2D double np.ndarray): 2D array with the parameter values of the batch.</dt><dd><p>The shape should be (number of parameters, number of binaries).
-See <code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.GBGPU.run_Wave</span></code> for more information on the adjustable
+See <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> for more information on the adjustable
 number of parameters when calculating for a third body.</p>
 </dd>
 <dt>eps (double, optional): Step to take when calculating the derivative.</dt><dd><p>Default is 1e-9.</p>

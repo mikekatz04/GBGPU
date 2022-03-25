@@ -8,14 +8,9 @@ import numpy as np
 from gbgpu.utils.constants import *
 
 # import Cython classes
-from newfastgb_cpu import get_basis_tensors as get_basis_tensors_cpu
-from newfastgb_cpu import GenWave as GenWave_cpu
-from newfastgb_cpu import unpack_data_1 as unpack_data_1_cpu
-from newfastgb_cpu import XYZ as XYZ_cpu
-from newfastgb_cpu import get_ll as get_ll_cpu
-from newfastgbthird_cpu import GenWaveThird as GenWave_third_cpu
-from newfastgb_cpu import fill_global as fill_global_cpu
-from newfastgb_cpu import direct_like_wrap as direct_like_wrap_cpu
+from gbgpu_utils_cpu import get_ll as get_ll_cpu
+from gbgpu_utils_cpu import fill_global as fill_global_cpu
+from gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 try:
     from lisatools import sensitivity as tdi
@@ -29,157 +24,16 @@ except (ModuleNotFoundError, ImportError) as e:
 # import for GPU if available
 try:
     import cupy as xp
-    from newfastgb import (
-        get_basis_tensors,
-        GenWave,
-        unpack_data_1,
-        XYZ,
+    from gbgpu_utils import (
         get_ll,
         fill_global,
         direct_like_wrap,
     )
-    from newfastgbthird import GenWaveThird as GenWave_third
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
 
-from gbgpu.utils.utility import get_N
-
-
-def AET(X, Y, Z):
-    return (
-        (Z - X) / np.sqrt(2.0),
-        (X - 2.0 * Y + Z) / np.sqrt(6.0),
-        (X + Y + Z) / np.sqrt(3.0),
-    )
-
-def get_u(l, e):
-
-    ######################/
-    ##
-    ## Invert Kepler's equation l = u - e sin(u)
-    ## Using Mikkola's method (1987)
-    ## referenced Tessmer & Gopakumar 2007
-    ##
-    ######################/
-
-    #double u0                            ## initial guess at eccentric anomaly
-    #double z, alpha, beta, s, w        ## auxiliary variables
-    #double mult                        ## multiple number of 2pi
-
-    #int neg         = 0                    // check if l is negative
-    #int over2pi  = 0                    // check if over 2pi
-    #int overpi     = 0                    // check if over pi but not 2pi
-
-    #double f, f1, f2, f3, f4            // pieces of root finder
-    #double u, u1, u2, u3, u4
-
-    # enforce the mean anomaly to be in the domain -pi < l < pi
-    neg = l < 0
-    l = l * np.sign(l)
-
-    over2pi = l > 2 * np.pi
-    mult = np.floor(l[over2pi] / (2 * np.pi))
-    l[over2pi] -= mult*2.*np.pi
-
-    overpi = l > np.pi
-    l[overpi]       = 2.*np.pi - l[overpi]
-    
-    #if (l < 0)
-    #{
-    #    neg = 1
-    #    l   = -l
-    #}
-    #if (l > 2.*M_PI)
-    #{
-    #    over2pi = 1
-    #    mult    = floor(l/(2.*M_PI))
-    #    l       -= mult*2.*M_PI
-    #}
-    #if (l > M_PI)
-    ##    overpi = 1
-    #    l       = 2.*M_PI - l
-    #}
-
-    alpha = (1. - e)/(4.*e + 0.5)
-    beta  = 0.5*l/(4.*e + 0.5)
-
-    z = np.sqrt(beta*beta + alpha*alpha*alpha)
-    z[:] = (beta - z) * (neg) + (beta + z) * (~neg)
-
-    #if (neg == 1) z = beta - z
-    #else          z = beta + z
-
-    # to handle nan's from negative arguments
-    #if (z < 0.) z = -pow(-z, 0.3333333333333333)
-    #else         z =  pow( z, 0.3333333333333333)
-    z[z < 0] = -(-z[z < 0]) ** (1/3)
-    z[z >= 0] = z[z >= 0] ** (1/3)
-    s  = z - alpha/z
-    w  = s - 0.078*s*s*s*s*s/(1. + e)
-
-    u0 = l + e*(3.*w - 4.*w*w*w)
-
-    # now this initial guess must be iterated once with a 4th order Newton root finder
-    f  = u0 - e*np.sin(u0) - l
-    f1 = 1. - e*np.cos(u0)
-    f2 = u0 - f - l
-    f3 = 1. - f1
-    f4 = -f2
-
-    f2 *= 0.5
-    f3 *= 0.166666666666667
-    f4 *= 0.0416666666666667
-
-    u1 = -f/f1
-    u2 = -f/(f1 + f2*u1)
-    u3 = -f/(f1 + f2*u2 + f3*u2*u2)
-    u4 = -f/(f1 + f2*u3 + f3*u3*u3 + f4*u3*u3*u3)
-
-    u = u0 + u4
-
-    u[overpi] = (2.*np.pi - u[overpi])
-    u[over2pi] = (2.*np.pi*mult + u[over2pi])
-    u[neg] *= -1
-
-    #if (overpi  == 1) u = 2.*M_PI - u
-    #if (over2pi == 1) u = 2.*M_PI*mult + u
-    #if (neg        == 1) u = -u
-
-    return u
-
-# get phi value for Line-of-sight velocity. See arXiv:1806.00500
-def get_phi( t,  T,  e,  n):
-    u = get_u(n[:, None, None]*(t-T[:, None, None]), e[:, None, None])
-
-    adjust =  (e > 1e-6)   # return u
-
-    # adjust if not circular
-    beta = (1. - np.sqrt(1. - e[adjust]*e[adjust]))/e[adjust]
-    u[adjust] += 2.*np.arctan2( beta[:, None, None]*np.sin(u[adjust]), 1. - beta[:, None, None]*np.cos(u[adjust]))
-    return u
-
-# calculate the line-of-site velocity
-# see equation 13 in arXiv:1806.00500
-def get_vLOS(t, A2,  omegabar,  e2,  n2,  T2):
-    phi2 = get_phi(t, T2, e2, n2)
-    return A2[:, None, None]*(np.sin(phi2 + omegabar[:, None, None]) + e2[:, None, None]*np.sin(omegabar[:, None, None]))
-
-def get_fGW(f0,  fdot,  fddot,  T,  t):
-    # assuming t0 = 0.
-    return f0[:, None, None] + fdot[:, None, None]*t + 0.5*fddot[:, None, None]*t*t
-
-def parab_step_ET(f0,  fdot,  fddot,  A2,  omegabar,  e2,  n2,  T2,  t0,  t0_old,  T):
-    dtt = t0 - t0_old
-    get_fGW( f0,  fdot,  fddot, T, t0_old)
-    g1 = get_vLOS(t0_old, A2, omegabar, e2, n2, T2) * get_fGW( f0,  fdot,  fddot, T, t0_old)
-    # g2 = get_vLOS(A2, omegabar, e2, n2, T2, (t0 + t0_old)/2.)*get_fGW(f0,  fdot,  fddot, T, (t0 + t0_old)/2.)
-    g3 = get_vLOS(t0, A2, omegabar, e2, n2, T2) * get_fGW(f0,  fdot,  fddot, T, t0)
-
-    # return area from trapezoidal rule
-    return (dtt * (g1 + g3)/2.*PI2/Clight)
-
-
+from gbgpu.utils.utility import *
 
 
 class GBGPU(object):
@@ -189,34 +43,23 @@ class GBGPU(object):
     in the form of LISA TDI channels X, A, and E. It generates waveforms in batches.
     It can also provide injection signals and calculate likelihoods in batches.
     These batches are run on GPUs or CPUs. When CPUs are used, all available threads
-    are leveraged with OpenMP.
+    are leveraged with OpenMP. To adjust the available threads, use ``OMP_NUM_THREADS``
+    environmental variable or :func:`gbgpu.utils.set_omp_num_threads`.
 
-    This class can generate waveforms for four different types of GB sources:
+    This class can generate waveforms for two different types of GB sources:
 
         * Circular Galactic binaries
-        * Eccentric Galactic binaries (see caveats below)
         * Circular Galactic binaries with an eccentric third body
-        * Eccentric Galactic binaries with an eccentric third body
 
     The class determines which waveform is desired based on the number of argmuments
-    input by the user (see the *args description below). The eccentric inner binary
-    is only roughly valid. It uses a bessel function expansion to get the relative
-    amplitudes of various modes (number and index of modes is a user defined quantity).
-    Therefore, the inner eccentric binaries are only valid at low eccentricities.
-    The eccentricity is also not evolved over time in the current implementation.
-
+    input by the user (see the ``*args`` description below).
 
     Args:
-        shift_ind (int, optional): How many points to shift towards lower frequencies
-            when calculating the likelihood. This helps to adjust for likelihoods
-            that are calculated e.g. with the right summation rule and removing
-            the DC component. Default is 2 for right summation and DC removal.
-        use_gpu (bool, optional): If True, run on GPUs. Default is False.
+        use_gpu (bool, optional): If True, run on GPUs. Default is ``False``.
 
     Attributes:
         xp (obj): NumPy if on CPU. CuPy if on GPU.
         use_gpu (bool): Use GPU if True.
-        shift_ind (int): Indices to shift during likelihood calculation. See argument string above.
         get_basis_tensors (obj): Cython function.
         GenWave (obj): Cython function.
         GenWaveThird (obj): Cython function.
@@ -227,49 +70,33 @@ class GBGPU(object):
         N_max (int): Maximum points in a waveform based on maximum harmonic mode considered.
         start_inds (list of 1D int xp.ndarray): Start indices into data stream array. q - N/2.
         df (double): Fourier bin spacing.
-        X_out, A_out, E_out (list of 1D complex xp.ndarrays): X, A, or E channel TDI templates.
-            This list is over the modes examined. Within each list entry is a 2D complex array
+        X_out, A_out, E_out (1D complex xp.ndarrays): X, A, or E channel TDI templates.
+            Each array is a 2D complex array
             of shape (number of points, number of binaries) that is flattened. These can be
-            accessed in python with the properties :code:`X`, :code:`A`, :code:`E`.
-        Ns (list): List of the number of points in each mode examined.
+            accessed in python with the properties ``X``, ``A``, ``E``.
+        N (int): Last N value used.
         d_d (double): <d|d> term in the likelihood.
-        injection_params (tuple, list or 1D double array): last set of params used
-            for injection (TODO: improve this method)
-        running_d_d (bool): Is the likelihood currently run on injeciton. This needs to
-            be improved with injection_params above.
 
     """
 
-    def __init__(self, shift_ind=2, use_gpu=False):
+    def __init__(self, use_gpu=False):
 
         self.use_gpu = use_gpu
-        self.shift_ind = shift_ind
 
         # setup Cython/C++/CUDA calls based on if using GPU
         if self.use_gpu:
             self.xp = xp
-            self.get_basis_tensors = get_basis_tensors
-            self.GenWave = GenWave
-            self.GenWaveThird = GenWave_third
-            self.unpack_data_1 = unpack_data_1
-            self.XYZ = XYZ
             self.get_ll_func = get_ll
             self.fill_global_func = fill_global
             self.global_get_ll_func = direct_like_wrap
 
         else:
             self.xp = np
-            self.get_basis_tensors = get_basis_tensors_cpu
-            self.GenWave = GenWave_cpu
-            self.GenWaveThird = GenWave_third_cpu
-            self.unpack_data_1 = unpack_data_1_cpu
-            self.XYZ = XYZ_cpu
             self.get_ll_func = get_ll_cpu
             self.fill_global_func = fill_global_cpu
             self.global_get_ll_func = direct_like_wrap_cpu
 
         self.d_d = None
-        self.running_d_d = False
 
     def run_wave(
         self,
@@ -291,20 +118,23 @@ class GBGPU(object):
     ):
         """Create waveforms in batches.
 
-        This call actually creates the TDI templates in batches. It handles all
-        four cases given above based on the number of *args provided by the user.
+        This call creates the TDI templates in batches. It handles the
+        two cases given above based on the number of ``*args`` provided by the user.
 
-        The parameters and code below are based on an implementation by Travis Robson
-        for the paper `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+        The parameters and code below are based on an implementation of Fast GB
+        in the LISA Data Challenges' ``ldc`` package. The third-body components are originally
+        by Travis Robson for the paper `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+
+        # TODO: add citation property
 
         Args:
             amp (double or 1D double np.ndarray): Amplitude parameter.
             f0 (double or 1D double np.ndarray): Initial frequency of gravitational
                 wave in Hz.
             fdot (double or 1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz^2.
+                frequency given as Hz/s.
             fddot (double or 1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz^3.
+                respect to time of the frequency given in Hz/s^2.
             phi0 (double or 1D double np.ndarray): Initial phase angle of gravitational
                 wave given in radians.
             iota (double or 1D double np.ndarray): Inclination of the Galactic binary
@@ -316,9 +146,9 @@ class GBGPU(object):
             beta (double or 1D double np.ndarray): Ecliptic Latitude of the source
                 given in radians. This is converted to the spherical polar angle.
             *args (tuple, optional): Flexible parameter to allow for a flexible
-                number of argmuments. If running a circular Galactic binarys, :code:`args = ()`.
+                number of argmuments. If running a circular Galactic binarys, ``args = ()``.
                 If running a circular inner binary with an eccentric third body,
-                :code:`args = (A2, omegabar, e2, P2, T2)`.
+                ``args = (A2, omegabar, e2, P2, T2)``.
             A2 (double or 1D double np.ndarray): Special amplitude parameter related to the
                 line-of-site velocity for the third body orbit as defined in the paper
                 given in the description above.
@@ -329,27 +159,29 @@ class GBGPU(object):
             P2 (double or 1D double np.ndarray): Period of the third body orbit in Years.
             T2 (double or 1D double np.ndarray): Time of pericenter passage of the third body in Years.
                 This parameter is effectively a constant of integration.
-            N (int, optional): Number of points to produce for the base j=1 mode. Therefore,
-                with the default j = 2 mode, the waveform will be 2 * N in length.
-                This should be determined by the initial frequency, f0. Default is None.
-                If None, will use a function to determine proper N.
-            T (double, optional): Observation time in seconds. Default is 4 years.
-            dt (double, optional): Observation cadence in seconds. Default is 10.0 seconds.
-            oversample(int, optional): Oversampling factor compared to the determined :code:`N`
-                value. Final N will be :code:`oversample * N`. This is only used if N is
-                not provided. Default is 1.
+            N (int, optional): Number of points in waveform.
+                This should be determined by the initial frequency, ``f0``. Default is ``None``.
+                If ``None``, will use :func:`gbgpu.utils.utility.get_N` function to determine proper ``N``.
+            T (double, optional): Observation time in seconds. Default is ``4 * YEAR``.
+            dt (double, optional): Observation cadence in seconds. Default is ``10.0`` seconds.
+            oversample(int, optional): Oversampling factor compared to the determined ``N``
+                value. Final N will be ``oversample * N``. This is only used if N is
+                not provided. Default is ``1``.
+            tdi2 (bool, optional): If ``True``, produce the TDI channels for TDI 2nd-generation.
+                If ``False``, produce TDI 1st-generation. Technically, the current TDI computation
+                is not valid for generic LISA orbits, which are dealth with with 2nd-generation TDI,
+                only those with an "equal-arm length" condition. Default is ``False``.
 
             Raises:
-                ValueError: Length of *args is not 0, 2, 5, or 7.
+                ValueError: Length of ``*args`` is not 0 or 5.
 
         """
 
+        # get number of observation points and adjust T accordingly
         N_obs = int(T / dt)
         T = N_obs * dt
 
         # if given scalar parameters, make sure at least 1D
-        modes = np.atleast_1d(modes)
-
         amp = np.atleast_1d(amp)
         f0 = np.atleast_1d(f0)
         fdot = np.atleast_1d(fdot)
@@ -372,18 +204,18 @@ class GBGPU(object):
 
         else:
             raise ValueError(
-                "Wrong number of extra arguments. Needs to be 2 for eccentric inner binary, 5 for circular inner binary and a third body, or 7 for eccentric inner and third body."
+                f"Wrong number of extra arguments. Needs to be 5 for circular inner binary and a third body. Currently, args has length {len(args)}."
             )
 
+        # set N if it is not given based on timescales in the waveform
         if N is None:
-            N_temp = self._get_N(amp, f0, T, oversample=oversample, P2=P2)
+            N_temp = get_N(amp, f0, T, oversample=oversample, P2=P2)
             N = N_temp.max()
 
         # number of binaries is determined from length of amp array
         self.num_bin = num_bin = len(amp)
 
-        num_modes = len(modes)
-
+        # polar angle from ecliptic latitude
         theta = np.pi / 2 - beta
 
         # bin spacing
@@ -416,6 +248,7 @@ class GBGPU(object):
 
             # get mean anomaly
             n2 = 2 * np.pi / (P2 * YEAR)
+
             T2 *= YEAR
 
             # copy to GPU if needed
@@ -432,96 +265,144 @@ class GBGPU(object):
             args_third = ()
             self.is_third = False
 
-        # get lengths of the output waveforms for each mode
         self.N = N
 
         # figure out start inds
-        q_check = (f0 * T * j / 2.0).astype(np.int32)
+        q_check = (f0 * T).astype(np.int32)
         self.start_inds = (q_check - N / 2).astype(xp.int32)
 
         cosiota = self.xp.cos(iota)
-        fstar = Clight/(Larm * 2 * np.pi)
-        cosps, sinps = self.xp.cos(2.*psi), self.xp.sin(2.*psi)
-        Aplus = amp *( 1.+ cosiota*cosiota)
+
+        # transfer frequency
+        fstar = Clight / (Larm * 2 * np.pi)
+
+        cosps, sinps = self.xp.cos(2.0 * psi), self.xp.sin(2.0 * psi)
+
+        Aplus = amp * (1.0 + cosiota * cosiota)
         Across = -2.0 * amp * cosiota
+
         DP = Aplus * cosps - 1.0j * Across * sinps
         DC = -Aplus * sinps - 1.0j * Across * cosps
 
+        # sky location basis vectors
         sinth, costh = self.xp.sin(theta), self.xp.cos(theta)
         sinph, cosph = self.xp.sin(lam), self.xp.cos(lam)
-        u = self.xp.array([costh*cosph, costh*sinph, -sinth]).T[:, None, :]
+        u = self.xp.array([costh * cosph, costh * sinph, -sinth]).T[:, None, :]
         v = self.xp.array([sinph, -cosph, self.xp.zeros_like(cosph)]).T[:, None, :]
-        k = self.xp.array([-sinth*cosph, -sinth*sinph, -costh]).T[:, None, :]
+        k = self.xp.array([-sinth * cosph, -sinth * sinph, -costh]).T[:, None, :]
 
-        eplus = self.xp.matmul(v.transpose(0, 2, 1), v) - self.xp.matmul(u.transpose(0, 2, 1), u)
-        ecross = self.xp.matmul(u.transpose(0, 2, 1), v) + self.xp.matmul(v.transpose(0, 2, 1), u)
+        # polarization tensors
+        eplus = self.xp.matmul(v.transpose(0, 2, 1), v) - self.xp.matmul(
+            u.transpose(0, 2, 1), u
+        )
+        ecross = self.xp.matmul(u.transpose(0, 2, 1), v) + self.xp.matmul(
+            v.transpose(0, 2, 1), u
+        )
 
+        # time points evaluated
         tm = self.xp.linspace(0, T, num=N, endpoint=False)
 
+        # get the spacecraft positions from orbits
         Ps = self._spacecraft(tm)
 
-        Gs, q = self._construct_slow_part(T, Larm, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third)
+        # time domain information
+        Gs, q = self._construct_slow_part(
+            T,
+            Larm,
+            Ps,
+            tm,
+            f0,
+            fdot,
+            fddot,
+            fstar,
+            phi0,
+            k,
+            DP,
+            DC,
+            eplus,
+            ecross,
+            *args_third,
+        )
+
+        # transform to TDI observables
         XYZf, f0_out = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
-        df = 1/T 
-        kmin = np.round(f0_out/df).astype(int)
-        fctr = 0.5*T/N
+        fctr = 0.5 * T / N
 
+        # adjust for TDI2 if needed
         if tdi2:
-            omegaL = 2*np.pi*f0_out*(Larm/Clight)
-            tdi2_factor = 2.j*self.xp.sin(2*omegaL)*self.xp.exp(-2j*omegaL)
+            omegaL = 2 * np.pi * f0_out * (Larm / Clight)
+            tdi2_factor = 2.0j * self.xp.sin(2 * omegaL) * self.xp.exp(-2j * omegaL)
             fctr *= tdi2_factor
 
         XYZf *= fctr
 
+        # we do not care about T right now
         Af, Ef, Tf = AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])
 
-        # add to lists
-        self.X_out = XYZf[:, 0].T.flatten()
-        # TODO: update this setup
+        # setup waveforms for efficient GPU likelihood or global template building
         self.A_out = Af.T.flatten()
         self.E_out = Ef.T.flatten()
 
+        self.X_out = XYZf[:, 0].T.flatten()
+
     def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
-        """ Compute TDI X, Y, Z from y_sr
-        """
+        """Compute TDI X, Y, Z from y_sr"""
 
-        f = f0[:, None] + fdot[:, None] *tm[None, :] + 1 / 2 * fddot[:, None] * tm[None, :] ** 2
-        omL = f/fstar
+        # get true frequency as a function of time
+        f = (
+            f0[:, None]
+            + fdot[:, None] * tm[None, :]
+            + 1 / 2 * fddot[:, None] * tm[None, :] ** 2
+        )
+
+        # compute transfer function
+        omL = f / fstar
         SomL = self.xp.sin(omL)
-        fctr = self.xp.exp(-1.j*omL)
-        fctr2 = 4.0*omL*SomL*fctr/ampl[:, None]
+        fctr = self.xp.exp(-1.0j * omL)
+        fctr2 = 4.0 * omL * SomL * fctr / ampl[:, None]
 
-        ### I have factored out 1 - exp(1j*omL) and transformed to 
+        # Notes from LDC below
+
+        ### I have factored out 1 - exp(1j*omL) and transformed to
         ### fractional frequency: those are in fctr2
         ### I have rremoved Ampl to reduce dynamical range, will restore it later
-        Xsl =  Gs['21'] - Gs['31'] + (Gs['12'] - Gs['13'])*fctr
-        Ysl =  Gs['32'] - Gs['12'] + (Gs['23'] - Gs['21'])*fctr
-        Zsl =  Gs['13'] - Gs['23'] + (Gs['31'] - Gs['32'])*fctr
 
+        Xsl = Gs["21"] - Gs["31"] + (Gs["12"] - Gs["13"]) * fctr
+        Ysl = Gs["32"] - Gs["12"] + (Gs["23"] - Gs["21"]) * fctr
+        Zsl = Gs["13"] - Gs["23"] + (Gs["31"] - Gs["32"]) * fctr
+
+        # time domain slow part
         XYZsl = fctr2[:, None, :] * self.xp.array([Xsl, Ysl, Zsl]).transpose(1, 0, 2)
-        XYZf_slow = ampl[:, None, None]*self.xp.fft.fft(XYZsl, axis=-1)
 
-        #for testing
-        #Xtry = 4.0*(self.G21 - self.G31 + (self.G12 - self.G13)*fctr)/self.ampl
+        # frequency domain slow part
+        XYZf_slow = ampl[:, None, None] * self.xp.fft.fft(XYZsl, axis=-1)
 
-        M = XYZf_slow.shape[2] #len(XYZf_slow)
+        # for testing
+        # Xtry = 4.0*(self.G21 - self.G31 + (self.G12 - self.G13)*fctr)/self.ampl
+
+        M = XYZf_slow.shape[2]  # len(XYZf_slow)
         XYZf = self.xp.fft.fftshift(XYZf_slow, axes=-1)
-        f0 = (q - M/2) / T # freq = (q + self.xp.arange(M) - M/2)/T
+
+        # closest bin frequency
+        f0 = (q - M / 2) / T  # freq = (q + self.xp.arange(M) - M/2)/T
         return XYZf, f0
-        
+
     def _spacecraft(self, t):
+        """Compute space craft positions as a function of time"""
         # kappa and lambda are constants determined in the Constants.h file
 
-        alpha = 2.* np.pi * fm * t + kappa
+        # angular quantities defining orbit
+        alpha = 2.0 * np.pi * fm * t + kappa
 
-        beta1 = 0. + lambda0
-        beta2 = 2.*np.pi/3. + lambda0
-        beta3 = 4.*np.pi/3. + lambda0
+        beta1 = 0.0 + lambda0
+        beta2 = 2.0 * np.pi / 3.0 + lambda0
+        beta3 = 4.0 * np.pi / 3.0 + lambda0
 
         sa = self.xp.sin(alpha)
         ca = self.xp.cos(alpha)
 
+        # output arrays
         P1 = self.xp.zeros((len(t), 3))
         P2 = self.xp.zeros((len(t), 3))
         P3 = self.xp.zeros((len(t), 3))
@@ -530,94 +411,165 @@ class GBGPU(object):
         sb = self.xp.sin(beta1)
         cb = self.xp.cos(beta1)
 
-        P1[:, 0] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb)
-        P1[:, 1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb)
-        P1[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
+        P1[:, 0] = AU * ca + AU * ec * (sa * ca * sb - (1.0 + sa * sa) * cb)
+        P1[:, 1] = AU * sa + AU * ec * (sa * ca * cb - (1.0 + ca * ca) * sb)
+        P1[:, 2] = -SQ3 * AU * ec * (ca * cb + sa * sb)
 
         # spacecraft 2
         sb = self.xp.sin(beta2)
         cb = self.xp.cos(beta2)
-        P2[:, 0] = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb)
-        P2[:, 1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb)
-        P2[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
+        P2[:, 0] = AU * ca + AU * ec * (sa * ca * sb - (1.0 + sa * sa) * cb)
+        P2[:, 1] = AU * sa + AU * ec * (sa * ca * cb - (1.0 + ca * ca) * sb)
+        P2[:, 2] = -SQ3 * AU * ec * (ca * cb + sa * sb)
 
         # spacecraft 3
         sb = self.xp.sin(beta3)
         cb = self.xp.cos(beta3)
-        P3[:, 0]  = AU*ca + AU*ec*(sa*ca*sb - (1. + sa*sa)*cb)
-        P3[:, 1] = AU*sa + AU*ec*(sa*ca*cb - (1. + ca*ca)*sb)
-        P3[:, 2] = -SQ3*AU*ec*(ca*cb + sa*sb)
+        P3[:, 0] = AU * ca + AU * ec * (sa * ca * sb - (1.0 + sa * sa) * cb)
+        P3[:, 1] = AU * sa + AU * ec * (sa * ca * cb - (1.0 + ca * ca) * sb)
+        P3[:, 2] = -SQ3 * AU * ec * (ca * cb + sa * sb)
+
         return [P1, P2, P3]
 
-    def _construct_slow_part(self, T, arm_length, Ps, tm, f0, fdot, fddot, fstar, phi0, k, DP, DC, eplus, ecross, *args_third):
+    def _construct_slow_part(
+        self,
+        T,
+        arm_length,
+        Ps,
+        tm,
+        f0,
+        fdot,
+        fddot,
+        fstar,
+        phi0,
+        k,
+        DP,
+        DC,
+        eplus,
+        ecross,
+        *args_third,
+    ):
+        """Construct the time-domain function for the slow part of the waveform."""
+
+        # these are the orbits (equal-arm lengths assumed)
         P1, P2, P3 = Ps
         r = dict()
-        r['12'] = (P2 - P1)/arm_length ## [3xNt]
-        r['13'] = (P3 - P1)/arm_length
-        r['23'] = (P3 - P2)/arm_length
-        r['31'] = -r['13']
 
+        # unit vectors of constellation arms
+        r["12"] = (P2 - P1) / arm_length  ## [3xNt]
+        r["13"] = (P3 - P1) / arm_length
+        r["23"] = (P3 - P2) / arm_length
+        r["31"] = -r["13"]
+
+        # wave propagation axis dotted with constellation unit vectors
         kdotr = dict()
-        for ij in ['12', '13', '23']:
-            kdotr[ij] = self.xp.dot(k.squeeze(), r[ij].T) ### should be size Nt
-            kdotr[ij[-1]+ij[0]] = -kdotr[ij]
+        for ij in ["12", "13", "23"]:
+            kdotr[ij] = self.xp.dot(k.squeeze(), r[ij].T)  ### should be size Nt
+            kdotr[ij[-1] + ij[0]] = -kdotr[ij]
 
-        kdotP = self.xp.array([self.xp.dot(k, P1.T), self.xp.dot(k, P2.T), self.xp.dot(k, P3.T)])[:, :, 0].transpose(1, 0, 2)
+        # wave propagation axis dotted with spacecraft positions
+        kdotP = self.xp.array(
+            [self.xp.dot(k, P1.T), self.xp.dot(k, P2.T), self.xp.dot(k, P3.T)]
+        )[:, :, 0].transpose(1, 0, 2)
 
         kdotP /= Clight
-        
+
         Nt = len(tm)
+
+        # delayed time at the spacecraft
         xi = tm - kdotP
-        fi = f0[:, None, None] + fdot[:, None, None] * xi + 1/2. * fddot[:, None, None] * xi ** 2
+
+        # instantaneous frequency of wave at the spacecraft at xi
+        fi = (
+            f0[:, None, None]
+            + fdot[:, None, None] * xi
+            + 1 / 2.0 * fddot[:, None, None] * xi**2
+        )
+
+        # add third-body component if necessary
         if self.is_third:
-            fi *= (1 + get_vLOS(xi, *args_third))
-        
-        fonfs = fi/fstar #Ratio of true frequency to transfer frequency
+            # shift frequency based on LOS velocity of CoM
+            fi *= 1 + get_vLOS(xi, *args_third)
 
+        # transfer frequency ratio
+        fonfs = fi / fstar  # Ratio of true frequency to transfer frequency
+
+        # LDC notes with '###'
         ### compute transfer f-n
-        q = np.rint(f0 * T) # index of nearest Fourier bin
-        df = 2.*np.pi*(q/T)
-        om = 2.0*np.pi*f0
-        ### The expressions below are arg2_i with om*kR_i factored out
+        q = np.rint(f0 * T)  # index of nearest Fourier bin
+        df = 2.0 * np.pi * (q / T)
+        om = 2.0 * np.pi * f0
 
+        ### The expressions below are arg2_i with om*kR_i factored out
         A = dict()
-        for ij in ['12', '23', '31']:
-            aij = self.xp.dot(eplus,r[ij].T)*r[ij].T*DP[:, None, None]+self.xp.dot(ecross,r[ij].T)*r[ij].T*DC[:, None, None]
+        for ij in ["12", "23", "31"]:
+            aij = (
+                self.xp.dot(eplus, r[ij].T) * r[ij].T * DP[:, None, None]
+                + self.xp.dot(ecross, r[ij].T) * r[ij].T * DC[:, None, None]
+            )
             A[ij] = aij.sum(axis=1)
+
+        # below is information from the LDC about matching the original LDC.
+        # The current code matches the time-domain-generated tempaltes in the LDC.
+
         # These are wfm->TR + 1j*TI in c-code
 
         # arg2_1 = 2.0*np.pi*f0*xi[0] + phi0 - df*tm + np.pi*fdot*(xi[0]**2)
         # arg2_2 = 2.0*np.pi*f0*xi[1] + phi0 - df*tm + np.pi*fdot*(xi[1]**2)
         # arg2_3 = 2.0*np.pi*f0*xi[2] + phi0 - df*tm + np.pi*fdot*(xi[2]**2)
 
-        ### These (y_sr) reproduce exactly the FastGB results 
-        #self.y12 = 0.25*np.sin(arg12)/arg12 * np.exp(1.j*(arg12 + arg2_1)) * ( Dp12*self.DP + Dc12*self.DC )
-        #self.y23 = 0.25*np.sin(arg23)/arg23 * np.exp(1.j*(arg23 + arg2_2)) * ( Dp23*self.DP + Dc23*self.DC )
-        #self.y31 = 0.25*np.sin(arg31)/arg31 * np.exp(1.j*(arg31 + arg2_3)) * ( Dp31*self.DP + Dc31*self.DC )
-        #self.y21 = 0.25*np.sin(arg21)/arg21 * np.exp(1.j*(arg21 + arg2_2)) * ( Dp12*self.DP + Dc12*self.DC )
-        #self.y32 = 0.25*np.sin(arg32)/arg32 * np.exp(1.j*(arg32 + arg2_3)) * ( Dp23*self.DP + Dc23*self.DC )
-        #self.y13 = 0.25*np.sin(arg13)/arg13 * np.exp(1.j*(arg13 + arg2_1)) * ( Dp31*self.DP + Dc31*self.DC )
+        ### These (y_sr) reproduce exactly the FastGB results
+        # self.y12 = 0.25*np.sin(arg12)/arg12 * np.exp(1.j*(arg12 + arg2_1)) * ( Dp12*self.DP + Dc12*self.DC )
+        # self.y23 = 0.25*np.sin(arg23)/arg23 * np.exp(1.j*(arg23 + arg2_2)) * ( Dp23*self.DP + Dc23*self.DC )
+        # self.y31 = 0.25*np.sin(arg31)/arg31 * np.exp(1.j*(arg31 + arg2_3)) * ( Dp31*self.DP + Dc31*self.DC )
+        # self.y21 = 0.25*np.sin(arg21)/arg21 * np.exp(1.j*(arg21 + arg2_2)) * ( Dp12*self.DP + Dc12*self.DC )
+        # self.y32 = 0.25*np.sin(arg32)/arg32 * np.exp(1.j*(arg32 + arg2_3)) * ( Dp23*self.DP + Dc23*self.DC )
+        # self.y13 = 0.25*np.sin(arg13)/arg13 * np.exp(1.j*(arg13 + arg2_1)) * ( Dp31*self.DP + Dc31*self.DC )
 
         ### Those are corrected values which match the time domain results.
         ## om*kdotP_i singed out for comparison with another code.
 
-        argS =  phi0[:, None, None] + (om[:, None, None] - df[:, None, None])*tm[None, None, :] + np.pi*fdot[:, None, None]*(xi**2) + 1/3 * np.pi * fddot[:, None, None] * (xi ** 3)  # TODO: check fddot factors
+        argS = (
+            phi0[:, None, None]
+            + (om[:, None, None] - df[:, None, None]) * tm[None, None, :]
+            + np.pi * fdot[:, None, None] * (xi**2)
+            + 1 / 3 * np.pi * fddot[:, None, None] * (xi**3)
+        )
+
+        # adjust for third-body effect on frequency
         if self.is_third:
-            input_tuple = (f0, fdot,  fddot) + args_third + (xi[:, :, 1:], xi[:, :, :-1], T)
+            input_tuple = (
+                (f0, fdot, fddot) + args_third + (xi[:, :, 1:], xi[:, :, :-1], T)
+            )
             third_body_term = self.xp.zeros_like(xi)
-            third_body_term[:, :, 1:] = self.xp.cumsum(parab_step_ET(*input_tuple), axis=-1)
+            third_body_term[:, :, 1:] = self.xp.cumsum(
+                parab_step_ET(*input_tuple), axis=-1
+            )
             argS += third_body_term
 
-        kdotP = om[:, None, None]*kdotP - argS
+        kdotP = om[:, None, None] * kdotP - argS
 
+        # get Gs transfer functions
         Gs = dict()
-        for ij, ij_sym, s in [('12', '12', 0), ('23', '23', 1), ('31', '31', 2),
-                            ('21', '12', 1), ('32', '23', 2), ('13', '31', 0)]:
-            
-            arg_ij = 0.5*fonfs[:, s,:] * (1 + kdotr[ij])
-            Gs[ij] = 0.25*self.xp.sin(arg_ij)/arg_ij * self.xp.exp(-1.j*(arg_ij + kdotP[:, s])) * A[ij_sym]
+        for ij, ij_sym, s in [
+            ("12", "12", 0),
+            ("23", "23", 1),
+            ("31", "31", 2),
+            ("21", "12", 1),
+            ("32", "23", 2),
+            ("13", "31", 0),
+        ]:
 
-        ### Lines blow are extractions from another python code and from C-code
+            arg_ij = 0.5 * fonfs[:, s, :] * (1 + kdotr[ij])
+            Gs[ij] = (
+                0.25
+                * self.xp.sin(arg_ij)
+                / arg_ij
+                * self.xp.exp(-1.0j * (arg_ij + kdotP[:, s]))
+                * A[ij_sym]
+            )
+
+        ### Lines blow are extractions from another python code and from C-code in LDC
         # y = -0.5j*self.omL*A*sinc(args)*np.exp(-1.0j*(args + self.om*kq))
         # args = 0.5*self.omL*(1.0 - kn)
         # arg12 = 0.5*fonfs[0,:] * (1 + kdotr12)
@@ -632,10 +584,6 @@ class GBGPU(object):
         # wfm->TR[i][j] = sinc*(tran1r*tran2r - tran1i*tran2i)
         # wfm->TI[i][j] = sinc*(tran1r*tran2i + tran1i*tran2r)
         return Gs, q
-
-    def _get_N(self, amp, f0, Tobs, oversample=1, P2=None):
-        """Determine proper sampling in time domain."""
-        return get_N(amp, f0, Tobs, oversample=oversample, P2=P2)
 
     @property
     def X(self):
@@ -655,14 +603,9 @@ class GBGPU(object):
     @property
     def freqs(self):
         """Return frequencies associated with each signal"""
-        freqs_out = []
-        freqs_temp = self.xp.zeros((len(self.start_inds), self.N))
-        for i, start_ind in enumerate(self.start_inds):
-            if isinstance(start_ind, self.xp.ndarray):
-                start_ind = start_ind.item()
-
-            freqs_temp[i] = self.xp.arange(start_ind, start_ind + self.N) * self.df
-        freqs_out.append(freqs_temp)
+        freqs_out = (
+            self.xp.arange(self.N)[None, :] + self.start_inds[:, None]
+        ) * self.df
         return freqs_out
 
     def get_ll(
@@ -670,50 +613,67 @@ class GBGPU(object):
         params,
         data,
         psd,
-        calc_d_d=False,
         phase_marginalize=False,
         start_freq_ind=0,
         data_index=None,
         noise_index=None,
-        df=None,
         **kwargs,
     ):
         """Get batched log likelihood
 
-        Generate the log likelihood for a batched set of Galactic binaries. This is
-        also GPU/CPU agnostic.
+        Generate the individual log likelihood for a batched set of Galactic binaries.
+        This is also GPU/CPU agnostic.
 
         Args:
-            params (list, tuple or array of 1D double np.ndarrays): Array-like object containing
-                the parameters of all binaries to be calculated. The shape is
-                (number of parameters, number of binaries).
-            data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
+            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
+                The shape is ``(number of parameters, number of binaries)``.
+            data (length 2 list of 1D or 2D complex128 xp.ndarrays): List of arrays representing the data
                 stream. These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
-            psd (length 2 list of 1D double xp.ndarrays): List of arrays representing
-                the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
+                Should be 1D if only one data stream is analyzed. If 2D, shape is
+                ``(number of data streams, data_length)``. If 2D,
+                user must also provide ``data_index`` kwarg.
+            psd (length 2 list of 1D or 2D double xp.ndarrays): List of arrays representing
+                the power spectral density (PSD) in the noise.
                 These should be CuPy arrays if running on the GPU, NumPy
                 arrays if running on a CPU. The list should be [A channel, E channel].
+                Should be 1D if only one PSD is analyzed. If 2D, shape is
+                ``(number of PSDs, data_length)``. If 2D,
+                user must also provide ``noise_index`` kwarg.
             phase_marginalize (bool, optional): If True, marginalize over the initial phase.
                 Default is False.
-            **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
+            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
+                for the first entry of ``data``/``psd``. This is used if a subset of a full data stream
+                is presented for the computation. If providing mutliple data streams in ``data``, this single
+                start index value will apply to all of them.
+            data_index (1D xp.int32 array, optional): If providing 2D ``data``, need to provide ``data_index``
+                to indicate the data stream associated with each waveform for which the log-Likelihood
+                is being computed. For example, if you have 100 binaries with 5 different data streams,
+                ``data_index`` will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
+                data stream to use for each source.
+                If ``None``, this will be filled with zeros and only analyzed with the first
+                data stream given. Default is ``None``.
+            noise_index (1D xp.int32 array, optional): If providing 2D ``psd``, need to provide ``noise_index``
+                to indicate the PSD associated with each waveform for which the log-Likelihood
+                is being computed. For example, if you have 100 binaries with 5 different PSDs,
+                ``noise_index`` will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
+                PSD to use for each source.
+                If ``None``, this will be filled with zeros and only analyzed with the first
+                PSD given. Default is ``None``.
+            **kwargs (dict, optional): Passes keyword arguments to the :func:`run_wave` method.
 
         Raises:
-            TypeError: If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.
+            TypeError: If data arrays are NumPy/CuPy while template arrays are CuPy/NumPy.
 
         Returns:
             1D double np.ndarray: Log likelihood values associated with each binary.
 
         """
 
-        # TODO: fix how this is dealt with
-        if (calc_d_d or self.d_d is None) and self.running_d_d is False:
-            self.running_d_d = True
-            self.get_ll(
-                self.injection_params, data, psd, calc_d_d=False, **kwargs
+        if self.d_d is None:
+            raise ValueError(
+                "self.d_d attribute must be set before computing log-Likelihood. This attribute is the data with data inner product (<d|d>)."
             )
-            self.running_d_d = False
-            # now sets self.d_d inside likelihood function
 
         # produce TDI templates
         self.run_wave(*params, **kwargs)
@@ -725,13 +685,14 @@ class GBGPU(object):
             raise TypeError(
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
-        
+
+        # make sure index information if provided properly
         if data[0].ndim == 1:
             if data_index is not None:
                 raise ValueError("If inputing 1D data, cannot use data_index kwarg.")
             if noise_index is not None:
                 raise ValueError("If inputing 1D data, cannot use noise_index kwarg.")
-            
+
             data_length = data[0].shape[0]
 
         elif data[0].ndim == 2:
@@ -740,32 +701,29 @@ class GBGPU(object):
 
         if psd[0].ndim == 2:
             psd = [psd_i.copy().flatten() for psd_i in psd]
-        
+
+        # fill index values if not given
         if data_index is None:
             data_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
         if noise_index is None:
             noise_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
 
-        assert len(data_index) == self.num_bin 
+        # check that index values are ready for computation
+        assert len(data_index) == self.num_bin
         assert len(data_index) == len(noise_index)
         assert data_index.dtype == self.xp.int32
         assert noise_index.dtype == self.xp.int32
         assert data_index.max() * data_length <= len(data[0])
         assert noise_index.max() * data_length <= len(data[0])
 
+        # initialize Likelihood terms <d|h> and <h|h>
         d_h = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
         h_h = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
 
-        # calculate each mode separately
-        # ASSUMES MODES DO NOT OVERLAP AT ALL
-        # makes the inner product the sum of products over modes
+        # shift start inds based on the starting index of the data stream
+        start_inds_temp = (self.start_inds - start_freq_ind).astype(self.xp.int32)
 
-        # shift start inds (see above)
-        start_inds_temp = (self.start_inds - start_freq_ind - self.shift_ind).astype(
-            self.xp.int32
-        )
-
-        # get ll
+        # get ll through C/CUDA
         self.get_ll_func(
             d_h,
             h_h,
@@ -781,7 +739,7 @@ class GBGPU(object):
             self.num_bin,
             data_index,
             noise_index,
-            data_length
+            data_length,
         )
 
         if phase_marginalize:
@@ -793,12 +751,11 @@ class GBGPU(object):
 
             d_h = self.xp.abs(d_h)
 
+        # store these likelihood terms for later if needed
         self.h_h = h_h
         self.d_h = d_h
 
-        if self.running_d_d:
-            self.d_d = self.h_h.copy()
-
+        # compute Likelihood
         like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
 
         # back to CPU if on GPU
@@ -808,38 +765,51 @@ class GBGPU(object):
         except AttributeError:
             return like_out
 
-    def fill_global_template(self, group_index, templates, A, E, start_inds, N, start_freq_ind=0):
-        """Get batched log likelihood for global fit
+    def fill_global_template(
+        self, group_index, templates, A, E, start_inds, N=None, start_freq_ind=0
+    ):
+        """Fill many global templates with waveforms
 
-        # TODO: Adjust
+        This method takes already generated waveforms (``A, E, start_inds``)
+        and their associated grouping index (``group_index``) and fills
+        buffer tempalte arrays (``templates``).
 
-        Generate the log likelihood for a batched set of Galactic binaries. This is
-        also GPU/CPU agnostic.
+        This method combines waveforms that have already been created.
+        When a user does not have the waveforms in hand, they should
+        use the :func:`generate_global_template` method.
 
         Args:
-            params (list, tuple or array of 1D double np.ndarrays): Array-like object containing
-                the parameters of all binaries to be calculated. The shape is
-                (number of parameters, number of binaries).
-            data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
-                stream. These should be CuPy arrays if running on the GPU, NumPy
-                arrays if running on a CPU. The list should be [A channel, E channel].
-            psd (length 2 list of 1D double xp.ndarrays): List of arrays representing
-                the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
-                These should be CuPy arrays if running on the GPU, NumPy
-                arrays if running on a CPU. The list should be [A channel, E channel].
-            **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
+            group_index (1D double int32 xp.ndarray): Index indicating to which template each individual binary belongs.
+            templates (3D complex128 xp.ndarray): Buffer array for template output to filled in place.
+                The shape is ``(number of templates, 2, data_length)``. The ``2`` is
+                for the ``A`` and ``E`` TDI channels in that order.
+            A (1D or 2D complex128 xp.ndarray): TDI A channel template values for each individual binary.
+                The shape if 2D is ``(number of binaries, N)''. In 1D, the array should be arranged so that
+                it resembles ``(number of binaries, N).transpose().flatten()``.
+                After running waveforms, this is how ``self.A_out`` is arranged.
+            E (1D 2D complex128 xp.ndarray): TDI E channel template values for each individual binary.
+                The shape if 2D is ``(number of binaries, N)''. In 1D, the array should be arranged so that
+                it resembles ``(number of binaries, N).transpose().flatten()``.
+                After running waveforms, this is how ``self.E_out`` is arranged.
+            start_inds (1D int32 xp.ndarray): The start indices of each binary waveform
+                in the full Fourier transform: ``int(f0/T) - N/2``.
+            N (int, optional): The length of the A and E channels for each individual binary.
+                When ``A`` and ``E`` are 1D, ``N`` must be given. Default is ``None``.
+            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
+                for the first entry of ``templates``. This is used if a subset of a full data stream
+                is presented for the computation.
 
         Raises:
             TypeError: If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.
-
-        Returns:
-            1D double np.ndarray: Log likelihood values associated with each binary.
+            ValueError: Inputs are not correctly provided.
 
         """
 
+        # get shape of information
         total_groups, nchannels, data_length = templates.shape
         group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
         num_bin = len(group_index)
+
         if nchannels < 2:
             raise ValueError("Calculates for A and E channels.")
         elif nchannels > 2:
@@ -851,26 +821,36 @@ class GBGPU(object):
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
+        # prepare temporary buffers for C/CUDA
+        # These are required to ensure the python memory order
+        # is read properly in C/CUDA
         template_A = self.xp.zeros_like(
             templates[:, 0], dtype=self.xp.complex128
         ).flatten()
         template_E = self.xp.zeros_like(
             templates[:, 1], dtype=self.xp.complex128
         ).flatten()
-        # shift start inds (see above)
-        start_inds = (start_inds - start_freq_ind - self.shift_ind).astype(
-            self.xp.int32
-        )
 
+        # shift start inds (see above)
+        start_inds = (start_inds - start_freq_ind).astype(self.xp.int32)
+
+        # check A, E, N inputs
         if A.ndim > 2 or E.ndim > 2:
             raise ValueError("A_in, E_in have maximum allowable dimension of 2.")
         elif A.ndim == 2:
+            N = A.shape[1]
             assert E.ndim == 2
             # assumes the shape is the same as self.A
             A = A.T.flatten()
             E = E.T.flatten()
 
-        # get ll
+        elif A.ndim == 1:
+            if N is None:
+                raise ValueError(
+                    "If providing a 1D flattened array for A and E, the N kwarg also needs to be provided."
+                )
+
+        # fill the templates in C/CUDA
         self.fill_global_func(
             template_A,
             template_E,
@@ -883,63 +863,70 @@ class GBGPU(object):
             data_length,
         )
 
+        # read out to buffer arrays
         templates[:, 0] = template_A.reshape(total_groups, data_length)
         templates[:, 1] = template_E.reshape(total_groups, data_length)
 
-
     def generate_global_template(
-        self, params, group_index, templates, start_freq_ind=0, **kwargs,
+        self,
+        params,
+        group_index,
+        templates,
+        start_freq_ind=0,
+        **kwargs,
     ):
-        """Get batched log likelihood for global fit
+        """Generate global templates from binary parameters
 
-        Generate the log likelihood for a batched set of Galactic binaries. This is
-        also GPU/CPU agnostic.
+        Generate waveforms in batches and then combine them into
+        global fit templates. This method wraps :func:`fill_global_template`
+        by building the waveforms first.
 
         Args:
-            params (list, tuple or array of 1D double np.ndarrays): Array-like object containing
-                the parameters of all binaries to be calculated. The shape is
-                (number of parameters, number of binaries).
-            data (length 2 list of 1D complex128 xp.ndarrays): List of arrays representing the data
-                stream. These should be CuPy arrays if running on the GPU, NumPy
-                arrays if running on a CPU. The list should be [A channel, E channel].
-            psd (length 2 list of 1D double xp.ndarrays): List of arrays representing
-                the noise factor for weighting. This is typically something like 1/psd(f) * sqrt(df).
-                These should be CuPy arrays if running on the GPU, NumPy
-                arrays if running on a CPU. The list should be [A channel, E channel].
-            **kwargs (dict, optional): Passes keyword arguments to run_wave function above.
-
-        Raises:
-            TypeError: If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.
-
-        Returns:
-            1D double np.ndarray: Log likelihood values associated with each binary.
+            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
+                The shape is ``(number of parameters, number of binaries)``.
+            group_index (1D double int32 xp.ndarray): Index indicating to which template each individual binary belongs.
+            templates (3D complex128 xp.ndarray): Buffer array for template output to filled in place.
+                The shape is ``(number of templates, 2, data_length)``. The ``2`` is
+                for the ``A`` and ``E`` TDI channels in that order.
+            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
+                for the first entry of ``templates``. This is used if a subset of a full data stream
+                is presented for the computation.
+            **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
 
         """
 
         # produce TDI templates
         self.run_wave(*params.T, **kwargs)
-        self.fill_global_template(group_index, templates, self.A_out, self.E_out, self.start, self.Ns, start_freq_ind=start_freq_ind)
+        self.fill_global_template(
+            group_index,
+            templates,
+            self.A_out,
+            self.E_out,
+            self.start_inds,
+            self.N,
+            start_freq_ind=start_freq_ind,
+        )
         return
 
-    def inject_signal(
-        self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, psd=True, **kwargs
-    ):
+    def inject_signal(self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, **kwargs):
         """Inject a single signal
 
         Provides the injection of a single signal into a data stream with frequencies
-        spanning from 0.0 to fmax with 1/T spacing.
+        spanning from 0.0 to fmax with 1/T spacing (from Fourier transform).
 
         Args:
             *args (list, tuple, or 1D double np.array): Arguments to provide to
-                run_wave to build the TDI templates for injection.
+                :func:`run_wave` to build the TDI templates for injection.
             fmax (double, optional): Maximum frequency to use in data stream.
-                Default is 1e-1.
-            T (double, optional): Observation time in seconds. Default is 4 years.
-            **kwargs (dict, optional): Passes kwargs to run_wave.
+                If ``None``, will use ``1/(2 * dt)``.
+                Default is ``None``.
+            T (double, optional): Observation time in seconds. Default is ``4 * YEAR``.
+            dt (double, optional): Observation cadence in seconds. Default is ``10.0`` seconds.
+            **kwargs (dict, optional): Passes kwargs to :func:`run_wave`.
 
         Returns:
             Tuple of 1D np.ndarrays: NumPy arrays for the A channel and
-                E channel: (A channel, E channel). Need to conver to CuPy if working
+                E channel: ``(A channel, E channel)``. Need to convert to CuPy if working
                 on GPU.
 
         """
@@ -948,6 +935,7 @@ class GBGPU(object):
         if fmax is None:
             fmax = 1 / (2 * dt)
 
+        # adjust inputs for run wave
         N_obs = int(T / dt)
         T = N_obs * dt
         kwargs["T"] = T
@@ -964,8 +952,6 @@ class GBGPU(object):
 
         # build the templates
         self.run_wave(*args, **kwargs)
-
-        self.injection_params = args
 
         # add each mode to the templates
         start = self.start_inds[0]
@@ -1009,7 +995,7 @@ class GBGPU(object):
         Args:
             params (2D double np.ndarray): 2D array with the parameter values of the batch.
                 The shape should be (number of parameters, number of binaries).
-                See :class:`gbgpu.gbgpu.GBGPU.run_Wave` for more information on the adjustable
+                See :func:`run_wave` for more information on the adjustable
                 number of parameters when calculating for a third body.
             eps (double, optional): Step to take when calculating the derivative.
                 Default is 1e-9.
