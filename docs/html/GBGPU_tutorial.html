@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Setup all the parameters and arrays to be used in these examples &mdash; gbgpu  documentation</title>
+  <title>GBGPU Tutorial &mdash; gbgpu  documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -45,22 +45,14 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Tutorial:</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Setup all the parameters and arrays to be used in these examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="#Circular-Galactic-Binary">Circular Galactic Binary</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#zoom-in-on-j-=-3-mode">zoom in on j = 3 mode</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#inject-eccentric-signal">inject eccentric signal</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#try-to-extract-with-ecc">try to extract with ecc</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#try-to-extract-with-circular">try to extract with circular</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#inject-circular-with-eccentric-third-body">inject circular with eccentric third body</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#try-to-extract-with-circular-third-body">try to extract with circular third body</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#id1">try to extract with circular</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">GBGPU Tutorial</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Generated-Galactic-binary-waveforms">Generated Galactic binary waveforms</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#Add-a-third-body">Add a third-body</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="#Fisher">Fisher</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#ln-(amp),-f0-in-ms,-ln-(fdot)">ln (amp), f0 in ms, ln (fdot)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Calculating-the-Information-Matrix">Calculating the Information Matrix</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="#emcee-example">emcee example</a></li>
 </ul>
 
         </div>
@@ -77,7 +69,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Setup all the parameters and arrays to be used in these examples</li>
+      <li>GBGPU Tutorial</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/GBGPU_tutorial.ipynb.txt" rel="nofollow"> View page source</a>
       </li>
@@ -359,6 +351,12 @@ div.rendered_html tbody tr:hover {
     text-align: unset;
 }
 </style>
+<section id="GBGPU-Tutorial">
+<h1>GBGPU Tutorial<a class="headerlink" href="#GBGPU-Tutorial" title="Permalink to this headline"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> is a GPU-accelerated version of the <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> waveform which has been developed by Neil Cornish, Tyson Littenberg, Travis Robson, and Stas Babak. It computes gravitational waveforms for Galactic binary systems observable by LISA using a fast/slow-type decomposition. For more details on the original construction of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> see <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>.</p>
+<p>The current version of the code is very closely related to the implementation of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> in the LISA Data Challenges’ Python code package. The waveform code is entirely Python-based. It is about 1/2 the speed of the full C version, but much simpler in Python for right now. There are also many additional functions including fast likelihood computations for individual Galactic binaries, as well as fast C-based methods to combine waveforms into global fitting templates.</p>
+<p>The code is CPU/GPU agnostic. CUDA and NVIDIA GPUs are required to run these codes for GPUs.</p>
+<p>See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/index.html">documentation</a> for more details. This code was designed for (# TODO: add new arxiv number). If you use any part of this code, please cite (# TODO: add new arxiv number), its Zenodo page (# TODO: add zenodo page), <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and <a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
@@ -369,58 +367,50 @@ div.rendered_html tbody tr:hover {
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
 
-<span class="kn">import</span> <span class="nn">unittest</span>
-
 <span class="kn">from</span> <span class="nn">gbgpu.gbgpu</span> <span class="kn">import</span> <span class="n">GBGPU</span>
 
 <span class="kn">from</span> <span class="nn">gbgpu.utils.constants</span> <span class="kn">import</span> <span class="o">*</span>
-
-<span class="kn">import</span> <span class="nn">tdi</span>
-<span class="kn">import</span> <span class="nn">emcee</span>
 </pre></div>
 </div>
 </div>
-<section id="Setup-all-the-parameters-and-arrays-to-be-used-in-these-examples">
-<h1>Setup all the parameters and arrays to be used in these examples<a class="headerlink" href="#Setup-all-the-parameters-and-arrays-to-be-used-in-these-examples" title="Permalink to this headline"></a></h1>
+<section id="Generated-Galactic-binary-waveforms">
+<h2>Generated Galactic binary waveforms<a class="headerlink" href="#Generated-Galactic-binary-waveforms" title="Permalink to this headline"></a></h2>
+<p>Initialize the waveform class.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gb</span> <span class="o">=</span> <span class="n">GBGPU</span><span class="p">(</span><span class="n">shift_ind</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gb</span> <span class="o">=</span> <span class="n">GBGPU</span><span class="p">(</span><span class="n">use_gpu</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
+<p>Setup all the binary information. GBGPU operates in a vectorized manner, so it takes arrays of parameters as inputs.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">dt</span> <span class="o">=</span> <span class="mf">15.0</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">dt</span> <span class="o">=</span> <span class="mf">10.0</span>
 <span class="n">Tobs</span> <span class="o">=</span> <span class="mf">4.0</span> <span class="o">*</span> <span class="n">YEAR</span>
 
 
-<span class="c1"># number of points</span>
+<span class="c1"># number of points in waveform</span>
+<span class="c1"># if None, will determine inside the code based on amp, f0 (and P2 if running third-body waveform)</span>
 <span class="n">N</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="c1"># number of binaries to batch</span>
 <span class="n">num_bin</span> <span class="o">=</span> <span class="mi">10</span>
 
 <span class="c1"># parameters</span>
-<span class="n">amp</span> <span class="o">=</span> <span class="mf">2e-22</span>  <span class="c1"># amplitude</span>
+<span class="n">amp</span> <span class="o">=</span> <span class="mf">2e-23</span>  <span class="c1"># amplitude</span>
 <span class="n">f0</span> <span class="o">=</span> <span class="mf">2e-3</span>  <span class="c1"># f0</span>
 <span class="n">fdot</span> <span class="o">=</span> <span class="mf">7.538331e-18</span>  <span class="c1"># fdot</span>
-<span class="n">fddot</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="c1">## not included (place holder for future?)</span>
+<span class="n">fddot</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="c1"># fddot</span>
 <span class="n">phi0</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c1"># initial phase</span>
 <span class="n">iota</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c1"># inclination</span>
 <span class="n">psi</span> <span class="o">=</span> <span class="mf">0.3</span>  <span class="c1"># polarization angle</span>
 <span class="n">lam</span> <span class="o">=</span> <span class="mf">0.4</span>  <span class="c1"># ecliptic longitude</span>
 <span class="n">beta_sky</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># ecliptic latitude</span>
-<span class="n">e1</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c1"># eccentricity of inner binary</span>
-<span class="n">beta1</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># TODO: fill in</span>
-<span class="n">A2</span> <span class="o">=</span> <span class="mf">18.0</span>  <span class="c1"># third body amplitude parameter</span>
-<span class="n">omegabar</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># omegabar parameter</span>
-<span class="n">e2</span> <span class="o">=</span> <span class="mf">0.3</span>  <span class="c1"># eccentricity of third body</span>
-<span class="n">P2</span> <span class="o">=</span> <span class="mf">0.6</span>  <span class="c1"># period of third body</span>
-<span class="n">T2</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># time of periapsis passage of third body</span>
+
 
 <span class="c1"># for batching</span>
 <span class="n">amp_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">amp</span><span class="p">)</span>
@@ -432,914 +422,277 @@ div.rendered_html tbody tr:hover {
 <span class="n">psi_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">psi</span><span class="p">)</span>
 <span class="n">lam_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">lam</span><span class="p">)</span>
 <span class="n">beta_sky_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">beta_sky</span><span class="p">)</span>
-<span class="n">e1_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">e1</span><span class="p">)</span>
-<span class="n">beta1_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">beta1</span><span class="p">)</span>
-<span class="n">A2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">A2</span><span class="p">)</span>
-<span class="n">P2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">P2</span><span class="p">)</span>
-<span class="n">omegabar_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">omegabar</span><span class="p">)</span>
-<span class="n">e2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">e2</span><span class="p">)</span>
-<span class="n">T2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">T2</span><span class="p">)</span>
-
-<span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">Tobs</span> <span class="o">/</span> <span class="n">dt</span><span class="p">)</span>
-
-<span class="c1"># prepare fake data for likelihood calculation</span>
-<span class="n">freqs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">rfftfreq</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">dt</span><span class="p">)</span>
-<span class="n">data_stream_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">freqs</span><span class="p">)</span>
-
-<span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="mf">1e-24</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">data_stream_length</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex128</span><span class="p">),</span>
-    <span class="mf">1e-24</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">data_stream_length</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex128</span><span class="p">),</span>
-<span class="p">]</span>
-
-<span class="n">noise_factor</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">data_stream_length</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">data_stream_length</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-<span class="p">]</span>
 <br/></pre></div>
 </div>
 </div>
-</section>
-<section id="Circular-Galactic-Binary">
-<h1>Circular Galactic Binary<a class="headerlink" href="#Circular-Galactic-Binary" title="Permalink to this headline"></a></h1>
+<p>Generate the waveforms.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">params_circ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">matplotlib</span>  inline
+<span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
     <span class="p">[</span><span class="n">amp_in</span><span class="p">,</span> <span class="n">f0_in</span><span class="p">,</span> <span class="n">fdot_in</span><span class="p">,</span> <span class="n">fddot_in</span><span class="p">,</span> <span class="n">phi0_in</span><span class="p">,</span> <span class="n">iota_in</span><span class="p">,</span> <span class="n">psi_in</span><span class="p">,</span> <span class="n">lam_in</span><span class="p">,</span> <span class="n">beta_sky_in</span><span class="p">,]</span>
 <span class="p">)</span>
 
-<span class="n">gb</span><span class="o">.</span><span class="n">run_wave</span><span class="p">(</span><span class="o">*</span><span class="n">params_circ</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span> <span class="n">modes</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">]),</span> <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">)</span>
+<span class="n">gb</span><span class="o">.</span><span class="n">run_wave</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
-<span class="n">A</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-<span class="n">freqs</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-
-<span class="n">df</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="n">Tobs</span>
-
-<span class="n">snr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">df</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">*</span> <span class="n">A</span><span class="o">/</span><span class="n">tdi</span><span class="o">.</span><span class="n">noisepsd_AE</span><span class="p">(</span><span class="n">freqs</span><span class="p">))</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;snr:&#39;</span><span class="p">,</span> <span class="n">snr</span><span class="p">)</span>
+<span class="c1"># signal from first binary</span>
+<span class="n">A</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">freqs</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;signal length:&quot;</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;TDI-A Channel&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;freqs (Hz)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">dx</span> <span class="o">=</span> <span class="mf">7e-7</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="n">f0</span> <span class="o">-</span> <span class="n">dx</span><span class="p">,</span> <span class="n">f0</span> <span class="o">+</span> <span class="n">dx</span><span class="p">)</span>
 </pre></div>
 </div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+signal length: (512,)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+(0.0019993, 0.0020007000000000002)
+</pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<div class="highlight"><pre>
-snr: 538.7018711897292
-</pre></div></div>
+<img alt="_images/GBGPU_tutorial_9_2.png" src="_images/GBGPU_tutorial_9_2.png" />
 </div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</div>
+<section id="Add-a-third-body">
+<h3>Add a third-body<a class="headerlink" href="#Add-a-third-body" title="Permalink to this headline"></a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">params_circ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">A2</span> <span class="o">=</span> <span class="mf">100.0</span>  <span class="c1"># third body amplitude parameter</span>
+<span class="n">varpi</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># varpi phase parameter</span>
+<span class="n">e2</span> <span class="o">=</span> <span class="mf">0.3</span>  <span class="c1"># eccentricity of third body</span>
+<span class="n">P2</span> <span class="o">=</span> <span class="mf">1.2</span>  <span class="c1"># period of third body</span>
+<span class="n">T2</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">P2</span>  <span class="c1"># time of periapsis passage of third body</span>
+
+
+<span class="n">A2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">A2</span><span class="p">)</span>
+<span class="n">P2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">P2</span><span class="p">)</span>
+<span class="n">varpi_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">varpi</span><span class="p">)</span>
+<span class="n">e2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">e2</span><span class="p">)</span>
+<span class="n">T2_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_bin</span><span class="p">,</span> <span class="n">T2</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">matplotlib</span>  inline
+<span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">amp_in</span><span class="p">,</span> <span class="n">f0_in</span><span class="p">,</span> <span class="n">fdot_in</span><span class="p">,</span> <span class="n">fddot_in</span><span class="p">,</span> <span class="n">phi0_in</span><span class="p">,</span> <span class="n">iota_in</span><span class="p">,</span> <span class="n">psi_in</span><span class="p">,</span> <span class="n">lam_in</span><span class="p">,</span> <span class="n">beta_sky_in</span><span class="p">,</span> <span class="n">A2_in</span><span class="p">,</span> <span class="n">varpi_in</span><span class="p">,</span> <span class="n">e2_in</span><span class="p">,</span> <span class="n">P2_in</span><span class="p">,</span> <span class="n">T2_in</span><span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">gb</span><span class="o">.</span><span class="n">run_wave</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="c1"># signal from first binary</span>
+<span class="n">A_third</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">freqs</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Third-body signal length:&quot;</span><span class="p">,</span> <span class="n">A_third</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No third body&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">A_third</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No third body&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;TDI-A Channel&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;freqs (Hz)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">dx</span> <span class="o">=</span> <span class="mf">7e-7</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="n">f0</span> <span class="o">-</span> <span class="n">dx</span><span class="p">,</span> <span class="n">f0</span> <span class="o">+</span> <span class="n">dx</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Third-body signal length: (512,)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+(0.0019993, 0.0020007000000000002)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/GBGPU_tutorial_12_2.png" src="_images/GBGPU_tutorial_12_2.png" />
+</div>
+</div>
+</section>
+</section>
+<section id="Calculating-the-Information-Matrix">
+<h2>Calculating the Information Matrix<a class="headerlink" href="#Calculating-the-Information-Matrix" title="Permalink to this headline"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
     <span class="p">[</span><span class="n">amp_in</span><span class="p">,</span> <span class="n">f0_in</span><span class="p">,</span> <span class="n">fdot_in</span><span class="p">,</span> <span class="n">fddot_in</span><span class="p">,</span> <span class="n">phi0_in</span><span class="p">,</span> <span class="n">iota_in</span><span class="p">,</span> <span class="n">psi_in</span><span class="p">,</span> <span class="n">lam_in</span><span class="p">,</span> <span class="n">beta_sky_in</span><span class="p">,]</span>
 <span class="p">)</span>
 
-<span class="n">num</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">inds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">])</span>
 
-<span class="n">A_inj</span><span class="p">,</span> <span class="n">E_inj</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">inject_signal</span><span class="p">(</span>
-    <span class="n">amp</span><span class="p">,</span>
-    <span class="n">f0</span><span class="p">,</span>
-    <span class="n">fdot</span><span class="p">,</span>
-    <span class="n">fddot</span><span class="p">,</span>
-    <span class="n">phi0</span><span class="p">,</span>
-    <span class="n">iota</span><span class="p">,</span>
-    <span class="n">psi</span><span class="p">,</span>
-    <span class="n">lam</span><span class="p">,</span>
-    <span class="n">beta_sky</span><span class="p">,</span>
-    <span class="n">modes</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">]),</span>
-    <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span>
+<span class="n">info_matrix</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">information_matrix</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">,</span>
+    <span class="n">easy_central_difference</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">eps</span><span class="o">=</span><span class="mf">1e-9</span><span class="p">,</span>
+    <span class="n">inds</span><span class="o">=</span><span class="n">inds</span><span class="p">,</span>
+    <span class="n">N</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
     <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
     <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">st</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
-<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num</span><span class="p">):</span>
-    <span class="n">like</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">get_ll</span><span class="p">(</span>
-        <span class="n">params_circ</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">noise_factor</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span> <span class="n">modes</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">]),</span> <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span>
-    <span class="p">)</span>
-<span class="n">et</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;circ:&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">et</span> <span class="o">-</span> <span class="n">st</span><span class="p">)</span> <span class="o">/</span> <span class="n">num</span><span class="p">,</span> <span class="s2">&quot;per binary:&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">et</span> <span class="o">-</span> <span class="n">st</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">num</span> <span class="o">*</span> <span class="n">num_bin</span><span class="p">))</span>
-<br/></pre></div>
+<span class="n">cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">pinv</span><span class="p">(</span><span class="n">info_matrix</span><span class="p">)</span>
+
+<span class="n">cov</span><span class="o">.</span><span class="n">shape</span>
+</pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-circ: 0.005135442859999557 per binary: 0.0005135442859999557
+(10, 8, 8)
 </pre></div></div>
 </div>
+<p>Covariance Matrix for first binary:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]))</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
-</pre></div>
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x7fe034d9d070&gt;]
-</pre></div></div>
-</div>
-<p>params_ecc = np.array( [ amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in, e1_in, beta1_in, ] )</p>
-<p>modes = np.array([1, 2, 3, 4]) A_inj, E_inj = gb.inject_signal( amp, f0, fdot, fddot, phi0, iota, psi, lam, beta_sky, e1, beta1, modes=modes, N=N, dt=dt, T=Tobs, )</p>
-<p>st = time.perf_counter() for _ in range(num): like = gb.get_ll(params_ecc, [A_inj, E_inj], noise_factor, N=N, dt=dt, modes=modes, T=Tobs,) et = time.perf_counter() print( “ecc ({} modes):”.format(len(modes)), (et - st) / num, “per binary:”, (et - st) / (num * num_bin), )</p>
-<p>for i in range(len(modes)): plt.plot(gb.freqs[i][0], np.abs(gb.A[i][0]))</p>
-<section id="zoom-in-on-j-=-3-mode">
-<h2>zoom in on j = 3 mode<a class="headerlink" href="#zoom-in-on-j-=-3-mode" title="Permalink to this headline"></a></h2>
-<p>plt.plot(gb.freqs[2][0], np.abs(gb.A[2][0]))</p>
-<p>params_circ_third = np.array( [ amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in, A2_in, omegabar_in, e2_in, P2_in, T2_in, ] )</p>
-<p>A_inj, E_inj = gb.inject_signal( amp, f0, fdot, fddot, phi0, iota, psi, lam, beta_sky, A2, omegabar, e2, P2, T2, modes=np.array([2]), N=N, dt=dt, T=Tobs, )</p>
-<p>st = time.perf_counter() for _ in range(num): like = gb.get_ll( params_circ_third, [A_inj, E_inj], noise_factor, N=N, dt=dt, modes=np.array([2]), T=Tobs, ) et = time.perf_counter() print(“circ / third:”, (et - st) / num, “per binary:”, (et - st) / (num * num_bin))</p>
-<p>plt.plot(gb.freqs[0][0], np.abs(gb.A[0][0]))</p>
-<p>params_full = np.array( [ amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in, e1_in, beta1_in, A2_in, omegabar_in, e2_in, P2_in, T2_in, ] )</p>
-<p>modes = np.array([1, 2, 3, 4]) A_inj, E_inj = gb.inject_signal( amp, f0, fdot, fddot, phi0, iota, psi, lam, beta_sky, e1, beta1, A2, omegabar, e2, P2, T2, modes=modes, N=N, dt=dt, T=Tobs, )</p>
-<p>st = time.perf_counter() for _ in range(num): like = gb.get_ll(params_full, [A_inj, E_inj], noise_factor, N=N, dt=dt, modes=modes, T=Tobs,) et = time.perf_counter() print( “ecc/third ({} modes):”.format(len(modes)), (et - st) / num, “per binary:”, (et - st) / (num * num_bin), )</p>
-<p>for i in range(len(modes)): plt.plot(gb.freqs[i][0], np.abs(gb.A[i][0]))</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">cov</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-125829120.0
+array([[ 2.59077356e-03, -1.73881105e-11,  5.79303854e-06,
+        -9.34813784e-06, -1.04002859e-04, -5.60750479e-05,
+         1.67605334e-05,  9.25171196e-05],
+       [-1.73881104e-11,  1.22082662e-14,  1.64237500e-09,
+        -2.54833541e-09,  1.37966733e-13, -1.52900681e-08,
+         5.16215869e-10, -3.66331834e-10],
+       [ 5.79303858e-06,  1.64237500e-09,  3.24595981e-04,
+        -5.03938709e-04, -3.47043395e-07, -3.02364387e-03,
+         1.81105534e-05,  1.29976949e-04],
+       [-9.34813786e-06, -2.54833541e-09, -5.03938709e-04,
+         7.82376988e-04,  5.53048679e-07,  4.69427999e-03,
+        -2.96655655e-05, -2.05333283e-04],
+       [-1.04002859e-04,  1.37967094e-13, -3.47043323e-07,
+         5.53048569e-07,  4.17508525e-06,  3.31774245e-06,
+        -6.68420959e-07, -3.78390944e-06],
+       [-5.60750482e-05, -1.52900681e-08, -3.02364387e-03,
+         4.69427999e-03,  3.31774311e-06,  2.81657883e-02,
+        -1.78010037e-04, -1.23202090e-03],
+       [ 1.67605334e-05,  5.16215870e-10,  1.81105534e-05,
+        -2.96655655e-05, -6.68420965e-07, -1.78010037e-04,
+         1.55073927e-03,  4.16053556e-04],
+       [ 9.25171196e-05, -3.66331834e-10,  1.29976949e-04,
+        -2.05333283e-04, -3.78390947e-06, -1.23202090e-03,
+         4.16053556e-04,  2.04009063e-03]])
 </pre></div></div>
 </div>
+<p>Standard deviation on the marginalized parameters:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="p">(</span><span class="n">Tobs</span><span class="p">)</span>
-<span class="n">fmax</span> <span class="o">=</span> <span class="mf">1e-2</span>
-<span class="n">noise_freqs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">fmax</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-
-<span class="n">AE_noise</span> <span class="o">=</span> <span class="n">tdi</span><span class="o">.</span><span class="n">noisepsd_AE</span><span class="p">(</span><span class="n">noise_freqs</span><span class="p">)</span>
-
-<span class="n">noise_factor</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">df</span><span class="p">),</span> <span class="mi">1</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">df</span><span class="p">)]</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">params</span><span class="p">[</span><span class="n">inds</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">cov</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-/Users/michaelkatz/.local/lib/python3.8/site-packages/tdi.py:647: RuntimeWarning: divide by zero encountered in true_divide
-  Sa_a = LP.Sa_a[model] *(1.0 +(0.4e-3/frq)**2)*(1.0+(frq/8e-3)**4)
-/Users/michaelkatz/.local/lib/python3.8/site-packages/tdi.py:649: RuntimeWarning: divide by zero encountered in power
-  Sa_d = Sa_a*(2.*np.pi*frq)**(-4.)
-/Users/michaelkatz/.local/lib/python3.8/site-packages/tdi.py:651: RuntimeWarning: invalid value encountered in multiply
-  Sa_nu = Sa_d*(2.0*np.pi*frq/LC.clight)**2
-/Users/michaelkatz/.local/lib/python3.8/site-packages/tdi.py:656: RuntimeWarning: divide by zero encountered in true_divide
-  Soms_d = LP.Soms_d[model] * (1. + (2.e-3/f)**4)
-/Users/michaelkatz/.local/lib/python3.8/site-packages/tdi.py:658: RuntimeWarning: invalid value encountered in multiply
-  Soms_nu = Soms_d*(2.0*np.pi*frq/LC.clight)**2
-</pre></div></div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">matplotlib</span> qt
-<span class="n">plt</span><span class="o">.</span><span class="n">loglog</span><span class="p">(</span><span class="n">noise_freqs</span><span class="p">,</span> <span class="n">AE_noise</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1</span><span class="o">/</span><span class="n">Tobs</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
-<span class="c1">#plt.xlim(0.0019989808400472007, 0.002001007397969564)</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x7fe026e07c40&gt;]
+array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
+       4.08660507e-04, 5.03479985e-02, 1.57517708e-02, 2.25836812e-02])
 </pre></div></div>
 </div>
-</section>
-<section id="inject-eccentric-signal">
-<h2>inject eccentric signal<a class="headerlink" href="#inject-eccentric-signal" title="Permalink to this headline"></a></h2>
-<p>params_ecc = np.array( [ amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in, e1_in, beta1_in, ] )</p>
-<p>modes = np.array([1, 2, 3, 4]) A_inj, E_inj = gb.inject_signal( amp, f0, fdot, fddot, phi0, iota, psi, lam, beta_sky, e1, beta1, modes=modes, N=N, dt=dt, T=Tobs, )</p>
-<p>A_inj = A_inj[:len(AE_noise)] / np.sqrt(AE_noise) * np.sqrt(df) E_inj = E_inj[:len(AE_noise)] / np.sqrt(AE_noise) * np.sqrt(df)</p>
-<p>data = [A_inj, E_inj] # right summation rule</p>
-</section>
-<section id="try-to-extract-with-ecc">
-<h2>try to extract with ecc<a class="headerlink" href="#try-to-extract-with-ecc" title="Permalink to this headline"></a></h2>
-<p>like = gb.get_ll( params_ecc, data, noise_factor, N=N, dt=dt, modes=np.array([2]), T=Tobs, )</p>
-<p>print(‘ecc template log likelihood:’, like)</p>
-</section>
-<section id="try-to-extract-with-circular">
-<h2>try to extract with circular<a class="headerlink" href="#try-to-extract-with-circular" title="Permalink to this headline"></a></h2>
-<p>params_circ = np.array( [amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in,] )</p>
-<p>like = gb.get_ll( params_circ, data, noise_factor, N=N, dt=dt, modes=np.array([2]), T=Tobs, )</p>
-<p>print(‘circ template log likelihood:’, like)</p>
-</section>
-<section id="inject-circular-with-eccentric-third-body">
-<h2>inject circular with eccentric third body<a class="headerlink" href="#inject-circular-with-eccentric-third-body" title="Permalink to this headline"></a></h2>
-<p>A_inj, E_inj = gb.inject_signal( amp, f0, fdot, fddot, phi0, iota, psi, lam, beta_sky, A2, omegabar, e2, P2, T2, modes=modes, N=N, dt=dt, T=Tobs, )</p>
-<p>A_inj = A_inj[:len(AE_noise)] / np.sqrt(AE_noise) * np.sqrt(df) E_inj = E_inj[:len(AE_noise)] / np.sqrt(AE_noise) * np.sqrt(df)</p>
-<p>data = [A_inj, E_inj] # right summation rule</p>
-</section>
-<section id="try-to-extract-with-circular-third-body">
-<h2>try to extract with circular third body<a class="headerlink" href="#try-to-extract-with-circular-third-body" title="Permalink to this headline"></a></h2>
-<p>like = gb.get_ll( params_circ_third, data, noise_factor, N=N, dt=dt, modes=np.array([2]), T=Tobs, )</p>
-<p>A_third = gb.A[0][0].copy() freqs_third = gb.freqs[0][0].copy()</p>
-<p>print(‘circular third body template likelihood:’, like)</p>
-</section>
-<section id="id1">
-<h2>try to extract with circular<a class="headerlink" href="#id1" title="Permalink to this headline"></a></h2>
-<p>params_circ = np.array( [amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in,] )</p>
-<p>like = gb.get_ll( params_circ, data, noise_factor, N=N, dt=dt, modes=np.array([2]), T=Tobs, )</p>
-<p>A_circ = gb.A[0][0].copy()</p>
-<p>freqs_circ = gb.freqs[0][0].copy()</p>
-<p>print(‘circ template likelihood:’, like)</p>
-</section>
-</section>
-<section id="Fisher">
-<h1>Fisher<a class="headerlink" href="#Fisher" title="Permalink to this headline"></a></h1>
-<p>num_bin = 100 amp = 1e-19 f0 = 2e-3 fdot = 1e-14 fddot = 0.0 phi0 = 0.1 iota = 0.2 psi = 0.3 lam = 0.4 beta_sky = 0.5 A2 = 19.5 omegabar = 0.0 e2 = 0.3 P2 = 0.6 T2 = 0.0</p>
-<p>amp_in = np.full(num_bin, amp) f0_in = np.full(num_bin, f0) fdot_in = np.full(num_bin, fdot) fddot_in = np.full(num_bin, fddot) phi0_in = np.full(num_bin, phi0) iota_in = np.full(num_bin, iota) psi_in = np.full(num_bin, psi) lam_in = np.full(num_bin, lam) beta_sky_in = np.full(num_bin, beta_sky) A2_in = np.full(num_bin, A2) P2_in = np.full(num_bin, P2) omegabar_in = np.full(num_bin, omegabar) e2_in = np.full(num_bin, e2) T2_in = np.full(num_bin, T2)</p>
-<p>N = int(1024)</p>
-<p>Tobs = 4.0 * YEAR dt = 15.0</p>
-<p>waveform_kwargs = dict(N=N, dt=dt, T=Tobs)</p>
-<section id="ln-(amp),-f0-in-ms,-ln-(fdot)">
-<h2>ln (amp), f0 in ms, ln (fdot)<a class="headerlink" href="#ln-(amp),-f0-in-ms,-ln-(fdot)" title="Permalink to this headline"></a></h2>
-<p>transform_fn = { 0: np.exp, 1: (lambda x: x * 1e-3), 2: np.exp, }</p>
-<p>injection_params = np.array( [ np.log(amp), f0 * 1e3, fdot, fddot, phi0, iota, psi, lam, beta_sky, A2, omegabar, e2, P2, T2, ] )</p>
-<p>fish_params = np.array( [ np.log(amp_in), f0_in * 1e3, np.log(fdot_in), fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in, A2_in, omegabar_in, e2_in, P2_in, T2_in, ] )</p>
-<p>inds_test = np.delete(np.arange(len(fish_params)), 3) fish = gb.fisher( fish_params, inds=inds_test, parameter_transforms=transform_fn, **waveform_kwargs )</p>
-<p>fish</p>
-<p>fish[0]</p>
-<p>fish[0].diagonal()</p>
-<p>cov = np.linalg.pinv(fish[0])</p>
-<p>np.sqrt(cov.diagonal()) # standard deviation</p>
-</section>
-</section>
-<section id="emcee-example">
-<h1>emcee example<a class="headerlink" href="#emcee-example" title="Permalink to this headline"></a></h1>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">uniform</span>
-
-<span class="k">def</span> <span class="nf">uniform_dist</span><span class="p">(</span><span class="nb">min</span><span class="p">,</span> <span class="nb">max</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">min</span> <span class="o">&gt;</span> <span class="nb">max</span><span class="p">:</span>
-        <span class="n">temp</span> <span class="o">=</span> <span class="nb">min</span>
-        <span class="nb">min</span> <span class="o">=</span> <span class="nb">max</span>
-        <span class="nb">max</span> <span class="o">=</span> <span class="n">temp</span>
-
-    <span class="n">mean</span> <span class="o">=</span> <span class="p">(</span><span class="nb">max</span> <span class="o">+</span> <span class="nb">min</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span>
-    <span class="n">sig</span> <span class="o">=</span> <span class="nb">max</span> <span class="o">-</span> <span class="nb">min</span>
-    <span class="n">dist</span> <span class="o">=</span> <span class="n">uniform</span><span class="p">(</span><span class="nb">min</span><span class="p">,</span> <span class="n">sig</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">dist</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="p">(</span><span class="n">Tobs</span><span class="p">)</span> <span class="c1"># not exactly right</span>
-<span class="n">fmax</span> <span class="o">=</span> <span class="mf">1e-2</span>
-<span class="n">noise_freqs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">fmax</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-
-<span class="n">AE_noise</span> <span class="o">=</span> <span class="n">tdi</span><span class="o">.</span><span class="n">noisepsd_AE</span><span class="p">(</span><span class="n">noise_freqs</span><span class="p">)</span>
-
-<span class="n">noise_factor</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">df</span><span class="p">),</span> <span class="mi">1</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">df</span><span class="p">)]</span>
-
-<span class="n">injection_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
-    <span class="n">amp</span><span class="p">,</span>
-    <span class="n">f0</span><span class="p">,</span>
-    <span class="n">fdot</span><span class="p">,</span>
-    <span class="n">fddot</span><span class="p">,</span>
-    <span class="n">phi0</span><span class="p">,</span>
-    <span class="n">iota</span><span class="p">,</span>
-    <span class="n">psi</span><span class="p">,</span>
-    <span class="n">lam</span><span class="p">,</span>
-    <span class="n">beta_sky</span><span class="p">,</span>
-    <span class="n">A2</span><span class="p">,</span>
-    <span class="n">omegabar</span><span class="p">,</span>
-    <span class="n">e2</span><span class="p">,</span>
-    <span class="n">P2</span><span class="p">,</span>
-    <span class="n">T2</span><span class="p">,</span>
-<span class="p">])</span>
-<span class="n">A_inj</span><span class="p">,</span> <span class="n">E_inj</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">inject_signal</span><span class="p">(</span>
-    <span class="o">*</span><span class="n">injection_params</span><span class="p">,</span>
-    <span class="n">modes</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">]),</span>
-    <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span>
-    <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
-    <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">A_inj</span> <span class="o">=</span> <span class="n">A_inj</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
-<span class="n">E_inj</span> <span class="o">=</span> <span class="n">E_inj</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">AE_noise</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
-
-<span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="n">A_inj</span><span class="p">,</span> <span class="n">E_inj</span><span class="p">]</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">priors</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">amp</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">amp</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">f0</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">f0</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">fdot</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">fdot</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">fddot</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">fddot</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mf">2.</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">A2</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">A2</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">e2</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">e2</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="n">P2</span> <span class="o">*</span> <span class="mf">0.95</span><span class="p">,</span> <span class="n">P2</span> <span class="o">*</span> <span class="mf">1.05</span><span class="p">),</span>
-    <span class="n">uniform_dist</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-<span class="p">]</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">Likelihood</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lnlike</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">noise_factor</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">modes</span><span class="p">,</span> <span class="n">Tobs</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="n">priors</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">lnlike</span> <span class="o">=</span> <span class="n">lnlike</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">noise_factor</span> <span class="o">=</span> <span class="n">noise_factor</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">modes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tobs</span> <span class="o">=</span> <span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">modes</span><span class="p">,</span> <span class="n">Tobs</span>
-
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-        <span class="n">prior_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-        <span class="k">for</span> <span class="n">prior_i</span><span class="p">,</span> <span class="n">x_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">T</span><span class="p">):</span>
-            <span class="n">temp</span> <span class="o">=</span> <span class="n">prior_i</span><span class="o">.</span><span class="n">logpdf</span><span class="p">(</span><span class="n">x_i</span><span class="p">)</span>
-
-            <span class="n">prior_vals</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">temp</span><span class="p">)]</span> <span class="o">+=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-
-        <span class="n">inds_eval</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">prior_vals</span><span class="p">)</span> <span class="o">!=</span> <span class="kc">True</span><span class="p">)))</span>
-
-        <span class="n">loglike_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">inds_eval</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="n">loglike_vals</span><span class="p">,</span> <span class="n">prior_vals</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
-
-        <span class="n">temp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lnlike</span><span class="o">.</span><span class="n">get_ll</span><span class="p">(</span>
-            <span class="n">x</span><span class="p">[</span><span class="n">inds_eval</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise_factor</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">modes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">modes</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Tobs</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="n">loglike_vals</span><span class="p">[</span><span class="n">inds_eval</span><span class="p">]</span> <span class="o">=</span> <span class="n">temp</span>
-
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">loglike_vals</span><span class="p">,</span> <span class="n">prior_vals</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">like</span> <span class="o">=</span> <span class="n">Likelihood</span><span class="p">(</span><span class="n">gb</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">noise_factor</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">]),</span> <span class="n">Tobs</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
+<p>Plot the Information Matrix ellipse for the intial frequency and frequency derivative:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">injection_params</span><span class="p">)</span>
-<span class="n">nwalkers</span> <span class="o">=</span> <span class="mi">100</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><br/><span></span><span class="n">ind1</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">ind2</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">inds_get</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+    <span class="p">[</span><span class="n">ind1</span><span class="p">,</span> <span class="n">ind1</span><span class="p">],</span>
+    <span class="p">[</span><span class="n">ind1</span><span class="p">,</span> <span class="n">ind2</span><span class="p">],</span>
+    <span class="p">[</span><span class="n">ind2</span><span class="p">,</span> <span class="n">ind1</span><span class="p">],</span>
+    <span class="p">[</span><span class="n">ind2</span><span class="p">,</span> <span class="n">ind2</span><span class="p">]</span>
+<span class="p">])</span><span class="o">.</span><span class="n">T</span>
+<span class="n">sub_mat</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="nb">tuple</span><span class="p">(</span><span class="n">inds_get</span><span class="p">)]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
-<span class="n">test_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">injection_params</span><span class="p">,</span> <span class="p">(</span><span class="n">nwalkers</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="c1"># calculate and draw covariance ellipse</span>
+<span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">sub_mat</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">like</span><span class="p">(</span><span class="n">test_x</span><span class="p">))</span>
+<span class="n">lam1</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">+</span> <span class="n">c</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(((</span><span class="n">a</span><span class="o">-</span><span class="n">c</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">b</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">lam2</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">+</span> <span class="n">c</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(((</span><span class="n">a</span><span class="o">-</span><span class="n">c</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">b</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">b</span> <span class="o">==</span> <span class="mf">0.</span> <span class="ow">and</span> <span class="n">a</span> <span class="o">&gt;=</span> <span class="n">c</span><span class="p">:</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="k">elif</span> <span class="n">b</span> <span class="o">==</span> <span class="mf">0.</span> <span class="ow">and</span> <span class="n">a</span> <span class="o">&lt;</span> <span class="n">c</span><span class="p">:</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mf">2.</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">lam1</span> <span class="o">-</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+
+<span class="n">t_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lam1</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">t_vals</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lam2</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">t_vals</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lam1</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">t_vals</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lam2</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">t_vals</span><span class="p">)</span>
+
+<span class="n">x_in</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">x</span><span class="p">)</span>
+<span class="n">y_in</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">y</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_in</span><span class="p">,</span> <span class="n">y_in</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput docutils container">
-<div class="prompt empty docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[[1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]
- [1.8189894e-12 0.0000000e+00]]
+[&lt;matplotlib.lines.Line2D at 0x7f80589c9ee0&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-/Users/michaelkatz/anaconda3/envs/gbgpu_env/lib/python3.8/site-packages/scipy/stats/_distn_infrastructure.py:1802: RuntimeWarning: invalid value encountered in true_divide
-  x = np.asarray((x - loc)/scale, dtype=dtyp)
-</pre></div></div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[44]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">factor</span> <span class="o">=</span> <span class="mf">1e-8</span>
-<span class="n">start_points</span> <span class="o">=</span> <span class="n">test_x</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">factor</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nwalkers</span><span class="p">,</span> <span class="n">ndim</span><span class="p">))</span>
-<span class="n">inds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">start_points</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">)</span>
-
-<span class="n">start_points</span><span class="p">[</span><span class="n">inds</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">factor</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nwalkers</span><span class="p">,</span> <span class="n">ndim</span><span class="p">))[</span><span class="n">inds</span><span class="p">]</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">like</span><span class="p">(</span><span class="n">start_points</span><span class="p">))</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
 <div class="output_area docutils container">
-<div class="highlight"><pre>
-[[1.20576345e+00 0.00000000e+00]
- [4.41114742e-02 0.00000000e+00]
- [3.46028856e-01 0.00000000e+00]
- [5.78320337e-02 0.00000000e+00]
- [5.42863689e-04 0.00000000e+00]
- [1.88296289e-01 0.00000000e+00]
- [3.07323620e-02 0.00000000e+00]
- [1.56069484e-01 0.00000000e+00]
- [9.77295802e-01 0.00000000e+00]
- [5.61122163e-01 0.00000000e+00]
- [1.43230359e-03 0.00000000e+00]
- [7.31024440e-04 0.00000000e+00]
- [1.83904699e-03 0.00000000e+00]
- [1.02603808e+00 0.00000000e+00]
- [1.89859347e-01 0.00000000e+00]
- [2.85021451e-01 0.00000000e+00]
- [1.12043981e-01 0.00000000e+00]
- [2.89340739e-02 0.00000000e+00]
- [3.67557806e-01 0.00000000e+00]
- [1.98508929e+00 0.00000000e+00]
- [2.02065406e-04 0.00000000e+00]
- [2.10635282e-02 0.00000000e+00]
- [8.17147678e-02 0.00000000e+00]
- [2.01302283e+00 0.00000000e+00]
- [3.13035271e+00 0.00000000e+00]
- [6.32620091e-04 0.00000000e+00]
- [1.56420033e-01 0.00000000e+00]
- [9.26318956e-02 0.00000000e+00]
- [6.11070964e-02 0.00000000e+00]
- [2.60250785e-01 0.00000000e+00]
- [2.76357852e-01 0.00000000e+00]
- [1.64203746e-02 0.00000000e+00]
- [1.39998142e+00 0.00000000e+00]
- [1.01514355e-01 0.00000000e+00]
- [9.67141316e-01 0.00000000e+00]
- [8.56852449e-02 0.00000000e+00]
- [4.98602367e-05 0.00000000e+00]
- [2.08596196e-01 0.00000000e+00]
- [1.02064996e-02 0.00000000e+00]
- [9.19620214e-01 0.00000000e+00]
- [3.33771279e+00 0.00000000e+00]
- [3.65495337e-02 0.00000000e+00]
- [1.34222245e+00 0.00000000e+00]
- [3.91855252e-01 0.00000000e+00]
- [3.04116011e-02 0.00000000e+00]
- [7.85777431e-01 0.00000000e+00]
- [1.06403558e-02 0.00000000e+00]
- [1.35419566e-01 0.00000000e+00]
- [5.22397002e-01 0.00000000e+00]
- [3.14108951e+00 0.00000000e+00]
- [2.37911896e-03 0.00000000e+00]
- [2.27301573e-01 0.00000000e+00]
- [1.25712630e-02 0.00000000e+00]
- [6.34904597e-01 0.00000000e+00]
- [1.31069172e-02 0.00000000e+00]
- [1.36683509e+00 0.00000000e+00]
- [1.51144776e-02 0.00000000e+00]
- [1.57403077e+00 0.00000000e+00]
- [1.55306369e-01 0.00000000e+00]
- [3.53548785e-02 0.00000000e+00]
- [1.00619844e-03 0.00000000e+00]
- [7.17635301e-03 0.00000000e+00]
- [6.10244918e-01 0.00000000e+00]
- [3.70754930e-01 0.00000000e+00]
- [9.99682904e-01 0.00000000e+00]
- [1.03589192e+00 0.00000000e+00]
- [3.07574786e+00 0.00000000e+00]
- [7.28142391e-02 0.00000000e+00]
- [1.76836163e+00 0.00000000e+00]
- [8.37806510e-02 0.00000000e+00]
- [1.34744330e+00 0.00000000e+00]
- [1.51008828e-01 0.00000000e+00]
- [1.34177244e+00 0.00000000e+00]
- [1.65585875e-01 0.00000000e+00]
- [1.46674197e+00 0.00000000e+00]
- [5.84329024e-02 0.00000000e+00]
- [2.09003209e-01 0.00000000e+00]
- [2.41005775e-02 0.00000000e+00]
- [7.08434855e-02 0.00000000e+00]
- [1.88229362e-01 0.00000000e+00]
- [8.82189674e-02 0.00000000e+00]
- [7.84224547e-01 0.00000000e+00]
- [1.08065659e-01 0.00000000e+00]
- [5.13536268e-01 0.00000000e+00]
- [4.76344468e-01 0.00000000e+00]
- [1.30112608e+00 0.00000000e+00]
- [2.52081696e-01 0.00000000e+00]
- [3.38038893e-01 0.00000000e+00]
- [4.40293487e-03 0.00000000e+00]
- [1.72142463e-01 0.00000000e+00]
- [6.54782363e-04 0.00000000e+00]
- [1.92123689e-01 0.00000000e+00]
- [7.03989532e-03 0.00000000e+00]
- [6.04162687e-02 0.00000000e+00]
- [5.49960853e-02 0.00000000e+00]
- [3.55397154e-02 0.00000000e+00]
- [5.76911462e-02 0.00000000e+00]
- [1.19694703e-01 0.00000000e+00]
- [1.34139121e+00 0.00000000e+00]
- [6.29182764e-02 0.00000000e+00]]
-</pre></div></div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sampler</span> <span class="o">=</span> <span class="n">emcee</span><span class="o">.</span><span class="n">EnsembleSampler</span><span class="p">(</span>
-            <span class="n">nwalkers</span><span class="p">,</span>
-            <span class="n">ndim</span><span class="p">,</span>
-            <span class="n">like</span><span class="p">,</span>
-            <span class="n">vectorize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">nsteps</span> <span class="o">=</span> <span class="mi">1000</span>
-<span class="n">sampler</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
-<span class="n">sampler</span><span class="o">.</span><span class="n">run_mcmc</span><span class="p">(</span><span class="n">start_points</span><span class="p">,</span> <span class="n">nsteps</span><span class="p">,</span> <span class="n">progress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-WARNING:root:You must install the tqdm library to use progress indicators with emcee
-</pre></div></div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
-</pre></div>
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-State([[2.00336638e-19 2.00003076e-03 9.99885714e-15 ... 2.99794719e-01
-  6.00623549e-01 5.01645699e-04]
- [2.07302877e-19 1.99998793e-03 1.01581279e-14 ... 2.93459059e-01
-  5.85017100e-01 2.00989623e-02]
- [2.07619860e-19 1.99998782e-03 1.01588261e-14 ... 3.09569284e-01
-  5.90305144e-01 5.42410362e-02]
- ...
- [2.08854015e-19 1.99998722e-03 1.01673430e-14 ... 3.02670688e-01
-  5.93777233e-01 6.79006849e-02]
- [2.08395169e-19 1.99998762e-03 1.01617529e-14 ... 3.05976487e-01
-  5.92138099e-01 7.90615625e-02]
- [2.09736825e-19 1.99998767e-03 1.01572512e-14 ... 2.86448123e-01
-  5.82297055e-01 1.12165539e-02]], log_prob=[12920.33422364 17064.91725977 17094.35101607 17063.84852572
- 17088.90850503 17059.2925746  17074.80006691 17093.31759835
- 16046.46549321 16043.29327257 17091.6524032  17071.58700815
- 17083.68950523 17077.93184354 16045.59390933 17076.06537462
- 17064.1313107  16030.70296255 17062.37939071 17089.68754652
- 17079.51740307 17085.5862116  17070.44181955 17119.5542966
- 17081.97551227 16050.77345046 17101.79650626 17061.18197311
- 17086.23445242 17054.70216357 17084.94433395 17062.99548962
- 17059.43253458 17083.04410247 17073.5341122  12891.0738908
- 16045.42468811 17064.80023899 17051.88196586 12927.83961893
- 17077.92053125 17076.24875083 17072.29259359 17103.35426338
- 17061.21512692 17044.5113426  17064.74378902 17074.05772838
- 17061.64833707 17094.83295172 17065.80158153 17081.90522705
- 17074.01431035 17062.18082711 17093.79451241 16046.83845663
- 17080.52800469 17097.44926696 17075.90152144 17045.97776286
- 17079.62598819 17067.74226232 17083.34963482 17065.84145521
- 17091.08822637 17077.45125989 16039.0145322  16038.13347731
- 17066.91366351 17068.93774063 17066.94554215 17075.38251854
- 17063.42146593 17068.15165817 17073.47324612 16032.0258124
- 17082.8423666  17072.78445388 17051.9027232  17069.21744946
- 16033.42671558 17083.92740704 17089.87305778 17084.36357441
- 17110.56938528 17078.42324229 17057.23376874 17086.8639956
- 17049.10278314 17074.3506549  17081.74249352 16033.67178434
- 16045.25351877 17067.25975002 17079.63808767 12883.86644431
- 17077.82660718 17072.5155075  17092.54177817 17078.00229851], blobs=[0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.
- 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.
- 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.
- 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.
- 0. 0. 0. 0.], random_state=(&#39;MT19937&#39;, array([1990881865,   47791442, 1487694719,  876042750,  823907945,
-       2237101137,  927874900, 2000589477, 2175119860, 2046894416,
-        785365864,  909539243, 1191520986,   64303167, 1590637636,
-       4278362154, 3131611021, 3220731443, 3251164693, 2669703712,
-       2451092373, 1417632084, 2425567570, 2620330680, 3312690724,
-       2318223274, 2308992770,  853221545,  573063239, 2048137647,
-        120154766, 3169590653, 3689441537, 1035698564, 3507071312,
-       3425040582, 2169378851,  205533289, 2132494191, 1303890271,
-       2232980996, 1629490756, 2568958115, 2018032242,  491972678,
-       2189463415,   23235827,  572977713, 4292274195,  290452952,
-       2014309341, 3728913165, 1551370218, 2286224276, 3754454121,
-        111352318,  351064498, 4125305230, 3473469677, 2448118931,
-       2116460569, 2334926408,  162062861, 3835103938,  980520001,
-       3708142905, 4128912521, 4198195295,  104563394, 3948644827,
-       1247769305,  245399940, 4121504631, 1839390326,  468459804,
-       1100392208, 2557291680, 1853859808, 1903190653, 1630126110,
-       2852979390, 1116558410, 1256960798, 1054715370, 3627671813,
-       2710219747, 3467834830, 1496629454, 1665463807, 2960496738,
-       3451034287, 2634405284, 4122518073, 2472829301, 3132800212,
-       2181054767,   65222451,   61716173,  824046040, 2233673114,
-       3655557239, 3394247173, 1772497986, 1295640904,  454879205,
-       3219902579,  273016356,  229023230, 2250116771, 1241398469,
-       1344406232, 3720278717, 1925482078,  556652562, 4151325779,
-        469905093,  590630956, 2853073045, 3786130255, 2466079804,
-        876392864,  603416671, 3914977156,  565488737, 1236858856,
-       3113958354,  517707887,  855852079, 3105049343, 2352608989,
-       1359379139, 4071123622,  232737219, 3190548093, 1993540745,
-        779691068, 1650441354,  981547223,  676107746, 3759063201,
-       2286738245, 2243051007, 2963435945, 2810285084, 4216547388,
-       3775059102, 3006720825, 3328591124, 2572579128, 2076217342,
-        406111209,   98142121, 3905183408, 2255301093, 1887979570,
-       3465819587, 3819812807,  538320128,  784697469, 2412809157,
-       2150202294,  882524111,  502359203, 1398792791, 3205442517,
-       1586091241, 4260122902, 3393316603, 1781821355, 1822023531,
-       3054843463, 3011377964,  320222530, 1762371559, 1098860097,
-         26474228, 4278701512, 1652400900, 3060049504, 1018028966,
-       1205449745, 3733111518, 3566182909, 2613319035,  494432460,
-       4054114734, 3761308977, 1588286820, 3617414778, 2235879081,
-       3112648802,  989945516, 3308903047,  833727762, 3494315147,
-        323422231, 2735322563, 1765451511,  750230322, 1489063596,
-       3210735099,  552528278, 2941167340, 2521964171, 2280146386,
-       3677536191, 1431949001, 3177315904,  919564530, 3100069283,
-        763197136, 3446517334, 3400268907, 2968007099, 3197776969,
-       1220384918, 1925823194, 3403461671, 4090935733, 2350549252,
-        221789018,  937350231, 2644516476, 1737465969, 4139932498,
-        820861994, 3568562789, 1455029068, 3182872990, 2135090895,
-        101621733, 1816674555, 2083049747, 2801425799, 3599694475,
-        895318769, 2770733790,  704411918,  874951194,  116003577,
-       2617132394, 1615009160, 2641596270, 3567453709, 3919319273,
-        180350263,  428742565,  590092411, 3014872315, 4012869203,
-       3652852659,  202933981, 1566870864, 1773353073, 1924230949,
-       4047943974,  736690056, 1848906842, 3695451837,  299280732,
-       4182260064, 2569438592, 2239370238, 1890053676,   40364981,
-         70964861, 3088100241, 3683324645, 3524985616, 3956944871,
-       3335586124, 2743163991, 3218452395, 4088083975, 3219193747,
-        193368792, 1620466442, 1100547998, 3584180603, 1666372128,
-       1478370900, 1084815944, 4265001269, 1402456780, 4141347093,
-        550006763, 2266582125, 2207302433, 2756343765, 1185199680,
-       1038445130,   19479869, 1923233929, 2516217895, 3414457401,
-        637561620,  274451876, 2265101878, 1937552423,  635603690,
-       2634627930, 1422102877, 3076375933, 2149045134, 3574909424,
-        273443228, 1034063295, 1624760243,  955876887, 3861263635,
-       2640804143, 1687948470, 1948373907,  341648652,  378530157,
-        795811792,  298056362, 3094853945, 2647622765, 3119155761,
-        321012908, 3102969765, 4189149179, 3420788111, 3035114798,
-        334075577,  663462817,  723642627, 2600114784, 3107795640,
-       2952450939, 2982290889, 4244369596, 3327629867,  111081970,
-       1014348014, 2462435815, 2026772758,   99263295, 3137390393,
-        516166427,  536193011, 3544533847, 1682525956, 3889500708,
-       3832811878, 2776055261, 3620458391, 1283312628, 2777882398,
-       3715650704, 4228389191, 3754949675, 3239401732, 1637304603,
-       1999054671, 1151623110, 1009359646, 3942632879, 2760762752,
-       2410014113,  302320080, 3107783876, 2736635728, 1262996593,
-       1386028588, 2997362419, 3577201470,  965961853,  952617893,
-       1182580761, 3723546497, 4268650541, 2559155359, 2209756730,
-       4161347574, 2550559113, 3102382119, 1685549634, 2858456063,
-        165608116,  741122601, 4224639908, 2631183285, 2889314935,
-       2937358437, 3843813162, 4228317385, 1853410794, 3127868544,
-       3786958297, 1525725057, 2701990811, 3031204682, 2608307839,
-        257467107,  983327520, 1118696492, 1485794400, 1444740784,
-       2751516820, 2358713208, 2547699183, 3893275078, 1473017430,
-        997581113,  373876495, 2052921017, 1984956304, 3441534468,
-        494654497,  741530252, 2597904551, 1841288790, 3219348798,
-        603749027, 2576922289, 3814827544,  767993905, 2587232580,
-       2217819917, 1551187879,  771790740, 3737644919, 1640965716,
-       3023526432, 2875953474, 4035523326, 3919150349, 4133877379,
-       1560133444, 4189547703,  925456421, 3054391253,  714396487,
-       3035876443, 2927568346, 1708529431, 2351753910, 2967511953,
-       2968351825,  439024671, 3475107326, 1498139809,  944693990,
-        956661341,  444014576, 3036133195, 3995802686, 3944639843,
-       3499744617, 3527592753,  950809069, 1854339920, 3597288852,
-       2646332547, 2412358040, 2113089282, 3128253369, 2386651313,
-       4207679475, 1686799086, 3307098609,  370677818,  148625442,
-       1973128801, 3757271965, 1080508246, 3014932352, 4130649978,
-        211682065, 1251679716, 3741058615, 1646460499,  342623652,
-        607691812, 1043416103, 1754006881, 1212993566, 1786923533,
-        409639063, 1694517145, 2459679921, 2688407941, 3606522061,
-       3887820310, 2915240465, 1606969935,  630283165,  290240606,
-       2781957638, 3086942595, 1791200132, 1384126675, 3703082447,
-       3606801080, 3527368439, 3201001346, 1960968756,  412053509,
-       2456556531, 2485772415,  132077177, 1370238950, 3702442237,
-       2417858065, 3084683948, 1532364455,  344977692, 1785436149,
-        706798723, 1548426467, 2563566094, 1669803685, 1784320854,
-        821465025, 2241724531, 3022650056, 2608279605, 3360221014,
-        879684357, 1536843998, 1215714258, 2206049352,   59605323,
-       2454643067, 2235173050, 3777324418, 3412668623, 3504978774,
-       2561072604,  244626878,   82730969, 3884224127, 2412495799,
-       3764306060, 3212507075, 4102628575, 3531039435,  541572898,
-       1039151503, 2819255632, 3535139264, 3929834651, 1147391625,
-       2477044411, 1869088345, 2667173908,   33096680, 2642829962,
-        855936296, 3104705796, 1283575534, 3313324031,  654485033,
-        604166447, 3856993673, 1753428898, 3905361521,  301510533,
-       2264680396, 3757233729, 4006346181, 3131053129,  231403722,
-       4245742711, 3821921408, 2758971374, 1538814559,  446490380,
-       1375558511, 2874542871, 3455497651, 2546921353, 1312851858,
-       2586605481, 2085416828, 3796607981, 3173384173, 2444894198,
-        533936625, 1641827509, 4041756769, 2091372395, 3313512436,
-       3348811860, 2038067125,  935065121, 4247825899, 3362210220,
-       1640862110,  681926921, 2603780387, 2886735753,  153057910,
-       4184167898,  445138136,  202345560, 2500964711,  180278838,
-       3505604770, 2557069607, 1590724921, 3500858722, 1414679441,
-       3266948478,  242506357, 2192129625, 3972071220, 1690014953,
-       2037713265, 4162181956,  857313233, 1512515203, 3974812003,
-       2976949368, 3354724308, 3942197284, 1485590654,  661509517,
-        806055620,  929009820, 1207793326, 2562845403], dtype=uint32), 381, 0, 0.0))
-</pre></div></div>
-</div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[47]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">samples</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">get_chain</span><span class="p">(</span><span class="n">flat</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">corner</span>
-<span class="n">corner</span><span class="o">.</span><span class="n">corner</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-WARNING:root:Too few points to create valid contours
-</pre></div></div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
-</pre></div>
-</div>
-<div class="output_area docutils container">
-<img alt="_images/GBGPU_tutorial_38_1.png" src="_images/GBGPU_tutorial_38_1.png" />
-</div>
-</div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<img alt="_images/GBGPU_tutorial_38_2.png" src="_images/GBGPU_tutorial_38_2.png" />
+<img alt="_images/GBGPU_tutorial_20_1.png" src="_images/GBGPU_tutorial_20_1.png" />
 </div>
 </div>
 <div class="nbinput nblast docutils container">
@@ -1350,6 +703,7 @@ WARNING:root:Too few points to create valid contours
 </pre></div>
 </div>
 </div>
+</section>
 </section>
 
 

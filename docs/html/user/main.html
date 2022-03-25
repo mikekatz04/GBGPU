@@ -16,10 +16,12 @@
         <script src="../_static/underscore.js"></script>
         <script src="../_static/doctools.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+        <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Setup all the parameters and arrays to be used in these examples" href="../GBGPU_tutorial.html" />
+    <link rel="next" title="GBGPU Tutorial" href="../GBGPU_tutorial.html" />
     <link rel="prev" title="gbgpu: GPU/CPU Galactic Binary Waveforms" href="../index.html" /> 
 </head>
 
@@ -44,10 +46,7 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Tutorial:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html">Setup all the parameters and arrays to be used in these examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Circular-Galactic-Binary">Circular Galactic Binary</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Fisher">Fisher</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#emcee-example">emcee example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html">GBGPU Tutorial</a></li>
 </ul>
 
         </div>
@@ -70,7 +69,7 @@
       </li>
   </ul><div class="rst-breadcrumbs-buttons" role="navigation" aria-label="Sequential page navigation">
         <a href="../index.html" class="btn btn-neutral float-left" title="gbgpu: GPU/CPU Galactic Binary Waveforms" accesskey="p"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="Setup all the parameters and arrays to be used in these examples" accesskey="n">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="GBGPU Tutorial" accesskey="n">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
   </div>
   <hr/>
 </div>
@@ -543,45 +542,62 @@ on GPU.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.fisher">
-<span class="sig-name descname"><span class="pre">fisher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-09</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_transforms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.fisher" title="Permalink to this definition"></a></dt>
-<dd><p>Get the fisher matrix for a batch.</p>
-<blockquote>
-<div><p>This function computes the Fisher matrix for a batch of galactic binaries.
-It cannot handle inner binary eccentricity yet. It can handle an eccentric
-third body.</p>
-<p>It uses a 2nd order calculation for the derivative:</p>
-<p>..math:</p>
-</div></blockquote>
-<p>rac{dh}{dlambda_i} =
-rac{-h(lambda_i + 2epsilon) + h(lambda_i - 2epsilon) + 8(h(lambda_i + epsilon) - h(lambda_i - epsilon))}{12epsilson}</p>
-<blockquote>
-<div><dl class="simple">
-<dt>Args:</dt><dd><dl class="simple">
-<dt>params (2D double np.ndarray): 2D array with the parameter values of the batch.</dt><dd><p>The shape should be (number of parameters, number of binaries).
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.information_matrix">
+<span class="sig-name descname"><span class="pre">information_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-09</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_transforms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_func</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">easy_central_difference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.information_matrix" title="Permalink to this definition"></a></dt>
+<dd><p>Get the information matrix for a batch.</p>
+<p>This function computes the Information matrix for a batch of Galactic binaries.
+It uses a 2nd order calculation for the derivative if <code class="docutils literal notranslate"><span class="pre">easy_central_difference</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>:</p>
+<p>..math:: frac{dh}{dlambda_i} = frac{-h(lambda_i + 2epsilon) + h(lambda_i - 2epsilon) + 8(h(lambda_i + epsilon) - h(lambda_i - epsilon))}{12epsilson}</p>
+<p>Otherwise, it will just calculate the derivate with a first-order central difference.</p>
+<p>This function maps all parameter values to 1. For example, if the square root of
+the diagonal of the associated covariance matrix is 1e-7 for the frequency
+parameter, then the standard deviation in the frequency is <code class="docutils literal notranslate"><span class="pre">1e-7</span> <span class="pre">*</span> <span class="pre">f0</span></code>. To
+properly use with covariance values not on the diagonal, they will have to be
+multipled by the parameters: <span class="math notranslate nohighlight">\(C_{ij} \vec{\theta}_j\)</span>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> (<em>2D double np.ndarrays</em>) – Parameters of all binaries to be calculated.
+The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">binaries)</span></code>.
 See <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> for more information on the adjustable
-number of parameters when calculating for a third body.</p>
+number of parameters when calculating for a third body.</p></li>
+<li><p><strong>eps</strong> (<em>double</em><em>, </em><em>optional</em>) – Step to take when calculating the derivative.
+The step is relative difference. Default is <code class="docutils literal notranslate"><span class="pre">1e-9</span></code>.</p></li>
+<li><p><strong>parameter_transforms</strong> (<em>dict</em><em>, </em><em>optional</em>) – Dictionary containing the parameter transform
+functions. The keys in the dict should be the index associated with the parameter.
+The items should be the actual transform function. Default is no transforms (<code class="docutils literal notranslate"><span class="pre">{}</span></code>).</p></li>
+<li><p><strong>inds</strong> (<em>1D int np.ndarray</em><em>, </em><em>optional</em>) – Numpy array with the indexes of the parameters to
+test in the Information matrix. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>. When it is not given, it defaults to
+all parameters.</p></li>
+<li><p><strong>N</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of points for the waveform. Same as the <code class="docutils literal notranslate"><span class="pre">N</span></code> parameter in
+<a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a>. We recommend using higher <code class="docutils literal notranslate"><span class="pre">N</span></code> in the Information Matrix
+computation because of the numerical derivatives. Default is <code class="docutils literal notranslate"><span class="pre">1024</span></code>.</p></li>
+<li><p><strong>psd_func</strong> (<em>object</em><em>, </em><em>optional</em>) – Function to compute the PSD for the A and E channels.
+Must take on argument: the frequencies as an xp.ndarray. When <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+it attemps to use the sensitivity functions from LISA Analysis Tools.</p></li>
+<li><p><strong>psd_kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Keyword arguments for the TDI noise generator. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>easy_central_difference</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, compute the derivatives with
+a first-order central difference computation. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, use the higher order
+derivative that computes two more waveforms during the derivative calculation.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>return_gpu</strong> (<em>False</em><em>, </em><em>optional</em>) – If True and self.use_gpu is True, return Information
+matrices in cupy array. Default is False.</p></li>
+</ul>
 </dd>
-<dt>eps (double, optional): Step to take when calculating the derivative.</dt><dd><p>Default is 1e-9.</p>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Information Matrices for all binaries with shape: <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">binaries,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">parameters)</span></code>.</p>
 </dd>
-<dt>parameter_transforms (dict, optional): Dictionary containing the parameter transform</dt><dd><p>functions. The keys in the dict should be the index associated with the parameter.
-The items should be the actual transform function. Default is no transforms ({}).</p>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>3D xp.ndarray</p>
 </dd>
-<dt>inds (1D int np.ndarray, optional): Numpy array with the indexes of the parameters to</dt><dd><p>test in the Fisher matrix. Default is None. When it is not given, it defaults to
-all parameters.</p>
-</dd>
-<dt>N (int, optional): Number of points to produce for the base j=1 mode. Therefore,</dt><dd><p>with the default j = 2 mode, the waveform will be 2 * N in length.
-This should be determined by the initial frequency, f0. In the future,
-this may be implemented. Default is 1024.</p>
-</dd>
-<dt>psd_kwargs (dict, optional): Keyword arguments for the TDI noise generator</dt><dd><p>from tdi.py (noisepsd_AE). Default is None.</p>
-</dd>
-<dt>return_gpu (False, optional): If True and self.use_gpu is True, return fisher</dt><dd><p>matrices in cupy array. Default is False.</p>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – Step size issues.</p></li>
+<li><p><strong>ModuleNotFoundError</strong> – LISA Analysis Tools package not available.
+    Occurs when NOT providing <code class="docutils literal notranslate"><span class="pre">psd_func</span></code> kwarg.</p></li>
+</ul>
 </dd>
 </dl>
-</dd>
-</dl>
-</div></blockquote>
 </dd></dl>
 
 </dd></dl>
@@ -593,7 +609,7 @@ this may be implemented. Default is 1024.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="gbgpu: GPU/CPU Galactic Binary Waveforms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="Setup all the parameters and arrays to be used in these examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="GBGPU Tutorial" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

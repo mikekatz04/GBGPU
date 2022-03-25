@@ -971,58 +971,96 @@ class GBGPU(object):
 
         return A_out, E_out
 
-    def fisher(
+    def _apply_parameter_transforms(self, params, parameter_transforms):
+        """Apply parameter transformations to params for Information Matrix."""
+        for ind_trans, trans in parameter_transforms.items():
+            if isinstance(ind_trans, int):
+                params[ind_trans] = trans(params[ind_trans])
+            else:
+                params[np.asarray(ind_trans)] = trans(*params[np.asarray(ind_trans)])
+        return params
+
+    def information_matrix(
         self,
         params,
         eps=1e-9,
         parameter_transforms={},
         inds=None,
         N=1024,
+        psd_func=None,
         psd_kwargs={},
+        easy_central_difference=False,
         return_gpu=False,
         **kwargs,
     ):
-        """Get the fisher matrix for a batch.
+        """Get the information matrix for a batch.
 
-        This function computes the Fisher matrix for a batch of galactic binaries.
-        It cannot handle inner binary eccentricity yet. It can handle an eccentric
-        third body.
+        This function computes the Information matrix for a batch of Galactic binaries.
+        It uses a 2nd order calculation for the derivative if ``easy_central_difference`` is ``False``:
 
-        It uses a 2nd order calculation for the derivative:
+        ..math:: \\frac{dh}{d\\lambda_i} = \\frac{-h(\\lambda_i + 2\\epsilon) + h(\\lambda_i - 2\\epsilon) + 8(h(\\lambda_i + \epsilon) - h(\\lambda_i - \\epsilon))}{12\\epsilson}
 
-        ..math:: \frac{dh}{d\lambda_i} = \frac{-h(\lambda_i + 2\epsilon) + h(\lambda_i - 2\epsilon) + 8(h(\lambda_i + \epsilon) - h(\lambda_i - \epsilon))}{12\epsilson}
+        Otherwise, it will just calculate the derivate with a first-order central difference.
+
+        This function maps all parameter values to 1. For example, if the square root of
+        the diagonal of the associated covariance matrix is 1e-7 for the frequency
+        parameter, then the standard deviation in the frequency is ``1e-7 * f0``. To
+        properly use with covariance values not on the diagonal, they will have to be
+        multipled by the parameters: :math:`C_{ij} \\vec{\\theta}_j`.
 
         Args:
-            params (2D double np.ndarray): 2D array with the parameter values of the batch.
-                The shape should be (number of parameters, number of binaries).
+            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
+                The shape is ``(number of parameters, number of binaries)``.
                 See :func:`run_wave` for more information on the adjustable
                 number of parameters when calculating for a third body.
             eps (double, optional): Step to take when calculating the derivative.
-                Default is 1e-9.
+                The step is relative difference. Default is ``1e-9``.
             parameter_transforms (dict, optional): Dictionary containing the parameter transform
                 functions. The keys in the dict should be the index associated with the parameter.
-                The items should be the actual transform function. Default is no transforms ({}).
+                The items should be the actual transform function. Default is no transforms (``{}``).
             inds (1D int np.ndarray, optional): Numpy array with the indexes of the parameters to
-                test in the Fisher matrix. Default is None. When it is not given, it defaults to
+                test in the Information matrix. Default is ``None``. When it is not given, it defaults to
                 all parameters.
-            N (int, optional): Number of points to produce for the base j=1 mode. Therefore,
-                with the default j = 2 mode, the waveform will be 2 * N in length.
-                This should be determined by the initial frequency, f0. In the future,
-                this may be implemented. Default is 1024.
-            psd_kwargs (dict, optional): Keyword arguments for the TDI noise generator
-                from tdi.py (noisepsd_AE). Default is None.
-            return_gpu (False, optional): If True and self.use_gpu is True, return fisher
+            N (int, optional): Number of points for the waveform. Same as the ``N`` parameter in
+                :func:`run_wave`. We recommend using higher ``N`` in the Information Matrix
+                computation because of the numerical derivatives. Default is ``1024``.
+            psd_func (object, optional): Function to compute the PSD for the A and E channels.
+                Must take on argument: the frequencies as an xp.ndarray. When ``None``,
+                it attemps to use the sensitivity functions from LISA Analysis Tools.
+            psd_kwargs (dict, optional): Keyword arguments for the TDI noise generator. Default is ``None``.
+            easy_central_difference (bool, optional): If ``True``, compute the derivatives with
+                a first-order central difference computation. If ``False``, use the higher order
+                derivative that computes two more waveforms during the derivative calculation.
+                Default is ``False``.
+            return_gpu (False, optional): If True and self.use_gpu is True, return Information
                 matrices in cupy array. Default is False.
 
-        """
-        # check if sensitivity information is available
-        if not tdi_available:
-            raise NameError(
-                "tdi module is not available. Stock option for Fisher matrix will not work."
-            )
+        Returns:
+            3D xp.ndarray: Information Matrices for all binaries with shape: ``(number of binaries, number of parameters, number of parameters)``.
 
+        Raises:
+            ValueError: Step size issues.
+            ModuleNotFoundError: LISA Analysis Tools package not available.
+                Occurs when NOT providing ``psd_func`` kwarg.
+
+        """
+
+        if psd_func is None:
+            # check if sensitivity information is available
+            if not tdi_available:
+                raise ModuleNotFoundError(
+                    "Sensitivity curve information through LISA Analysis Tools is not available. Stock option for Information matrix will not work. Please install LISA Analysis Tools (lisatools)."
+                )
+            psd_func = tdi.noisepsd_AE
+
+        if N is None:
+            raise ValueError("N must be provided up front for Infromation Matrix.")
+        # put the N used here into kwargs
         kwargs["N"] = N
 
+        params = np.atleast_2d(params)
+
+        # get shape information
         num_params = len(params)
         num_bins = len(params[0])
 
@@ -1032,112 +1070,95 @@ class GBGPU(object):
 
         # setup holder arrays
         num_derivs = len(inds)
-        fish_matrix = self.xp.zeros((num_bins, num_derivs, num_derivs))
+        info_matrix = self.xp.zeros((num_bins, num_derivs, num_derivs))
 
-        # ECCENTRIC INNER BINARY NOT IMPLEMENTED
-        dh = self.xp.zeros((num_bins, num_derivs, 2, 2 * N), self.xp.complex128)
-
-        # assumes frequencies will be the same within a given binary and that the
-        # fisher estimates will not adjust them a bin width
+        # derivative buffer for waveforms
+        dh = self.xp.zeros((num_bins, num_derivs, 2, N), self.xp.complex128)
 
         for i, ind in enumerate(inds):
-
-            # 2 eps up derivative
-            params_up_2 = params.copy()
-            params_up_2[ind] += 2 * eps
-            for ind_trans, trans in parameter_transforms.items():
-                if isinstance(ind_trans, int):
-                    params_up_2[ind_trans] = trans(params_up_2[ind_trans])
-                else:
-                    params_up_2[np.asarray(ind_trans)] = trans(
-                        *params_up_2[np.asarray(ind_trans)]
-                    )
-
-            self.run_wave(*params_up_2, **kwargs)
-
-            h_I_up_2eps = self.xp.asarray([self.A, self.E]).squeeze()
-
             # 1 eps up derivative
-            params_up_1 = params.copy()
+            # map all the parameters to 1
+            params_up_1 = np.ones_like(params)
             params_up_1[ind] += 1 * eps
-            for ind_trans, trans in parameter_transforms.items():
-                if isinstance(ind_trans, int):
-                    params_up_1[ind_trans] = trans(params_up_1[ind_trans])
-                else:
-                    params_up_1[np.asarray(ind_trans)] = trans(
-                        *params_up_1[np.asarray(ind_trans)]
-                    )
-
+            params_up_1 *= params
+            params_up_1 = self._apply_parameter_transforms(
+                params_up_1, parameter_transforms
+            )
             self.run_wave(*params_up_1, **kwargs)
-            h_I_up_eps = self.xp.asarray([self.A, self.E]).squeeze()
-
-            # 2 eps down derivative
-            params_down_2 = params.copy()
-            params_down_2[ind] -= 2 * eps
-            for ind_trans, trans in parameter_transforms.items():
-                if isinstance(ind_trans, int):
-                    params_down_2[ind_trans] = trans(params_down_2[ind_trans])
-                else:
-                    params_down_2[np.asarray(ind_trans)] = trans(
-                        *params_down_2[np.asarray(ind_trans)]
-                    )
-
-            self.run_wave(*params_down_2, **kwargs)
-            h_I_down_2eps = self.xp.asarray([self.A, self.E]).squeeze()
+            h_I_up_eps = self.xp.asarray([self.A, self.E]).transpose((1, 0, 2))
 
             # 1 eps down derivative
-            params_down_1 = params.copy()
+            # map all the parameters to 1
+            params_down_1 = np.ones_like(params)
             params_down_1[ind] -= 1 * eps
-            for ind_trans, trans in parameter_transforms.items():
-                if isinstance(ind_trans, int):
-                    params_down_1[ind_trans] = trans(params_down_1[ind_trans])
-                else:
-                    params_down_1[np.asarray(ind_trans)] = trans(
-                        *params_down_1[np.asarray(ind_trans)]
+            params_down_1 *= params
+            params_down_1 = self._apply_parameter_transforms(
+                params_down_1, parameter_transforms
+            )
+            self.run_wave(*params_down_1, **kwargs)
+            h_I_down_eps = self.xp.asarray([self.A, self.E]).transpose((1, 0, 2))
+
+            # compute derivative and store
+            if easy_central_difference:
+                dh[:, i] = (h_I_up_eps - h_I_down_eps) / (2 * eps)
+
+            else:
+                # higher degree derivative computation
+
+                # 2 eps up derivative
+                # map all the parameters to 1
+                params_up_2 = np.ones_like(params)
+                params_up_2[ind] += 2 * eps
+                params_up_2 *= params
+                params_up_2 = self._apply_parameter_transforms(
+                    params_up_2, parameter_transforms
+                )
+                self.run_wave(*params_up_2, **kwargs)
+                h_I_up_2eps = self.xp.asarray([self.A, self.E]).transpose((1, 0, 2))
+                if not np.all(self.start_inds == self.start_inds[0]):
+                    raise ValueError(
+                        "The user should decrease steps size (eps) because the frequency bins are changing during derivative calculation, which is not allowed."
                     )
 
-            self.run_wave(*params_down_1, **kwargs)
-            h_I_down_eps = self.xp.asarray([self.A, self.E]).squeeze()
+                # 2 eps down derivative
+                # map all the parameters to 1
+                params_down_2 = np.ones_like(params)
+                params_down_2[ind] -= 2 * eps
+                params_down_2 *= params
+                params_down_2 = self._apply_parameter_transforms(
+                    params_down_2, parameter_transforms
+                )
+                self.run_wave(*params_down_2, **kwargs)
+                h_I_down_2eps = self.xp.asarray([self.A, self.E]).transpose((1, 0, 2))
 
-            # compute derivative
-            dh_I = (-h_I_up_2eps + h_I_down_2eps + 8 * (h_I_up_eps - h_I_down_eps)) / (
-                12 * eps
-            )
-
-            if len(dh_I.shape) == 2:
-                dh_I = dh_I[:, self.xp.newaxis, :]
-
-            # plug into derivative holder
-            dh[:, i] = self.xp.transpose(dh_I, (1, 0, 2))
+                dh[:, i] = (
+                    -h_I_up_2eps + h_I_down_2eps + 8 * (h_I_up_eps - h_I_down_eps)
+                ) / (12 * eps)
 
         # get frequencies for each binary
-        freqs = self.freqs[0]
-
-        try:
-            freqs_temp = freqs.get()
-
-        except AttributeError:
-            freqs_temp = freqs
+        freqs = self.freqs
 
         # get psd
-        psd = self.xp.asarray(tdi.noisepsd_AE(freqs, **psd_kwargs))
+        psd = self.xp.asarray(psd_func(freqs, **psd_kwargs))
 
-        # noise factor
-        psd = self.xp.asarray(1.0 / psd * freqs)[:, self.xp.newaxis, :]
-
-        # compute Fisher matrix
+        # compute Information matrix via inner products
         for i in range(num_derivs):
             for j in range(i, num_derivs):
                 # innter product between derivatives
-                inner_prod = 4 * self.xp.sum(
-                    (dh[:, i].conj() * dh[:, j] * psd).real, axis=(1, 2)
+                inner_prod = (
+                    4
+                    * self.df
+                    * self.xp.sum(
+                        (dh[:, i].conj() * dh[:, j]).real / psd[:, None, :], axis=(1, 2)
+                    )
                 )
 
                 # symmetry
-                fish_matrix[:, i, j] = fish_matrix[:, j, i] = inner_prod
+                info_matrix[:, i, j] = inner_prod
+                info_matrix[:, j, i] = info_matrix[:, i, j]
 
         # copy to cpu if needed
         if self.use_gpu and return_gpu is False:
-            fish_matrix = fish_matrix.get()
+            info_matrix = info_matrix.get()
 
-        return fish_matrix
+        return info_matrix
