@@ -21,7 +21,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="GBGPU Tutorial" href="../GBGPU_tutorial.html" />
+    <link rel="next" title="Extending GBGPU Waveforms" href="derivedwaves.html" />
     <link rel="prev" title="gbgpu: GPU/CPU Galactic Binary Waveforms" href="../index.html" /> 
 </head>
 
@@ -43,6 +43,8 @@
               <p class="caption" role="heading"><span class="caption-text">Documentation:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Fast GB Waveforms and Likelihoods</a></li>
+<li class="toctree-l1"><a class="reference internal" href="derivedwaves.html">Extending GBGPU Waveforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="utils.html">GBGPU Utility Functions</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Tutorial:</span></p>
 <ul>
@@ -69,7 +71,7 @@
       </li>
   </ul><div class="rst-breadcrumbs-buttons" role="navigation" aria-label="Sequential page navigation">
         <a href="../index.html" class="btn btn-neutral float-left" title="gbgpu: GPU/CPU Galactic Binary Waveforms" accesskey="p"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="GBGPU Tutorial" accesskey="n">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="derivedwaves.html" class="btn btn-neutral float-right" title="Extending GBGPU Waveforms" accesskey="n">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
   </div>
   <hr/>
 </div>
@@ -299,11 +301,11 @@ accessed in python with the properties <code class="docutils literal notranslate
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.run_wave">
 <span class="sig-name descname"><span class="pre">run_wave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tdi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.run_wave" title="Permalink to this definition"></a></dt>
 <dd><p>Create waveforms in batches.</p>
-<p>This call creates the TDI templates in batches. It handles the
-two cases given above based on the number of <code class="docutils literal notranslate"><span class="pre">*args</span></code> provided by the user.</p>
+<p>This call creates the TDI templates in batches.</p>
 <p>The parameters and code below are based on an implementation of Fast GB
-in the LISA Data Challenges’ <code class="docutils literal notranslate"><span class="pre">ldc</span></code> package. The third-body components are originally
-by Travis Robson for the paper <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
+in the LISA Data Challenges’ <code class="docutils literal notranslate"><span class="pre">ldc</span></code> package.</p>
+<p>This class can be inherited to build fast waveforms for systems
+with additional astrophysical effects.</p>
 <p># TODO: add citation property</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -326,19 +328,10 @@ given in radians.</p></li>
 <li><p><strong>beta</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Ecliptic Latitude of the source
 given in radians. This is converted to the spherical polar angle.</p></li>
 <li><p><strong>*args</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Flexible parameter to allow for a flexible
-number of argmuments. If running a circular Galactic binarys, <code class="docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">()</span></code>.
-If running a circular inner binary with an eccentric third body,
-<code class="docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">(A2,</span> <span class="pre">omegabar,</span> <span class="pre">e2,</span> <span class="pre">P2,</span> <span class="pre">T2)</span></code>.</p></li>
-<li><p><strong>A2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Special amplitude parameter related to the
-line-of-site velocity for the third body orbit as defined in the paper
-given in the description above.</p></li>
-<li><p><strong>omegabar</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Special angular frequency parameter related to the
-line-of-site velocity for the third body orbit as defined in the paper
-given in the description above.</p></li>
-<li><p><strong>e2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Eccentricity of the third body orbit.</p></li>
-<li><p><strong>P2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Period of the third body orbit in Years.</p></li>
-<li><p><strong>T2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Time of pericenter passage of the third body in Years.
-This parameter is effectively a constant of integration.</p></li>
+number of argmuments when inherited by other classes.
+If running a circular Galactic binarys, <code class="docutils literal notranslate"><span class="pre">args</span> <span class="pre">=</span> <span class="pre">()</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">len(args)</span> <span class="pre">!=</span> <span class="pre">0</span></code>, then the inheriting class must have a
+<code class="docutils literal notranslate"><span class="pre">prepare_additional_args</span></code> method.</p></li>
 <li><p><strong>N</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of points in waveform.
 This should be determined by the initial frequency, <code class="docutils literal notranslate"><span class="pre">f0</span></code>. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.
 If <code class="docutils literal notranslate"><span class="pre">None</span></code>, will use <code class="xref py py-func docutils literal notranslate"><span class="pre">gbgpu.utils.utility.get_N()</span></code> function to determine proper <code class="docutils literal notranslate"><span class="pre">N</span></code>.</p></li>
@@ -609,7 +602,7 @@ matrices in cupy array. Default is False.</p></li>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="gbgpu: GPU/CPU Galactic Binary Waveforms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="GBGPU Tutorial" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="derivedwaves.html" class="btn btn-neutral float-right" title="Extending GBGPU Waveforms" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

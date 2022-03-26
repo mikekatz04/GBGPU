@@ -1,6 +1,7 @@
 from multiprocessing.sharedctypes import Value
 import time
 import warnings
+from abc import ABC
 
 import numpy as np
 
@@ -118,12 +119,13 @@ class GBGPU(object):
     ):
         """Create waveforms in batches.
 
-        This call creates the TDI templates in batches. It handles the
-        two cases given above based on the number of ``*args`` provided by the user.
+        This call creates the TDI templates in batches.
 
         The parameters and code below are based on an implementation of Fast GB
-        in the LISA Data Challenges' ``ldc`` package. The third-body components are originally
-        by Travis Robson for the paper `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+        in the LISA Data Challenges' ``ldc`` package.
+
+        This class can be inherited to build fast waveforms for systems
+        with additional astrophysical effects.
 
         # TODO: add citation property
 
@@ -146,19 +148,10 @@ class GBGPU(object):
             beta (double or 1D double np.ndarray): Ecliptic Latitude of the source
                 given in radians. This is converted to the spherical polar angle.
             *args (tuple, optional): Flexible parameter to allow for a flexible
-                number of argmuments. If running a circular Galactic binarys, ``args = ()``.
-                If running a circular inner binary with an eccentric third body,
-                ``args = (A2, omegabar, e2, P2, T2)``.
-            A2 (double or 1D double np.ndarray): Special amplitude parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            omegabar (double or 1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (double or 1D double np.ndarray): Eccentricity of the third body orbit.
-            P2 (double or 1D double np.ndarray): Period of the third body orbit in Years.
-            T2 (double or 1D double np.ndarray): Time of pericenter passage of the third body in Years.
-                This parameter is effectively a constant of integration.
+                number of argmuments when inherited by other classes.
+                If running a circular Galactic binarys, ``args = ()``.
+                If ``len(args) != 0``, then the inheriting class must have a
+                ``prepare_additional_args`` method.
             N (int, optional): Number of points in waveform.
                 This should be determined by the initial frequency, ``f0``. Default is ``None``.
                 If ``None``, will use :func:`gbgpu.utils.utility.get_N` function to determine proper ``N``.
@@ -192,24 +185,25 @@ class GBGPU(object):
         lam = np.atleast_1d(lam)
         beta = np.atleast_1d(beta)
 
-        # if circular plus third body
-        if len(args) == 5:
-            A2, omegabar, e2, P2, T2 = args
-            run_third = True
-
-        # if just circular
-        elif len(args) == 0:
-            run_third = False
-            P2 = None
+        # if circular base
+        if len(args) == 0:
+            add_args = ()
 
         else:
-            raise ValueError(
-                f"Wrong number of extra arguments. Needs to be 5 for circular inner binary and a third body. Currently, args has length {len(args)}."
-            )
+            if not hasattr(self, "prepare_additional_args"):
+                raise ValueError(
+                    "If providing more args than the base args, must be a class derived from GBGPU that has a 'prepare_additional_args' method."
+                )
+
+            add_args = self.prepare_additional_args(*args)
 
         # set N if it is not given based on timescales in the waveform
         if N is None:
-            N_temp = get_N(amp, f0, T, oversample=oversample, P2=P2)
+            if hasattr(self, "special_get_N"):
+                # take the original extra arguments
+                N_temp = self.special_get_N(amp, f0, T, *args, oversample=oversample)
+            else:
+                N_temp = get_N(amp, f0, T, oversample=oversample)
             N = N_temp.max()
 
         # number of binaries is determined from length of amp array
@@ -235,35 +229,6 @@ class GBGPU(object):
         theta = self.xp.asarray(theta.copy())
 
         cosiota = self.xp.cos(iota.copy())
-
-        # do things if running a third body
-        if run_third:
-
-            # cast to 1D if scalar
-            A2 = np.atleast_1d(A2).copy()
-            omegabar = np.atleast_1d(omegabar).copy()
-            e2 = np.atleast_1d(e2).copy()
-            P2 = np.atleast_1d(P2).copy()
-            T2 = np.atleast_1d(T2).copy()
-
-            # get mean anomaly
-            n2 = 2 * np.pi / (P2 * YEAR)
-
-            T2 *= YEAR
-
-            # copy to GPU if needed
-            A2 = self.xp.asarray(A2)
-            omegabar = self.xp.asarray(omegabar)
-            e2 = self.xp.asarray(e2)
-            n2 = self.xp.asarray(n2)
-            T2 = self.xp.asarray(T2)
-
-            args_third = (A2, omegabar, e2, n2, T2)
-            self.is_third = True
-
-        else:
-            args_third = ()
-            self.is_third = False
 
         self.N = N
 
@@ -321,7 +286,7 @@ class GBGPU(object):
             DC,
             eplus,
             ecross,
-            *args_third,
+            *add_args,
         )
 
         # transform to TDI observables
@@ -447,7 +412,7 @@ class GBGPU(object):
         DC,
         eplus,
         ecross,
-        *args_third,
+        *add_args,
     ):
         """Construct the time-domain function for the slow part of the waveform."""
 
@@ -486,10 +451,9 @@ class GBGPU(object):
             + 1 / 2.0 * fddot[:, None, None] * xi**2
         )
 
-        # add third-body component if necessary
-        if self.is_third:
-            # shift frequency based on LOS velocity of CoM
-            fi *= 1 + get_vLOS(xi, *args_third)
+        if hasattr(self, "shift_frequency"):
+            # shift is performed in place to save memory
+            fi[:] = self.shift_frequency(fi, xi, *add_args)
 
         # transfer frequency ratio
         fonfs = fi / fstar  # Ratio of true frequency to transfer frequency
@@ -536,16 +500,9 @@ class GBGPU(object):
             + 1 / 3 * np.pi * fddot[:, None, None] * (xi**3)
         )
 
-        # adjust for third-body effect on frequency
-        if self.is_third:
-            input_tuple = (
-                (f0, fdot, fddot) + args_third + (xi[:, :, 1:], xi[:, :, :-1], T)
-            )
-            third_body_term = self.xp.zeros_like(xi)
-            third_body_term[:, :, 1:] = self.xp.cumsum(
-                parab_step_ET(*input_tuple), axis=-1
-            )
-            argS += third_body_term
+        if hasattr(self, "add_to_argS"):
+            # performed in place to save memory
+            argS[:] = self.add_to_argS(argS, f0, fdot, fddot, xi, *add_args)
 
         kdotP = om[:, None, None] * kdotP - argS
 
@@ -1162,3 +1119,100 @@ class GBGPU(object):
             info_matrix = info_matrix.get()
 
         return info_matrix
+
+
+class InheritGBGPU(GBGPU, ABC):
+    """Inherit this class to expand on GBGPU waveforms.
+
+    The required methods to be added are shown below.
+
+    """
+
+    @classmethod
+    def prepare_additional_args(self, *args):
+        """Prepare the arguments special to this class
+
+        This function must take in the extra ``args`` input
+        into :meth:`GBGPU.run_wave` and transform them as needed
+        to input into the rest of the code. If using GPUs,
+        this is where the parameters are copied to GPUs.
+
+        Args:
+            *args (tuple): Any additional args to be dealt with.
+
+        Returns:
+            Tuple: New args. In the rest of the code this is ``add_args``.
+
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def special_get_N(
+        self,
+        amp,
+        f0,
+        T,
+        *args,
+        oversample=1,
+    ):
+        """Determine proper sampling rate in time domain for slow-part.
+
+        Args:
+            amp (double or 1D double np.ndarray): Amplitude parameter.
+            f0 (double or 1D double np.ndarray): Initial frequency of gravitational
+                wave in Hz.
+            T (double): Observation time in seconds.
+            *args (tuple): Args input for beyond-GBGPU functionality.
+            oversample(int, optional): Oversampling factor compared to the determined ``N``
+                value. Final N will be ``oversample * N``. This is only used if N is
+                not provided. Default is ``1``.
+        Returns:
+            1D int32 xp.ndarray: Number of time-domain points recommended for each binary.
+
+        """
+        raise NotImplementedError
+
+    def shift_frequency(self, fi, xi, *args):
+        """Shift the evolution of the frequency in the slow part
+
+        Args:
+            fi (3D double xp.ndarray): Instantaneous frequencies of the
+                wave before applying third-body effect at each spacecraft as a function of time.
+                The shape is ``(num binaries, 3 spacecraft, N)``.
+            xi (3D double xp.ndarray): Time at each spacecraft.
+                The shape is ``(num binaries, 3 spacecraft, N)``.
+            *args (tuple): Args returned from :meth:`prepare_additional_args`.
+
+        Returns:
+            3D double xp.ndarray: Updated frequencies with third-body effect.
+
+        """
+        raise NotImplementedError
+
+    def add_to_argS(self, argS, f0, fdot, fddot, xi, *args):
+        """Update ``argS`` in FastGB formalism for third-body effect
+
+        ``argS`` is an effective phase that goes into ``kdotP`` in the construction
+        of the slow part of the waveform. ``kdotP`` is then included directly
+        in the transfer function. See :meth:`gbgpu.gbgpu.GBGPU._construct_slow_part`
+        for the use of argS in the larger code.
+
+        Args:
+            argS (3D double xp.ndarray): Special phase evaluation that goes into ``kdotP``.
+                Shape is ``(num binaries, 3 spacecraft, N)``.
+            f0 (1D double np.ndarray): Initial frequency of gravitational
+                wave in Hz.
+            fdot (1D double np.ndarray): Initial time derivative of the
+                frequency given as Hz/s.
+            fddot (1D double np.ndarray): Initial second derivative with
+                respect to time of the frequency given in Hz/s^2.
+            xi (3D double xp.ndarray): Time at each spacecraft.
+                The shape is ``(num binaries, 3 spacecraft, N)``.
+            T (double): Observation time in seconds.
+            *args (tuple): Args returned from :meth:`prepare_additional_args`.
+
+        Returns:
+            3D double xp.ndarray: Updated ``argS`` with third-body effect
+
+        """
+        raise NotImplementedError

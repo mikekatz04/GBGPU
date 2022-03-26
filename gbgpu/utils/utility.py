@@ -1,3 +1,4 @@
+from ast import Mod
 import numpy as np
 import warnings
 
@@ -12,8 +13,22 @@ except (ModuleNotFoundError, ImportError) as e:
     tdi_available = False
     warnings.warn("tdi module not found. No sensitivity information will be included.")
 
+try:
+    from cupy.cuda.runtime import setDevice
+except ModuleNotFoundError:
+    setDevice = None
+
 
 def AET(X, Y, Z):
+    """Return the A,E,T channels from X,Y,Z
+
+    Args:
+        X,Y,Z (xp.ndarray): Arrays holding ``XYZ`` TDI information. The signals can be in any domain.
+
+    Returns:
+        Tuple: ``(A,E,T)`` with array shapes the same as the input ``XYZ``.
+
+    """
     return (
         (Z - X) / np.sqrt(2.0),
         (X - 2.0 * Y + Z) / np.sqrt(6.0),
@@ -21,145 +36,11 @@ def AET(X, Y, Z):
     )
 
 
-def get_u(l, e):
-
-    ######################/
-    ##
-    ## Invert Kepler's equation l = u - e sin(u)
-    ## Using Mikkola's method (1987)
-    ## referenced Tessmer & Gopakumar 2007
-    ##
-    ######################/
-
-    # double u0                            ## initial guess at eccentric anomaly
-    # double z, alpha, beta, s, w        ## auxiliary variables
-    # double mult                        ## multiple number of 2pi
-
-    # int neg         = 0                    // check if l is negative
-    # int over2pi  = 0                    // check if over 2pi
-    # int overpi     = 0                    // check if over pi but not 2pi
-
-    # double f, f1, f2, f3, f4            // pieces of root finder
-    # double u, u1, u2, u3, u4
-
-    # enforce the mean anomaly to be in the domain -pi < l < pi
-    neg = l < 0
-    l = l * np.sign(l)
-
-    over2pi = l > 2 * np.pi
-    mult = np.floor(l[over2pi] / (2 * np.pi))
-    l[over2pi] -= mult * 2.0 * np.pi
-
-    overpi = l > np.pi
-    l[overpi] = 2.0 * np.pi - l[overpi]
-
-    # if (l < 0)
-    # {
-    #    neg = 1
-    #    l   = -l
-    # }
-    # if (l > 2.*M_PI)
-    # {
-    #    over2pi = 1
-    #    mult    = floor(l/(2.*M_PI))
-    #    l       -= mult*2.*M_PI
-    # }
-    # if (l > M_PI)
-    ##    overpi = 1
-    #    l       = 2.*M_PI - l
-    # }
-
-    alpha = (1.0 - e) / (4.0 * e + 0.5)
-    beta = 0.5 * l / (4.0 * e + 0.5)
-
-    z = np.sqrt(beta * beta + alpha * alpha * alpha)
-    z[:] = (beta - z) * (neg) + (beta + z) * (~neg)
-
-    # if (neg == 1) z = beta - z
-    # else          z = beta + z
-
-    # to handle nan's from negative arguments
-    # if (z < 0.) z = -pow(-z, 0.3333333333333333)
-    # else         z =  pow( z, 0.3333333333333333)
-    z[z < 0] = -((-z[z < 0]) ** (1 / 3))
-    z[z >= 0] = z[z >= 0] ** (1 / 3)
-    s = z - alpha / z
-    w = s - 0.078 * s * s * s * s * s / (1.0 + e)
-
-    u0 = l + e * (3.0 * w - 4.0 * w * w * w)
-
-    # now this initial guess must be iterated once with a 4th order Newton root finder
-    f = u0 - e * np.sin(u0) - l
-    f1 = 1.0 - e * np.cos(u0)
-    f2 = u0 - f - l
-    f3 = 1.0 - f1
-    f4 = -f2
-
-    f2 *= 0.5
-    f3 *= 0.166666666666667
-    f4 *= 0.0416666666666667
-
-    u1 = -f / f1
-    u2 = -f / (f1 + f2 * u1)
-    u3 = -f / (f1 + f2 * u2 + f3 * u2 * u2)
-    u4 = -f / (f1 + f2 * u3 + f3 * u3 * u3 + f4 * u3 * u3 * u3)
-
-    u = u0 + u4
-
-    u[overpi] = 2.0 * np.pi - u[overpi]
-    u[over2pi] = 2.0 * np.pi * mult + u[over2pi]
-    u[neg] *= -1
-
-    # if (overpi  == 1) u = 2.*M_PI - u
-    # if (over2pi == 1) u = 2.*M_PI*mult + u
-    # if (neg        == 1) u = -u
-
-    return u
-
-
-# get phi value for Line-of-sight velocity. See arXiv:1806.00500
-def get_phi(t, T, e, n):
-    u = get_u(n[:, None, None] * (t - T[:, None, None]), e[:, None, None])
-
-    adjust = e > 1e-6  # return u
-
-    # adjust if not circular
-    beta = (1.0 - np.sqrt(1.0 - e[adjust] * e[adjust])) / e[adjust]
-    u[adjust] += 2.0 * np.arctan2(
-        beta[:, None, None] * np.sin(u[adjust]),
-        1.0 - beta[:, None, None] * np.cos(u[adjust]),
-    )
-    return u
-
-
-# calculate the line-of-site velocity
-# see equation 13 in arXiv:1806.00500
-def get_vLOS(t, A2, omegabar, e2, n2, T2):
-    phi2 = get_phi(t, T2, e2, n2)
-    return A2[:, None, None] * (
-        np.sin(phi2 + omegabar[:, None, None])
-        + e2[:, None, None] * np.sin(omegabar[:, None, None])
-    )
-
-
-def get_fGW(f0, fdot, fddot, T, t):
+def get_fGW(f0, fdot, fddot, t):
     # assuming t0 = 0.
     return (
         f0[:, None, None] + fdot[:, None, None] * t + 0.5 * fddot[:, None, None] * t * t
     )
-
-
-def parab_step_ET(f0, fdot, fddot, A2, omegabar, e2, n2, T2, t0, t0_old, T):
-    dtt = t0 - t0_old
-    get_fGW(f0, fdot, fddot, T, t0_old)
-    g1 = get_vLOS(t0_old, A2, omegabar, e2, n2, T2) * get_fGW(
-        f0, fdot, fddot, T, t0_old
-    )
-    # g2 = get_vLOS(A2, omegabar, e2, n2, T2, (t0 + t0_old)/2.)*get_fGW(f0,  fdot,  fddot, T, (t0 + t0_old)/2.)
-    g3 = get_vLOS(t0, A2, omegabar, e2, n2, T2) * get_fGW(f0, fdot, fddot, T, t0)
-
-    # return area from trapezoidal rule
-    return dtt * (g1 + g3) / 2.0 * PI2 / Clight
 
 
 def get_chirp_mass(m1, m2):
@@ -207,137 +88,6 @@ def get_chirp_mass_from_f_fdot(f, fdot):
     ) ** (3 / 5)
     Mc = Mc_SI / MSUN
     return Mc
-
-
-def third_body_factors(
-    total_mass_inner,
-    mc,
-    orbit_period,
-    orbit_eccentricity,
-    orbit_inclination,
-    orbit_Omega2,
-    orbit_omega2,
-    orbit_phi2,
-    orbit_lambda,
-    orbit_beta,
-    third_mass_unit="Mjup",
-    third_period_unit="years",
-):
-
-    total_mass_inner *= MSUN
-
-    if third_mass_unit == "Mjup":
-        factor = Mjup
-    elif third_mass_unit == "MSUN":
-        factor = MSUN
-
-    else:
-        raise NotImplementedError
-
-    mc *= factor
-
-    if third_period_unit == "years":
-        orbit_period *= YEAR
-
-    elif third_period_unit == "seconds":
-        pass
-    else:
-        raise NotImplementedError
-
-    P = orbit_period
-    M = total_mass_inner
-    m2 = M + mc
-    iota = orbit_inclination
-    Omega2 = orbit_Omega2
-    omega2 = orbit_omega2
-    phi2 = orbit_phi2
-    theta = np.pi / 2 - orbit_beta
-    phi = orbit_lambda
-
-    a2 = (G * M * P**2 / (4 * np.pi**2)) ** (1 / 3)
-    e2 = orbit_eccentricity
-    p2 = a2 * (1 - e2**2)  # semilatus rectum
-
-    # get C and S
-    C = np.cos(theta) * np.sin(iota) + np.sin(theta) * np.cos(iota) * np.sin(
-        phi - Omega2
-    )
-    S = np.sin(theta) * np.cos(phi - Omega2)
-
-    # bar quantities
-    A_bar = np.sqrt(C**2 + S**2)
-    phi_bar = np.arctan(C / (-S))
-    omega_bar = (omega2 + phi_bar) % (2 * np.pi)
-    # check factor of 0.77
-    amp2 = (mc / m2) * np.sqrt(G * m2 / p2) * A_bar
-
-    T2 = get_T2(P, e2, phi2, third_period_unit="seconds")
-
-    return amp2, omega_bar, T2
-
-
-def get_T2(P2, e2, phi2, third_period_unit="years"):
-
-    if third_period_unit == "years":
-        P2 *= YEAR
-
-    elif third_period_unit == "seconds":
-        pass
-    else:
-        raise NotImplementedError
-
-    # compute T2
-    u2 = 2.0 * np.arctan(np.sqrt((1 - e2) / (1 + e2)) * np.tan(phi2 / 2.0))
-
-    n2 = 2 * np.pi / P2
-
-    temp_T2 = (u2 - e2 * np.sin(u2)) / n2
-    T2 = (temp_T2 / YEAR) * (temp_T2 >= 0.0) + ((P2 - np.abs(temp_T2)) / YEAR) * (
-        temp_T2 < 0.0
-    )
-    return T2
-
-
-def get_aLOS(A2, omegabar, e2, P2, T2, t, eps=1e-9):
-
-    # central differencing for derivative of velocity
-    up = get_vLOS(A2, omegabar, e2, P2, T2, t + eps)
-    down = get_vLOS(A2, omegabar, e2, P2, T2, t - eps)
-
-    aLOS = (up - down) / (2 * eps)
-
-    return aLOS
-
-
-def get_f_derivatives(f0, fdot, A2, omegabar, e2, P2, T2, eps=5e4, t=None):
-
-    if t is not None and not isinstance(t, list) and not isinstance(t, np.ndarray):
-        raise ValueError("t must be 1d list or 1d np.ndarray")
-
-    elif t is None:
-        t = np.array([-eps, 0.0, eps])
-
-    else:
-        t = np.asarray(t)
-
-    fddot = 11 / 3 * fdot**2 / f0
-
-    A2_in = np.full_like(t, A2)
-    omegabar_in = np.full_like(t, omegabar)
-    e2_in = np.full_like(t, e2)
-    P2_in = np.full_like(t, P2)
-    T2_in = np.full_like(t, T2)
-    f0_in = np.full_like(t, f0)
-    fdot_in = np.full_like(t, fdot)
-
-    f_temp = f0 + fdot * t + 0.5 * fddot * t * t
-    f_temp *= 1.0 + get_vLOS(A2_in, omegabar_in, e2_in, P2_in, T2_in, t) / Clight
-
-    fdot_new = (f_temp[2] - f_temp[0]) / (2 * eps)
-
-    fddot_new = (f_temp[2] - 2 * f_temp[1] + f_temp[0]) / (2 * eps) ** 2
-
-    return (f_temp[1], fdot_new, fddot_new)
 
 
 def get_N(amp, f0, Tobs, oversample=1, P2=None):
@@ -413,21 +163,27 @@ def get_N(amp, f0, Tobs, oversample=1, P2=None):
 def omp_set_num_threads(num_threads=1):
     """Globally sets OMP_NUM_THREADS
     Args:
-        num_threads (int, optional):
-        Number of parallel threads to use in OpenMP.
+        num_threads (int, optional): Number of parallel threads to use in OpenMP.
             Default is 1.
     """
     set_threads_wrap(num_threads)
 
 
 def omp_get_num_threads():
-    """Get global variable OMP_NUM_THREADS"""
+    """Get global variable OMP_NUM_THREADS
+
+
+    Returns:
+        int: Number of OMP threads.
+
+    """
     num_threads = get_threads_wrap()
     return num_threads
 
 
 def cuda_set_device(dev):
     """Globally sets CUDA device
+
     Args:
         dev (int): CUDA device number.
     """

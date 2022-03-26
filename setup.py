@@ -208,7 +208,7 @@ setup(
     author="Michael Katz",
     version="0.1",
     packages=["gbgpu", "gbgpu.utils"],
-    py_modules=["gbgpu.gbgpu"],
+    py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,
     # Inject our custom trigger
     cmdclass={"build_ext": custom_build_ext},
