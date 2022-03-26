@@ -4,7 +4,7 @@
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "# GBGPU Tutorial"
+    "## GBGPU Tutorial"
    ]
   },
   {
@@ -41,7 +41,7 @@
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "## Generated Galactic binary waveforms"
+    "## Generating Galactic binary waveforms"
    ]
   },
   {
