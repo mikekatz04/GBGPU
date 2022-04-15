@@ -525,7 +525,6 @@ class GBGPU(object):
                 * self.xp.exp(-1.0j * (arg_ij + kdotP[:, s]))
                 * A[ij_sym]
             )
-
         ### Lines blow are extractions from another python code and from C-code in LDC
         # y = -0.5j*self.omL*A*sinc(args)*np.exp(-1.0j*(args + self.om*kq))
         # args = 0.5*self.omL*(1.0 - kn)
