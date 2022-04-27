@@ -48,11 +48,21 @@
 <p class="caption" role="heading"><span class="caption-text">Tutorial:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">GBGPU Tutorial</a></li>
-<li class="toctree-l1"><a class="reference internal" href="#Generating-Galactic-binary-waveforms">Generating Galactic binary waveforms</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#Add-a-third-body">Add a third-body</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#Generating-Galactic-binary-waveforms">Generating Galactic binary waveforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#Adding-additional-GB-astrophysics">Adding additional GB astrophysics</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Example:-Third-body-in-orbit-around-the-inner-binary">Example: Third-body in orbit around the inner binary</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="#Calculating-the-Information-Matrix">Calculating the Information Matrix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#Utility-functions">Utility functions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Get-the-instantaneous-gravitational-wave-frequency">Get the instantaneous gravitational wave frequency</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Get-amplitude-(for-slowly-evolving-source)">Get amplitude (for slowly evolving source)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Get-\dot{f}">Get <span class="math notranslate nohighlight">\(\dot{f}\)</span></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Determine-necessary-sampling-rate-in-the-time-domin">Determine necessary sampling rate in the time-domin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Adjust-OMP-usage-in-C-functions">Adjust OMP usage in C functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="#Citations">Citations</a></li>
 </ul>
 
         </div>
@@ -368,8 +378,10 @@ div.rendered_html tbody tr:hover {
 <span class="o">%</span><span class="k">matplotlib</span> inline
 
 <span class="kn">from</span> <span class="nn">gbgpu.gbgpu</span> <span class="kn">import</span> <span class="n">GBGPU</span>
+<span class="kn">from</span> <span class="nn">gbgpu.thirdbody</span> <span class="kn">import</span> <span class="n">ThirdBody</span>
 
 <span class="kn">from</span> <span class="nn">gbgpu.utils.constants</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">gbgpu.utils.utility</span> <span class="kn">import</span> <span class="o">*</span>
 </pre></div>
 </div>
 </div>
@@ -431,8 +443,7 @@ div.rendered_html tbody tr:hover {
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">matplotlib</span>  inline
-<span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
     <span class="p">[</span><span class="n">amp_in</span><span class="p">,</span> <span class="n">f0_in</span><span class="p">,</span> <span class="n">fdot_in</span><span class="p">,</span> <span class="n">fddot_in</span><span class="p">,</span> <span class="n">phi0_in</span><span class="p">,</span> <span class="n">iota_in</span><span class="p">,</span> <span class="n">psi_in</span><span class="p">,</span> <span class="n">lam_in</span><span class="p">,</span> <span class="n">beta_sky_in</span><span class="p">,]</span>
 <span class="p">)</span>
 
@@ -442,7 +453,7 @@ div.rendered_html tbody tr:hover {
 <span class="n">A</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <span class="n">freqs</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;signal length:&quot;</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A</span><span class="p">))</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;TDI-A Channel&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;freqs (Hz)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
 <span class="n">dx</span> <span class="o">=</span> <span class="mf">7e-7</span>
@@ -474,14 +485,26 @@ signal length: (512,)
 <img alt="_images/GBGPU_tutorial_9_2.png" src="_images/GBGPU_tutorial_9_2.png" />
 </div>
 </div>
-<section id="Add-a-third-body">
-<h2>Add a third-body<a class="headerlink" href="#Add-a-third-body" title="Permalink to this headline"></a></h2>
+</section>
+<section id="Adding-additional-GB-astrophysics">
+<h1>Adding additional GB astrophysics<a class="headerlink" href="#Adding-additional-GB-astrophysics" title="Permalink to this headline"></a></h1>
+<p>It is possible in <code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> to inherit a special class <cite>(``gbgpu.gbgpu.InheritGBGPU`</cite>) &lt;<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU">https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU</a>&gt;`__ that allows users to add other types of astrophysics to the FastGB waveform. This requires that the astrophysical effects vary slowly.</p>
+<p>The methods that need to be written when adding astrophysics are <code class="docutils literal notranslate"><span class="pre">prepare_additional_args</span></code>, <code class="docutils literal notranslate"><span class="pre">special_get_N</span></code>, <code class="docutils literal notranslate"><span class="pre">shift_frequency</span></code>, and <code class="docutils literal notranslate"><span class="pre">add_to_argS</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">prepare_additional_args</span></code>: Prepares all arguments beyond the base GB parameters.</p>
+<p><code class="docutils literal notranslate"><span class="pre">special_get_N</span></code>: Implemented if the new setup puts limitations on the sampling rate in the time-domain for the slow part of the waveform.</p>
+<p><code class="docutils literal notranslate"><span class="pre">shift_frequency</span></code>: Shifts the frequency in the slow computation.</p>
+<p><code class="docutils literal notranslate"><span class="pre">add_to_argS</span></code>: Adjusts the phasing in the transfer function of the slow waveform.</p>
+<p>See <code class="docutils literal notranslate"><span class="pre">`gbgpu.thirdbody.ThirdBody</span></code> &lt;<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody">https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody</a>&gt;`__ for an example and more information.</p>
+<section id="Example:-Third-body-in-orbit-around-the-inner-binary">
+<h2>Example: Third-body in orbit around the inner binary<a class="headerlink" href="#Example:-Third-body-in-orbit-around-the-inner-binary" title="Permalink to this headline"></a></h2>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">A2</span> <span class="o">=</span> <span class="mf">100.0</span>  <span class="c1"># third body amplitude parameter</span>
-<span class="n">varpi</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># varpi phase parameter</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gb_third</span> <span class="o">=</span> <span class="n">ThirdBody</span><span class="p">(</span><span class="n">use_gpu</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">A2</span> <span class="o">=</span> <span class="mf">400.0</span>  <span class="c1"># third body amplitude parameter</span>
+<span class="n">varpi</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># varpi phase parameter</span>
 <span class="n">e2</span> <span class="o">=</span> <span class="mf">0.3</span>  <span class="c1"># eccentricity of third body</span>
 <span class="n">P2</span> <span class="o">=</span> <span class="mf">1.2</span>  <span class="c1"># period of third body</span>
 <span class="n">T2</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">P2</span>  <span class="c1"># time of periapsis passage of third body</span>
@@ -499,19 +522,18 @@ signal length: (512,)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">matplotlib</span>  inline
-<span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
     <span class="p">[</span><span class="n">amp_in</span><span class="p">,</span> <span class="n">f0_in</span><span class="p">,</span> <span class="n">fdot_in</span><span class="p">,</span> <span class="n">fddot_in</span><span class="p">,</span> <span class="n">phi0_in</span><span class="p">,</span> <span class="n">iota_in</span><span class="p">,</span> <span class="n">psi_in</span><span class="p">,</span> <span class="n">lam_in</span><span class="p">,</span> <span class="n">beta_sky_in</span><span class="p">,</span> <span class="n">A2_in</span><span class="p">,</span> <span class="n">varpi_in</span><span class="p">,</span> <span class="n">e2_in</span><span class="p">,</span> <span class="n">P2_in</span><span class="p">,</span> <span class="n">T2_in</span><span class="p">]</span>
 <span class="p">)</span>
 
-<span class="n">gb</span><span class="o">.</span><span class="n">run_wave</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">gb_third</span><span class="o">.</span><span class="n">run_wave</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="n">Tobs</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
 <span class="c1"># signal from first binary</span>
-<span class="n">A_third</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-<span class="n">freqs</span> <span class="o">=</span> <span class="n">gb</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">A_third</span> <span class="o">=</span> <span class="n">gb_third</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">freqs</span> <span class="o">=</span> <span class="n">gb_third</span><span class="o">.</span><span class="n">freqs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Third-body signal length:&quot;</span><span class="p">,</span> <span class="n">A_third</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No third body&quot;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">A_third</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No third body&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No third body&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">freqs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A_third</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;No third body&quot;</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;TDI-A Channel&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;freqs (Hz)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
 <span class="n">dx</span> <span class="o">=</span> <span class="mf">7e-7</span>
@@ -540,7 +562,7 @@ Third-body signal length: (512,)
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="_images/GBGPU_tutorial_12_2.png" src="_images/GBGPU_tutorial_12_2.png" />
+<img alt="_images/GBGPU_tutorial_14_2.png" src="_images/GBGPU_tutorial_14_2.png" />
 </div>
 </div>
 </section>
@@ -644,10 +666,10 @@ array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
 </div>
 <p>Plot the Information Matrix ellipse for the intial frequency and frequency derivative:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><br/><span></span><span class="n">ind1</span> <span class="o">=</span> <span class="mi">1</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">ind1</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="n">ind2</span> <span class="o">=</span> <span class="mi">2</span>
 <span class="n">inds_get</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
     <span class="p">[</span><span class="n">ind1</span><span class="p">,</span> <span class="n">ind1</span><span class="p">],</span>
@@ -681,28 +703,202 @@ array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
 </div>
 </div>
 <div class="nboutput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x7f80589c9ee0&gt;]
+[&lt;matplotlib.lines.Line2D at 0x7f9d3998d340&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="_images/GBGPU_tutorial_20_1.png" src="_images/GBGPU_tutorial_20_1.png" />
+<img alt="_images/GBGPU_tutorial_22_1.png" src="_images/GBGPU_tutorial_22_1.png" />
 </div>
 </div>
+</section>
+<section id="Utility-functions">
+<h1>Utility functions<a class="headerlink" href="#Utility-functions" title="Permalink to this headline"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> provides many utility functions. Below are some examples of <code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> utility functions. This may not include all utility functions. See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/utils.html#gbgpu-utility-functions">utility documentation</a> for all included utility functions.</p>
+<section id="Get-the-instantaneous-gravitational-wave-frequency">
+<h2>Get the instantaneous gravitational wave frequency<a class="headerlink" href="#Get-the-instantaneous-gravitational-wave-frequency" title="Permalink to this headline"></a></h2>
+<p>Given <span class="math notranslate nohighlight">\(f_0\)</span>, <span class="math notranslate nohighlight">\(\dot{f}_0\)</span>, and <span class="math notranslate nohighlight">\(\ddot{f}_0\)</span> calculate the instantaneous frequency of the gravitational waves approximating the frequency evolution to quadratic order:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">num</span> <span class="o">=</span> <span class="mi">15</span>
+<span class="n">f0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.002</span><span class="p">,</span> <span class="n">num</span><span class="p">)</span>
+<span class="n">fdot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">1e-17</span><span class="p">,</span> <span class="mf">2e-17</span><span class="p">,</span> <span class="n">num</span><span class="p">)</span>
+<span class="n">fddot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">1e-28</span><span class="p">,</span> <span class="mf">2e-28</span><span class="p">,</span> <span class="n">num</span><span class="p">)</span>
+
+<span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">YEAR</span><span class="p">,</span> <span class="n">YEAR</span><span class="o">/</span><span class="mi">200</span><span class="p">)</span>
+
+<span class="c1"># cast t to be for all binaries</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+
+<span class="n">f</span> <span class="o">=</span> <span class="n">get_fGW</span><span class="p">(</span><span class="n">f0</span><span class="p">,</span> <span class="n">fdot</span><span class="p">,</span> <span class="n">fddot</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">f</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;$t$ (s)&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;$f_</span><span class="si">{gw}</span><span class="s2">$ (Hz)&quot;</span><span class="p">)</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/GBGPU_tutorial_27_1.png" src="_images/GBGPU_tutorial_27_1.png" />
+</div>
+</div>
+</section>
+<section id="Get-amplitude-(for-slowly-evolving-source)">
+<h2>Get amplitude (for slowly evolving source)<a class="headerlink" href="#Get-amplitude-(for-slowly-evolving-source)" title="Permalink to this headline"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">m1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">)</span>
+<span class="n">m2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
+<span class="n">f0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
+<span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">)</span>  <span class="c1"># kpc</span>
+<span class="n">amp</span> <span class="o">=</span> <span class="n">get_amplitude</span><span class="p">(</span><span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">,</span> <span class="n">f0</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">amp</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[6.37190427e-23 6.37190427e-23 6.37190427e-23 6.37190427e-23
+ 6.37190427e-23 6.37190427e-23 6.37190427e-23 6.37190427e-23
+ 6.37190427e-23 6.37190427e-23 6.37190427e-23 6.37190427e-23
+ 6.37190427e-23 6.37190427e-23 6.37190427e-23]
+</pre></div></div>
+</div>
+</section>
+<section id="Get-\dot{f}">
+<h2>Get <span class="math notranslate nohighlight">\(\dot{f}\)</span><a class="headerlink" href="#Get-\dot{f}" title="Permalink to this headline"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">m1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">)</span>
+<span class="n">m2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
+<span class="n">f0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">)</span>
+
+<span class="n">fdot</span> <span class="o">=</span> <span class="n">get_fdot</span><span class="p">(</span><span class="n">f0</span><span class="p">,</span> <span class="n">m1</span><span class="o">=</span><span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="o">=</span><span class="n">m2</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">fdot</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[1.73056526e-19 1.73056526e-19 1.73056526e-19 1.73056526e-19
+ 1.73056526e-19 1.73056526e-19 1.73056526e-19 1.73056526e-19
+ 1.73056526e-19 1.73056526e-19 1.73056526e-19 1.73056526e-19
+ 1.73056526e-19 1.73056526e-19 1.73056526e-19]
+</pre></div></div>
+</div>
+</section>
+<section id="Determine-necessary-sampling-rate-in-the-time-domin">
+<h2>Determine necessary sampling rate in the time-domin<a class="headerlink" href="#Determine-necessary-sampling-rate-in-the-time-domin" title="Permalink to this headline"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">get_N</span><span class="p">(</span><span class="n">amp</span><span class="p">,</span> <span class="n">f0</span><span class="p">,</span> <span class="n">Tobs</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256,
+       256, 256])
+</pre></div></div>
+</div>
+</section>
+<section id="Adjust-OMP-usage-in-C-functions">
+<h2>Adjust OMP usage in C functions<a class="headerlink" href="#Adjust-OMP-usage-in-C-functions" title="Permalink to this headline"></a></h2>
+<p>When using openMP, it defaults to using all threads. To limit this, use <code class="docutils literal notranslate"><span class="pre">gbgpu.utils.utility.omp_set_num_threads</span></code>.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">omp_set_num_threads</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
 </div>
+</div>
+</section>
+</section>
+<section id="Citations">
+<h1>Citations<a class="headerlink" href="#Citations" title="Permalink to this headline"></a></h1>
+<p>You can access the necessary citations for the specific waveforms with the <code class="docutils literal notranslate"><span class="pre">citation</span></code> property.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">gb</span><span class="o">.</span><span class="n">citation</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+@article{Cornish:2007if,
+    author = &#34;Cornish, Neil J. and Littenberg, Tyson B.&#34;,
+    title = &#34;{Tests of Bayesian Model Selection Techniques for Gravitational Wave Astronomy}&#34;,
+    eprint = &#34;0704.1808&#34;,
+    archivePrefix = &#34;arXiv&#34;,
+    primaryClass = &#34;gr-qc&#34;,
+    doi = &#34;10.1103/PhysRevD.76.083006&#34;,
+    journal = &#34;Phys. Rev. D&#34;,
+    volume = &#34;76&#34;,
+    pages = &#34;083006&#34;,
+    year = &#34;2007&#34;
+}
+
+@article{Robson:2018svj,
+    author = &#34;Robson, Travis and Cornish, Neil J. and Tamanini, Nicola and Toonen, Silvia&#34;,
+    title = &#34;{Detecting hierarchical stellar systems with LISA}&#34;,
+    eprint = &#34;1806.00500&#34;,
+    archivePrefix = &#34;arXiv&#34;,
+    primaryClass = &#34;gr-qc&#34;,
+    doi = &#34;10.1103/PhysRevD.98.064012&#34;,
+    journal = &#34;Phys. Rev. D&#34;,
+    volume = &#34;98&#34;,
+    number = &#34;6&#34;,
+    pages = &#34;064012&#34;,
+    year = &#34;2018&#34;
+}
+
+</pre></div></div>
 </div>
 </section>
 

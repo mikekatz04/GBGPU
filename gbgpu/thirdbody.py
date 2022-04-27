@@ -6,6 +6,7 @@ import numpy as np
 
 # import constants
 from gbgpu.utils.constants import *
+from gbgpu.utils.citation import *
 
 # import for GPU if available
 try:
@@ -30,6 +31,11 @@ class ThirdBody(InheritGBGPU):
     Attributes:
 
     """
+
+    @property
+    def citation(self):
+        """Get citations for this class"""
+        return cornish_fastb + robson_triple
 
     def prepare_additional_args(self, A2, varpi, e2, P2, T2):
         """Prepare the arguments special to this class

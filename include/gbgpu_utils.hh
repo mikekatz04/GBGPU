@@ -18,5 +18,8 @@ void direct_like(cmplx* d_h, cmplx* h_h,
                cmplx* A_data, cmplx* E_data,
                int data_length, int start_freq_ind, int nwalkers);
 
+void set_threads(int num_threads);
+int get_threads();
+
 
 #endif // __NEW_FASTGB_HH__

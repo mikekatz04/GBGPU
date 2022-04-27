@@ -21,6 +21,17 @@ cdef extern from "gbgpu_utils.hh":
                     cmplx* A_template, cmplx* E_template,
                     cmplx* A_data, cmplx* E_data,
                     int data_length, int start_freq_ind, int nwalkers);
+    void set_threads(int num_threads);
+    int get_threads();
+
+
+def get_threads_wrap():
+    return get_threads()
+
+
+def set_threads_wrap(num_threads):
+    return set_threads(num_threads)
+
 
 @pointer_adjust
 def get_ll(d_h, h_h,

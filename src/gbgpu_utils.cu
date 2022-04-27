@@ -371,3 +371,21 @@ void direct_like(cmplx* d_h, cmplx* h_h,
     }
 }
 #endif
+
+void set_threads(int num_threads)
+{
+    omp_set_num_threads(num_threads);
+}
+
+int get_threads()
+{
+    int num_threads;
+    #pragma omp parallel for
+    for (int i = 0; i < 1; i +=1)
+    {
+        num_threads = omp_get_num_threads();
+    }
+
+    return num_threads;
+}
+

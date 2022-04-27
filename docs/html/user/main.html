@@ -49,6 +49,11 @@
 <p class="caption" role="heading"><span class="caption-text">Tutorial:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html">GBGPU Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Generating-Galactic-binary-waveforms">Generating Galactic binary waveforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Adding-additional-GB-astrophysics">Adding additional GB astrophysics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Calculating-the-Information-Matrix">Calculating the Information Matrix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Utility-functions">Utility functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Citations">Citations</a></li>
 </ul>
 
         </div>
@@ -297,6 +302,12 @@ accessed in python with the properties <code class="docutils literal notranslate
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.citation">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">citation</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.citation" title="Permalink to this definition"></a></dt>
+<dd><p>Get citations for this class</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.run_wave">
 <span class="sig-name descname"><span class="pre">run_wave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tdi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.run_wave" title="Permalink to this definition"></a></dt>
@@ -334,7 +345,7 @@ If <code class="docutils literal notranslate"><span class="pre">len(args)</span>
 <code class="docutils literal notranslate"><span class="pre">prepare_additional_args</span></code> method.</p></li>
 <li><p><strong>N</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of points in waveform.
 This should be determined by the initial frequency, <code class="docutils literal notranslate"><span class="pre">f0</span></code>. Default is <code class="docutils literal notranslate"><span class="pre">None</span></code>.
-If <code class="docutils literal notranslate"><span class="pre">None</span></code>, will use <code class="xref py py-func docutils literal notranslate"><span class="pre">gbgpu.utils.utility.get_N()</span></code> function to determine proper <code class="docutils literal notranslate"><span class="pre">N</span></code>.</p></li>
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, will use <a class="reference internal" href="utils.html#gbgpu.utils.utility.get_N" title="gbgpu.utils.utility.get_N"><code class="xref py py-func docutils literal notranslate"><span class="pre">gbgpu.utils.utility.get_N()</span></code></a> function to determine proper <code class="docutils literal notranslate"><span class="pre">N</span></code>.</p></li>
 <li><p><strong>T</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation time in seconds. Default is <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">*</span> <span class="pre">YEAR</span></code>.</p></li>
 <li><p><strong>dt</strong> (<em>double</em><em>, </em><em>optional</em>) – Observation cadence in seconds. Default is <code class="docutils literal notranslate"><span class="pre">10.0</span></code> seconds.</p></li>
 <li><p><strong>oversample</strong> (<em>int</em><em>, </em><em>optional</em>) – Oversampling factor compared to the determined <code class="docutils literal notranslate"><span class="pre">N</span></code>

@@ -45,7 +45,10 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="GBGPU_tutorial.html">GBGPU Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="GBGPU_tutorial.html#Generating-Galactic-binary-waveforms">Generating Galactic binary waveforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="GBGPU_tutorial.html#Adding-additional-GB-astrophysics">Adding additional GB astrophysics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="GBGPU_tutorial.html#Calculating-the-Information-Matrix">Calculating the Information Matrix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="GBGPU_tutorial.html#Utility-functions">Utility functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="GBGPU_tutorial.html#Citations">Citations</a></li>
 </ul>
 
         </div>
@@ -76,12 +79,14 @@
 
 <div class="genindex-jumpbox">
  <a href="#A"><strong>A</strong></a>
+ | <a href="#C"><strong>C</strong></a>
  | <a href="#D"><strong>D</strong></a>
  | <a href="#E"><strong>E</strong></a>
  | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
  | <a href="#I"><strong>I</strong></a>
  | <a href="#N"><strong>N</strong></a>
+ | <a href="#O"><strong>O</strong></a>
  | <a href="#P"><strong>P</strong></a>
  | <a href="#R"><strong>R</strong></a>
  | <a href="#S"><strong>S</strong></a>
@@ -104,6 +109,22 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="user/utils.html#gbgpu.utils.utility.AET">AET() (in module gbgpu.utils.utility)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="user/main.html#gbgpu.gbgpu.GBGPU.citation">citation (gbgpu.gbgpu.GBGPU property)</a>
+
+      <ul>
+        <li><a href="user/derivedwaves.html#gbgpu.thirdbody.ThirdBody.citation">(gbgpu.thirdbody.ThirdBody property)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="user/utils.html#gbgpu.utils.utility.cuda_set_device">cuda_set_device() (in module gbgpu.utils.utility)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -153,15 +174,29 @@
 </li>
       <li><a href="user/derivedwaves.html#gbgpu.thirdbody.ThirdBody.get_aLOS">get_aLOS() (gbgpu.thirdbody.ThirdBody method)</a>
 </li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_amplitude">get_amplitude() (in module gbgpu.utils.utility)</a>
+</li>
       <li><a href="user/main.html#gbgpu.gbgpu.GBGPU.get_basis_tensors">get_basis_tensors (gbgpu.gbgpu.GBGPU attribute)</a>
+</li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_chirp_mass">get_chirp_mass() (in module gbgpu.utils.utility)</a>
+</li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_chirp_mass_from_f_fdot">get_chirp_mass_from_f_fdot() (in module gbgpu.utils.utility)</a>
+</li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_eta">get_eta() (in module gbgpu.utils.utility)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="user/derivedwaves.html#gbgpu.thirdbody.ThirdBody.get_f_derivatives">get_f_derivatives() (gbgpu.thirdbody.ThirdBody method)</a>
 </li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_fdot">get_fdot() (in module gbgpu.utils.utility)</a>
+</li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_fGW">get_fGW() (in module gbgpu.utils.utility)</a>
+</li>
       <li><a href="user/main.html#gbgpu.gbgpu.GBGPU.get_ll">get_ll() (gbgpu.gbgpu.GBGPU method)</a>
 </li>
       <li><a href="user/main.html#gbgpu.gbgpu.GBGPU.get_ll_func">get_ll_func (gbgpu.gbgpu.GBGPU attribute)</a>
+</li>
+      <li><a href="user/utils.html#gbgpu.utils.utility.get_N">get_N() (in module gbgpu.utils.utility)</a>
 </li>
       <li><a href="user/derivedwaves.html#gbgpu.thirdbody.ThirdBody.get_phi">get_phi() (gbgpu.thirdbody.ThirdBody method)</a>
 </li>
@@ -198,6 +233,18 @@
       <li><a href="user/main.html#gbgpu.gbgpu.GBGPU.N_max">N_max (gbgpu.gbgpu.GBGPU attribute)</a>
 </li>
       <li><a href="user/main.html#gbgpu.gbgpu.GBGPU.num_bin">num_bin (gbgpu.gbgpu.GBGPU attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="O">O</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="user/utils.html#gbgpu.utils.utility.omp_get_num_threads">omp_get_num_threads() (in module gbgpu.utils.utility)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="user/utils.html#gbgpu.utils.utility.omp_set_num_threads">omp_set_num_threads() (in module gbgpu.utils.utility)</a>
 </li>
   </ul></td>
 </tr></table>

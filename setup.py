@@ -155,7 +155,7 @@ if run_cuda_install:
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
-    ext_gpu = Extension("gbgpu_utils", **ext_gpu_dict)
+    ext_gpu = Extension("gbgpu.gbgpu_utils", **ext_gpu_dict)
 
 cu_files = ["gbgpu_utils"]
 pyx_files = ["GBGPU"]
@@ -175,7 +175,7 @@ ext_cpu_dict = dict(
     },  # '-g'],
     include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
-ext_cpu = Extension("gbgpu_utils_cpu", **ext_cpu_dict)
+ext_cpu = Extension("gbgpu.gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
     extensions = [ext_gpu, ext_cpu]

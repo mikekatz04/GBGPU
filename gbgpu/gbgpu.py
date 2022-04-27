@@ -7,6 +7,7 @@ import numpy as np
 
 # import constants
 from gbgpu.utils.constants import *
+from gbgpu.utils.citation import *
 
 # import Cython classes
 from gbgpu_utils_cpu import get_ll as get_ll_cpu
@@ -98,6 +99,11 @@ class GBGPU(object):
             self.global_get_ll_func = direct_like_wrap_cpu
 
         self.d_d = None
+
+    @property
+    def citation(self):
+        """Get citations for this class"""
+        return cornish_fastb + robson_triple
 
     def run_wave(
         self,
