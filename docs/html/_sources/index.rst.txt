@@ -6,6 +6,8 @@
    :caption: Documentation:
 
    user/main
+   user/derivedwaves
+   user/utils
    
 .. toctree::
    :maxdepth: 4

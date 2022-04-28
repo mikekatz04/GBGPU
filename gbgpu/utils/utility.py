@@ -1,35 +1,159 @@
+from ast import Mod
 import numpy as np
 import warnings
 
 from gbgpu.utils.constants import *
-from newfastgbthird_cpu import third_body_vLOS
+from gbgpu.gbgpu_utils_cpu import *
 
 try:
     from lisatools import sensitivity as tdi
+
     tdi_available = True
 
 except (ModuleNotFoundError, ImportError) as e:
     tdi_available = False
     warnings.warn("tdi module not found. No sensitivity information will be included.")
 
+try:
+    from cupy.cuda.runtime import setDevice
+    
+
+except ModuleNotFoundError:
+    setDevice = None
+
+
+def AET(X, Y, Z):
+    """Return the A,E,T channels from X,Y,Z
+
+    Args:
+        X,Y,Z (xp.ndarray): Arrays holding ``XYZ`` TDI information. The signals can be in any domain.
+
+    Returns:
+        Tuple: ``(A,E,T)`` with array shapes the same as the input ``XYZ``.
+
+    """
+    return (
+        (Z - X) / np.sqrt(2.0),
+        (X - 2.0 * Y + Z) / np.sqrt(6.0),
+        (X + Y + Z) / np.sqrt(3.0),
+    )
+
+
+def get_fGW(f0, fdot, fddot, t, xp=None):
+    """Get instantaneous frequency of gravitational wave
+
+    Computes :math:`f(t)\\approx f_0 + \\dot{f}_0 t + \\frac{1}{2}\\ddot{f}_0 t^2.`
+    This assumes the initial time is 0.
+
+    Args:
+        f0 (1D xp.ndarray): Initial frequency of source in Hz. Shape is ``(num_bin_all,)``. 
+        fdot (1D xp.ndarray): Initial frequency derivative of source in Hz/s. Shape is ``(num_bin_all,)``. 
+        fddot (1D xp.ndarray): Initial second derivative of the frequency of source in Hz/s^2. Shape is ``(num_bin_all,)``. 
+        t (xp.ndarray): Time values at which to evaluate the frequencies.
+            If ``t.ndim > 1``, it will cast the frequency information properly. 
+            In this case, ``t.shape[0]`` must be equal to ``num_bin_all``.   
+        
+    Returns:
+        xp.ndarray: All frequencies evaluated at the given times.
+
+    Raises:
+        AssertionError: ``t.shape[0] != num_bin_all and t.shape[0] != 1``. 
+
+    
+    """
+    if xp is None:
+        xp = np
+
+    # get dimensionality of t
+    tdim = t.ndim
+
+    # adjust dimensions if needed
+    dim_diff = tdim - 1
+    if dim_diff > 0:
+        assert (t.shape[0] == len(f0)) or (t.shape[0] == 1)
+
+        dims_to_expand = list(np.arange(1, dim_diff + 1))
+        f0 = xp.expand_dims(f0, dims_to_expand)
+        fdot = xp.expand_dims(fdot, dims_to_expand)
+        fddot = xp.expand_dims(fddot, dims_to_expand)
+
+    # calculate
+    f = (
+        f0 + fdot * t + 0.5 * fddot * t * t
+    )
+    return f
+
 
 def get_chirp_mass(m1, m2):
+    """Get chirp mass
+    
+    Args:
+        m1 (xp.ndarray): Mass 1.
+        m2 (xp.ndarray): Mass 2.
+
+    Returns:
+        xp.ndarray: Chirp mass.
+
+    
+    """
     return (m1 * m2) ** (3 / 5) / (m1 + m2) ** (1 / 5)
 
 
 def get_eta(m1, m2):
+    """Get symmetric mass ratio
+    
+    Args:
+        m1 (xp.ndarray): Mass 1.
+        m2 (xp.ndarray): Mass 2.
+
+    Returns:
+        xp.ndarray: Symetric mass ratio.
+        
+    
+    """
     return (m1 * m2) / (m1 + m2) ** 2
 
 
 def get_amplitude(m1, m2, f, d):
+    """Get amplitude of GW
+    
+    Args:
+        m1 (xp.ndarray): Mass 1 in solar masses.
+        m2 (xp.ndarray): Mass 2 in solar masses.
+        f (xp.ndarray): Frequency of gravitational wave in Hz.
+        d (xp.ndarray): Luminosity distance in kpc. 
+
+    Returns:
+        xp.ndarray: Amplitude.
+    
+    """
     Mc = get_chirp_mass(m1, m2) * MSUN
     d = d * 1e3 * PC  # kpc to meters
-    A = 2 * (G * Mc) ** (5.0 / 3.0) / (Clight ** 4 * d) * (np.pi * f) ** (2.0 / 3.0)
+    A = 2 * (G * Mc) ** (5.0 / 3.0) / (Clight**4 * d) * (np.pi * f) ** (2.0 / 3.0)
     return A
 
 
 def get_fdot(f, m1=None, m2=None, Mc=None):
+    """Get fdot of GW
 
+    Must provide either ``m1`` and ``m2`` or ``Mc``.
+    
+    Args:
+        f (xp.ndarray): Frequency of gravitational wave in Hz.
+        m1 (xp.ndarray, optional): Mass 1 in solar masses.
+        m2 (xp.ndarray, optional): Mass 2 in solar masses.
+        Mc (xp.ndarray, optional): Chirp mass in solar masses.
+
+    Returns:
+        xp.ndarray: fdot.
+
+    Raises:
+        ValueError: Inputs are incorrect. 
+        AssertionError: Inputs are incorrect. 
+    
+    """
+
+    # prepare inputs and convert to chirp mass if needed
     if m1 is None and m2 is None and Mc is None:
         raise ValueError("Must provide either m1 & m2 or Mc.")
     elif m1 is not None or m2 is not None:
@@ -37,22 +161,35 @@ def get_fdot(f, m1=None, m2=None, Mc=None):
         Mc = get_chirp_mass(m1, m2) * MSUN
     elif Mc is not None:
         Mc *= MSUN
-    
+
+    # calculate fdot
     fdot = (
         (96.0 / 5.0)
         * np.pi ** (8 / 3)
-        * (G * Mc / Clight ** 3) ** (5 / 3)
+        * (G * Mc / Clight**3) ** (5 / 3)
         * f ** (11 / 3)
     )
     return fdot
 
 
 def get_chirp_mass_from_f_fdot(f, fdot):
+    """Get chirp mass from f and fdot of GW
+    
+    Args:
+        f (xp.ndarray): Frequency of gravitational wave in Hz.
+        fdot (xp.ndarray): Frequency derivative of gravitational wave in Hz/s.
+
+    Returns:
+        xp.ndarray: chirp mass.
+    
+    """
+
+    # backout 
     Mc_SI = (
         5.0
         / 96.0
         * np.pi ** (-8 / 3)
-        * (G / Clight ** 3) ** (-5 / 3)
+        * (G / Clight**3) ** (-5 / 3)
         * f ** (-11 / 3)
         * fdot
     ) ** (3 / 5)
@@ -60,188 +197,30 @@ def get_chirp_mass_from_f_fdot(f, fdot):
     return Mc
 
 
-def third_body_factors(
-    total_mass_inner,
-    mc,
-    orbit_period,
-    orbit_eccentricity,
-    orbit_inclination,
-    orbit_Omega2,
-    orbit_omega2,
-    orbit_phi2,
-    orbit_lambda,
-    orbit_beta,
-    third_mass_unit="Mjup",
-    third_period_unit="years",
-):
+def get_N(amp, f0, Tobs, oversample=1):
+    """Determine sampling rate for slow part of FastGB waveform.
+    
+    Args:
+        amp (xp.ndarray): Amplitude of gravitational wave.
+        f0 (xp.ndarray): Frequency of gravitational wave in Hz.
+        Tobs (double): Observation time in seconds.
+        oversample (int, optional): Oversampling factor. This function will return
+            ``oversample * N``, if N is the determined sample number. 
+            (Default: ``1``). 
 
-    total_mass_inner *= MSUN
+    Returns:
+        int xp.ndarray: N values for each binary entered.
+    
+    """
 
-    if third_mass_unit == "Mjup":
-        factor = Mjup
-    elif third_mass_unit == "MSUN":
-        factor = MSUN
-
-    else:
-        raise NotImplementedError
-
-    mc *= factor
-
-    if third_period_unit == "years":
-        orbit_period *= YEAR
-
-    elif third_period_unit == "seconds":
-        pass
-    else:
-        raise NotImplementedError
-
-    P = orbit_period
-    M = total_mass_inner
-    m2 = M + mc
-    iota = orbit_inclination
-    Omega2 = orbit_Omega2
-    omega2 = orbit_omega2
-    phi2 = orbit_phi2
-    theta = np.pi / 2 - orbit_beta
-    phi = orbit_lambda
-
-    a2 = (G * M * P ** 2 / (4 * np.pi ** 2)) ** (1 / 3)
-    e2 = orbit_eccentricity
-    p2 = a2 * (1 - e2 ** 2)  # semilatus rectum
-
-    # get C and S
-    C = np.cos(theta) * np.sin(iota) + np.sin(theta) * np.cos(iota) * np.sin(
-        phi - Omega2
-    )
-    S = np.sin(theta) * np.cos(phi - Omega2)
-
-    # bar quantities
-    A_bar = np.sqrt(C ** 2 + S ** 2)
-    phi_bar = np.arctan(C / (-S))
-    omega_bar = (omega2 + phi_bar) % (2 * np.pi)
-    # check factor of 0.77
-    amp2 = (mc / m2) * np.sqrt(G * m2 / p2) * A_bar
-
-    T2 = get_T2(P, e2, phi2, third_period_unit="seconds")
-
-    return amp2, omega_bar, T2
-
-
-def get_T2(P2, e2, phi2, third_period_unit="years"):
-
-    if third_period_unit == "years":
-        P2 *= YEAR
-
-    elif third_period_unit == "seconds":
-        pass
-    else:
-        raise NotImplementedError
-
-    # compute T2
-    u2 = 2.0 * np.arctan(np.sqrt((1 - e2) / (1 + e2)) * np.tan(phi2 / 2.0))
-
-    n2 = 2 * np.pi / P2
-
-    temp_T2 = (u2 - e2 * np.sin(u2)) / n2
-    T2 = (temp_T2 / YEAR) * (temp_T2 >= 0.0) + ((P2 - np.abs(temp_T2)) / YEAR) * (
-        temp_T2 < 0.0
-    )
-    return T2
-
-
-def get_vLOS(A2, omegabar, e2, P2, T2, t):
-
-    # check if inputs are scalar or array
-    if isinstance(A2, float):
-        scalar = True
-
-    else:
-        scalar = False
-
-    A2_in = np.atleast_1d(A2)
-    omegabar_in = np.atleast_1d(omegabar)
-    e2_in = np.atleast_1d(e2)
-    P2_in = np.atleast_1d(P2)
-    T2_in = np.atleast_1d(T2)
-    t_in = np.atleast_1d(t)
-
-    # make sure all are same length
-    assert np.all(
-        np.array(
-            [
-                len(A2_in),
-                len(omegabar_in),
-                len(e2_in),
-                len(P2_in),
-                len(T2_in),
-                len(t_in),
-            ]
-        )
-        == len(A2_in)
-    )
-
-    n2_in = 2 * np.pi / (P2_in * YEAR)
-    T2_in *= YEAR
-
-    vLOS = third_body_vLOS(A2_in, omegabar_in, e2_in, n2_in, T2_in, t_in)
-
-    # set output to shape of input
-    if scalar:
-        return vLOS[0]
-
-    return vLOS
-
-
-def get_aLOS(A2, omegabar, e2, P2, T2, t, eps=1e-9):
-
-    # central differencing for derivative of velocity
-    up = get_vLOS(A2, omegabar, e2, P2, T2, t + eps)
-    down = get_vLOS(A2, omegabar, e2, P2, T2, t - eps)
-
-    aLOS = (up - down) / (2 * eps)
-
-    return aLOS
-
-
-def get_f_derivatives(f0, fdot, A2, omegabar, e2, P2, T2, eps=5e4, t=None):
-
-    if t is not None and not isinstance(t, list) and not isinstance(t, np.ndarray):
-        raise ValueError("t must be 1d list or 1d np.ndarray")
-
-    elif t is None:
-        t = np.array([-eps, 0.0, eps])
-
-    else:
-        t = np.asarray(t)
-
-    fddot = 11 / 3 * fdot ** 2 / f0
-
-    A2_in = np.full_like(t, A2)
-    omegabar_in = np.full_like(t, omegabar)
-    e2_in = np.full_like(t, e2)
-    P2_in = np.full_like(t, P2)
-    T2_in = np.full_like(t, T2)
-    f0_in = np.full_like(t, f0)
-    fdot_in = np.full_like(t, fdot)
-
-    f_temp = f0 + fdot * t + 0.5 * fddot * t * t
-    f_temp *= 1.0 + get_vLOS(A2_in, omegabar_in, e2_in, P2_in, T2_in, t) / Clight
-
-    fdot_new = (f_temp[2] - f_temp[0]) / (2 * eps)
-
-    fddot_new = (f_temp[2] - 2 * f_temp[1] + f_temp[0]) / (2 * eps) ** 2
-
-    return (f_temp[1], fdot_new, fddot_new)
-
-
-def get_N(amp, f0, Tobs, oversample=1, P2=None):
-    """Determine proper sampling in time domain."""
-
+    # make sure they are arrays
     amp = np.atleast_1d(amp)
     f0 = np.atleast_1d(f0)
 
+    # default mult
     mult = 8
 
+    # adjust mult based on observation time
     if (Tobs / YEAR) <= 1.0:
         mult = 1
 
@@ -251,19 +230,22 @@ def get_N(amp, f0, Tobs, oversample=1, P2=None):
     elif (Tobs / YEAR) <= 4.0:
         mult = 4
 
-    elif (Tobs / YEAR) <= 2.0:
+    elif (Tobs / YEAR) <= 8.0:
         mult = 8
 
+    # cast for all binaries
     mult = np.full_like(f0, mult, dtype=np.int32)
 
     N = 32 * mult
 
+    # adjust based on the frequency of the source
     N[f0 >= 0.1] = 1024 * mult[f0 >= 0.1]
     N[(f0 >= 0.03) & (f0 < 0.1)] = 512 * mult[(f0 >= 0.03) & (f0 < 0.1)]
     N[(f0 >= 0.01) & (f0 < 0.3)] = 256 * mult[(f0 >= 0.01) & (f0 < 0.3)]
     N[(f0 >= 0.001) & (f0 < 0.01)] = 64 * mult[(f0 >= 0.001) & (f0 < 0.01)]
 
-    # TODO: add amplitude into N calculation
+    # if a sensitivity curve is available, verify the SNR is not too high
+    # if it is, needs more points
     if tdi_available:
         fonfs = f0 / fstar
 
@@ -288,17 +270,42 @@ def get_N(amp, f0, Tobs, oversample=1, P2=None):
 
     N = M
 
-    # check against exoplanet sampling
-    if P2 is not None:
-        P2 = np.atleast_1d(P2)
-
-        freq_N = 1 / ((Tobs / YEAR) / N)
-        while np.any(freq_N < (2.0 / P2)):
-            inds_fix = freq_N < (2.0 / P2)
-            N = 2 * N * (inds_fix) + N * (~inds_fix)
-            freq_N = 1 / ((Tobs / YEAR) / N)
-
-    # for j = 1 mode, so N/2 not N
-    N_out = ((N / 2) * oversample).astype(int)
+    # adjust with oversample
+    N_out = (N * oversample).astype(int)
 
     return N_out
+
+
+def omp_set_num_threads(num_threads=1):
+    """Globally sets OMP_NUM_THREADS
+
+    Args:
+        num_threads (int, optional): Number of parallel threads to use in OpenMP.
+            Default is 1.
+
+    """
+    set_threads_wrap(num_threads)
+
+
+def omp_get_num_threads():
+    """Get global variable OMP_NUM_THREADS
+
+    Returns:
+        int: Number of OMP threads.
+
+    """
+    num_threads = get_threads_wrap()
+    return num_threads
+
+
+def cuda_set_device(dev):
+    """Globally sets CUDA device
+
+    Args:
+        dev (int): CUDA device number.
+
+    """
+    if setDevice is not None:
+        setDevice(dev)
+    else:
+        warnings.warn("Setting cuda device, but cupy/cuda not detected.")

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GBGPU Utility Functions &mdash; gbgpu  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+        <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="GBGPU Tutorial" href="../GBGPU_tutorial.html" />
+    <link rel="prev" title="Extending GBGPU Waveforms" href="derivedwaves.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: coral" >
+            <a href="../index.html" class="icon icon-home"> gbgpu
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="main.html">Fast GB Waveforms and Likelihoods</a></li>
+<li class="toctree-l1"><a class="reference internal" href="derivedwaves.html">Extending GBGPU Waveforms</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">GBGPU Utility Functions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#gravitational-wave-utilities">Gravitational-wave utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#other-utilities">Other utilities</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorial:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html">GBGPU Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Generating-Galactic-binary-waveforms">Generating Galactic binary waveforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Adding-additional-GB-astrophysics">Adding additional GB astrophysics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Calculating-the-Information-Matrix">Calculating the Information Matrix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Utility-functions">Utility functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GBGPU_tutorial.html#Citations">Citations</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: coral" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">gbgpu</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>GBGPU Utility Functions</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user/utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul><div class="rst-breadcrumbs-buttons" role="navigation" aria-label="Sequential page navigation">
+        <a href="derivedwaves.html" class="btn btn-neutral float-left" title="Extending GBGPU Waveforms" accesskey="p"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="GBGPU Tutorial" accesskey="n">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+  </div>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<section id="gbgpu-utility-functions">
+<h1>GBGPU Utility Functions<a class="headerlink" href="#gbgpu-utility-functions" title="Permalink to this headline"></a></h1>
+<section id="gravitational-wave-utilities">
+<h2>Gravitational-wave utilities<a class="headerlink" href="#gravitational-wave-utilities" title="Permalink to this headline"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.AET">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">AET</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Z</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.AET" title="Permalink to this definition"></a></dt>
+<dd><p>Return the A,E,T channels from X,Y,Z</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>xp.ndarray</em>) – Arrays holding <code class="docutils literal notranslate"><span class="pre">XYZ</span></code> TDI information. The signals can be in any domain.</p></li>
+<li><p><strong>Y</strong> (<em>xp.ndarray</em>) – Arrays holding <code class="docutils literal notranslate"><span class="pre">XYZ</span></code> TDI information. The signals can be in any domain.</p></li>
+<li><p><strong>Z</strong> (<em>xp.ndarray</em>) – Arrays holding <code class="docutils literal notranslate"><span class="pre">XYZ</span></code> TDI information. The signals can be in any domain.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">(A,E,T)</span></code> with array shapes the same as the input <code class="docutils literal notranslate"><span class="pre">XYZ</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_fGW">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_fGW</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_fGW" title="Permalink to this definition"></a></dt>
+<dd><p>Get instantaneous frequency of gravitational wave</p>
+<p>Computes <span class="math notranslate nohighlight">\(f(t)\approx f_0 + \dot{f}_0 t + \frac{1}{2}\ddot{f}_0 t^2.\)</span>
+This assumes the initial time is 0.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>f0</strong> (<em>1D xp.ndarray</em>) – Initial frequency of source in Hz. Shape is <code class="docutils literal notranslate"><span class="pre">(num_bin_all,)</span></code>.</p></li>
+<li><p><strong>fdot</strong> (<em>1D xp.ndarray</em>) – Initial frequency derivative of source in Hz/s. Shape is <code class="docutils literal notranslate"><span class="pre">(num_bin_all,)</span></code>.</p></li>
+<li><p><strong>fddot</strong> (<em>1D xp.ndarray</em>) – Initial second derivative of the frequency of source in Hz/s^2. Shape is <code class="docutils literal notranslate"><span class="pre">(num_bin_all,)</span></code>.</p></li>
+<li><p><strong>t</strong> (<em>xp.ndarray</em>) – Time values at which to evaluate the frequencies.
+If <code class="docutils literal notranslate"><span class="pre">t.ndim</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, it will cast the frequency information properly.
+In this case, <code class="docutils literal notranslate"><span class="pre">t.shape[0]</span></code> must be equal to <code class="docutils literal notranslate"><span class="pre">num_bin_all</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>All frequencies evaluated at the given times.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xp.ndarray</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>AssertionError</strong> – <code class="docutils literal notranslate"><span class="pre">t.shape[0]</span> <span class="pre">!=</span> <span class="pre">num_bin_all</span> <span class="pre">and</span> <span class="pre">t.shape[0]</span> <span class="pre">!=</span> <span class="pre">1</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_chirp_mass">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_chirp_mass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_chirp_mass" title="Permalink to this definition"></a></dt>
+<dd><p>Get chirp mass</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m1</strong> (<em>xp.ndarray</em>) – Mass 1.</p></li>
+<li><p><strong>m2</strong> (<em>xp.ndarray</em>) – Mass 2.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Chirp mass.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xp.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_eta">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_eta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_eta" title="Permalink to this definition"></a></dt>
+<dd><p>Get symmetric mass ratio</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m1</strong> (<em>xp.ndarray</em>) – Mass 1.</p></li>
+<li><p><strong>m2</strong> (<em>xp.ndarray</em>) – Mass 2.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Symetric mass ratio.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xp.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_amplitude">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_amplitude</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_amplitude" title="Permalink to this definition"></a></dt>
+<dd><p>Get amplitude of GW</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>m1</strong> (<em>xp.ndarray</em>) – Mass 1 in solar masses.</p></li>
+<li><p><strong>m2</strong> (<em>xp.ndarray</em>) – Mass 2 in solar masses.</p></li>
+<li><p><strong>f</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
+<li><p><strong>d</strong> (<em>xp.ndarray</em>) – Luminosity distance in kpc.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Amplitude.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xp.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_fdot">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_fdot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Mc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_fdot" title="Permalink to this definition"></a></dt>
+<dd><p>Get fdot of GW</p>
+<p>Must provide either <code class="docutils literal notranslate"><span class="pre">m1</span></code> and <code class="docutils literal notranslate"><span class="pre">m2</span></code> or <code class="docutils literal notranslate"><span class="pre">Mc</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>f</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
+<li><p><strong>m1</strong> (<em>xp.ndarray</em><em>, </em><em>optional</em>) – Mass 1 in solar masses.</p></li>
+<li><p><strong>m2</strong> (<em>xp.ndarray</em><em>, </em><em>optional</em>) – Mass 2 in solar masses.</p></li>
+<li><p><strong>Mc</strong> (<em>xp.ndarray</em><em>, </em><em>optional</em>) – Chirp mass in solar masses.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>fdot.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xp.ndarray</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – Inputs are incorrect.</p></li>
+<li><p><strong>AssertionError</strong> – Inputs are incorrect.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_chirp_mass_from_f_fdot">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_chirp_mass_from_f_fdot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_chirp_mass_from_f_fdot" title="Permalink to this definition"></a></dt>
+<dd><p>Get chirp mass from f and fdot of GW</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>f</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
+<li><p><strong>fdot</strong> (<em>xp.ndarray</em>) – Frequency derivative of gravitational wave in Hz/s.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>chirp mass.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>xp.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.get_N">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_N</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Tobs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_N" title="Permalink to this definition"></a></dt>
+<dd><p>Determine sampling rate for slow part of FastGB waveform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>amp</strong> (<em>xp.ndarray</em>) – Amplitude of gravitational wave.</p></li>
+<li><p><strong>f0</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
+<li><p><strong>Tobs</strong> (<em>double</em>) – Observation time in seconds.</p></li>
+<li><p><strong>oversample</strong> (<em>int</em><em>, </em><em>optional</em>) – Oversampling factor. This function will return
+<code class="docutils literal notranslate"><span class="pre">oversample</span> <span class="pre">*</span> <span class="pre">N</span></code>, if N is the determined sample number.
+(Default: <code class="docutils literal notranslate"><span class="pre">1</span></code>).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>N values for each binary entered.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int xp.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="other-utilities">
+<h2>Other utilities<a class="headerlink" href="#other-utilities" title="Permalink to this headline"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.omp_set_num_threads">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">omp_set_num_threads</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.omp_set_num_threads" title="Permalink to this definition"></a></dt>
+<dd><p>Globally sets OMP_NUM_THREADS</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>num_threads</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of parallel threads to use in OpenMP.
+Default is 1.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.omp_get_num_threads">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">omp_get_num_threads</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.omp_get_num_threads" title="Permalink to this definition"></a></dt>
+<dd><p>Get global variable OMP_NUM_THREADS</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Number of OMP threads.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gbgpu.utils.utility.cuda_set_device">
+<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">cuda_set_device</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dev</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.cuda_set_device" title="Permalink to this definition"></a></dt>
+<dd><p>Globally sets CUDA device</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dev</strong> (<em>int</em>) – CUDA device number.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="derivedwaves.html" class="btn btn-neutral float-left" title="Extending GBGPU Waveforms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../GBGPU_tutorial.html" class="btn btn-neutral float-right" title="GBGPU Tutorial" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Michael L. Katz.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

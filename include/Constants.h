@@ -51,7 +51,7 @@
 #define Larm 2.5e9
 
  /* LISA orbital eccentricity */
-#define ec 0.0048241852
+#define ec 0.004824185218078991
 
  /* Initial azimuthal position of the guiding center */
 #define kappa 0.000000
@@ -60,7 +60,7 @@
 #define lambda0 0.000000
 
  /* LISA modulation frequency */
-#define fm 3.168753575e-8
+#define fm 3.168753578738106e-08
 
 /* transfer frequency (Hz) */
 #define fstar 0.01908538063694777

@@ -17,9 +17,9 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'gbgpu'
-copyright = '2021, Michael L. Katz'
-author = 'Michael L. Katz'
+project = "gbgpu"
+copyright = "2021, Michael L. Katz"
+author = "Michael L. Katz"
 
 
 import pypandoc
@@ -33,7 +33,6 @@ import sys, os
 sys.path.insert(0, os.path.abspath("../../"))
 
 import shutil
-
 
 
 shutil.copy(

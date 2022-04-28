@@ -29,7 +29,7 @@ class WaveformTest(unittest.TestCase):
         num_bin = 10
         amp = 1e-22  # amplitude
         f0 = 2e-3  # f0
-        fdot = 1e-14  # fdot
+        fdot = 1e-18  # fdot
         fddot = 0.0
         phi0 = 0.1  # initial phase
         iota = 0.2  # inclination
