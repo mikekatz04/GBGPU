@@ -378,7 +378,7 @@ div.rendered_html tbody tr:hover {
 <span class="o">%</span><span class="k">matplotlib</span> inline
 
 <span class="kn">from</span> <span class="nn">gbgpu.gbgpu</span> <span class="kn">import</span> <span class="n">GBGPU</span>
-<span class="kn">from</span> <span class="nn">gbgpu.thirdbody</span> <span class="kn">import</span> <span class="n">ThirdBody</span>
+<span class="kn">from</span> <span class="nn">gbgpu.thirdbody</span> <span class="kn">import</span> <span class="n">GBGPUThirdBody</span>
 
 <span class="kn">from</span> <span class="nn">gbgpu.utils.constants</span> <span class="kn">import</span> <span class="o">*</span>
 <span class="kn">from</span> <span class="nn">gbgpu.utils.utility</span> <span class="kn">import</span> <span class="o">*</span>
@@ -494,14 +494,14 @@ signal length: (512,)
 <p><code class="docutils literal notranslate"><span class="pre">special_get_N</span></code>: Implemented if the new setup puts limitations on the sampling rate in the time-domain for the slow part of the waveform.</p>
 <p><code class="docutils literal notranslate"><span class="pre">shift_frequency</span></code>: Shifts the frequency in the slow computation.</p>
 <p><code class="docutils literal notranslate"><span class="pre">add_to_argS</span></code>: Adjusts the phasing in the transfer function of the slow waveform.</p>
-<p>See <code class="docutils literal notranslate"><span class="pre">`gbgpu.thirdbody.ThirdBody</span></code> &lt;<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody">https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody</a>&gt;`__ for an example and more information.</p>
+<p>See <code class="docutils literal notranslate"><span class="pre">`gbgpu.thirdbody.GBGPUThirdBody</span></code> &lt;<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody">https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody</a>&gt;`__ for an example and more information.</p>
 <section id="Example:-Third-body-in-orbit-around-the-inner-binary">
 <h2>Example: Third-body in orbit around the inner binary<a class="headerlink" href="#Example:-Third-body-in-orbit-around-the-inner-binary" title="Permalink to this headline"></a></h2>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gb_third</span> <span class="o">=</span> <span class="n">ThirdBody</span><span class="p">(</span><span class="n">use_gpu</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gb_third</span> <span class="o">=</span> <span class="n">GBGPUThirdBody</span><span class="p">(</span><span class="n">use_gpu</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 <span class="n">A2</span> <span class="o">=</span> <span class="mf">400.0</span>  <span class="c1"># third body amplitude parameter</span>
 <span class="n">varpi</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># varpi phase parameter</span>
@@ -708,7 +708,7 @@ array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x7f9d3998d340&gt;]
+[&lt;matplotlib.lines.Line2D at 0x7f97f48912b0&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">

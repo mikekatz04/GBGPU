@@ -1,7 +1,7 @@
 Extending GBGPU Waveforms
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The base class :class:`gbgpu.gbgpu.GBGPU` can be inherited in order to build other waveforms in the model of FastGB. To do this, there are required methods that need to be added to the new waveform class. They are described in the Abstract Base Class :class:`gbgpu.gbgpu.InheritGBGPU`. After the base class, waveform models that have already been extended beyond the base are described. 
+The base class :class:`gbgpu.gbgpu.InheritGBGPU` can be inherited in order to build other waveforms in the model of FastGB. To do this, there are required methods that need to be added to the new waveform class. They are described in the Abstract Base Class :class:`gbgpu.gbgpu.InheritGBGPU`. After the base class, waveform models that have already been extended beyond the base are described. 
 
 
 ``InheritGBGPU`` base class
@@ -20,7 +20,7 @@ Third-body inclusion
 Third-body waveform
 ******************************
 
-.. autoclass:: gbgpu.thirdbody.ThirdBody
+.. autoclass:: gbgpu.thirdbody.GBGPUThirdBody
     :members:
     :show-inheritance:
 

@@ -117,7 +117,7 @@
 </style>
 <section id="extending-gbgpu-waveforms">
 <h1>Extending GBGPU Waveforms<a class="headerlink" href="#extending-gbgpu-waveforms" title="Permalink to this headline"></a></h1>
-<p>The base class <a class="reference internal" href="main.html#gbgpu.gbgpu.GBGPU" title="gbgpu.gbgpu.GBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.GBGPU</span></code></a> can be inherited in order to build other waveforms in the model of FastGB. To do this, there are required methods that need to be added to the new waveform class. They are described in the Abstract Base Class <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a>. After the base class, waveform models that have already been extended beyond the base are described.</p>
+<p>The base class <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a> can be inherited in order to build other waveforms in the model of FastGB. To do this, there are required methods that need to be added to the new waveform class. They are described in the Abstract Base Class <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a>. After the base class, waveform models that have already been extended beyond the base are described.</p>
 <section id="inheritgbgpu-base-class">
 <h2><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class<a class="headerlink" href="#inheritgbgpu-base-class" title="Permalink to this headline"></a></h2>
 <dl class="py class">
@@ -240,8 +240,8 @@ The shape is <code class="docutils literal notranslate"><span class="pre">(num</
 <section id="third-body-waveform">
 <h3>Third-body waveform<a class="headerlink" href="#third-body-waveform" title="Permalink to this headline"></a></h3>
 <dl class="py class">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.thirdbody.</span></span><span class="sig-name descname"><span class="pre">ThirdBody</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.thirdbody.</span></span><span class="sig-name descname"><span class="pre">GBGPUThirdBody</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a></p>
 <p>Build the effect of a third body into Galactic binary waveforms.</p>
 <p>The third-body components are originally
@@ -253,14 +253,14 @@ by Travis Robson for the paper <a class="reference external" href="https://arxiv
 </dl>
 <p>Attributes:</p>
 <dl class="py property">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.citation">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">citation</span></span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.citation" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.citation">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">citation</span></span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.citation" title="Permalink to this definition"></a></dt>
 <dd><p>Get citations for this class</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.prepare_additional_args">
-<span class="sig-name descname"><span class="pre">prepare_additional_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.prepare_additional_args" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.prepare_additional_args">
+<span class="sig-name descname"><span class="pre">prepare_additional_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.prepare_additional_args" title="Permalink to this definition"></a></dt>
 <dd><p>Prepare the arguments special to this class</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -291,8 +291,8 @@ This parameter is effectively a constant of integration.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.special_get_N">
-<span class="sig-name descname"><span class="pre">special_get_N</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.special_get_N" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.special_get_N">
+<span class="sig-name descname"><span class="pre">special_get_N</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.special_get_N" title="Permalink to this definition"></a></dt>
 <dd><p>Determine proper sampling rate in time domain for slow-part.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -326,8 +326,8 @@ This parameter is effectively a constant of integration. (Not needed in this fun
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.shift_frequency">
-<span class="sig-name descname"><span class="pre">shift_frequency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.shift_frequency" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.shift_frequency">
+<span class="sig-name descname"><span class="pre">shift_frequency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.shift_frequency" title="Permalink to this definition"></a></dt>
 <dd><p>Shift the evolution of the frequency in the slow part</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -359,8 +359,8 @@ This parameter is effectively a constant of integration.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.add_to_argS">
-<span class="sig-name descname"><span class="pre">add_to_argS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argS</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.add_to_argS" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.add_to_argS">
+<span class="sig-name descname"><span class="pre">add_to_argS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argS</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.add_to_argS" title="Permalink to this definition"></a></dt>
 <dd><p>Update <code class="docutils literal notranslate"><span class="pre">argS</span></code> in FastGB formalism for third-body effect</p>
 <p><code class="docutils literal notranslate"><span class="pre">argS</span></code> is an effective phase that goes into <code class="docutils literal notranslate"><span class="pre">kdotP</span></code> in the construction
 of the slow part of the waveform. <code class="docutils literal notranslate"><span class="pre">kdotP</span></code> is then included directly
@@ -402,8 +402,8 @@ This parameter is effectively a constant of integration.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.get_u">
-<span class="sig-name descname"><span class="pre">get_u</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">l</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.get_u" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.get_u">
+<span class="sig-name descname"><span class="pre">get_u</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">l</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.get_u" title="Permalink to this definition"></a></dt>
 <dd><p>Invert Kepler’s Equation to get eccentric anomaly</p>
 <p>Invert Kepler’s equation (<span class="math notranslate nohighlight">\(l = u - e \sin{u}\)</span>)
 using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
@@ -424,8 +424,8 @@ using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.get_phi">
-<span class="sig-name descname"><span class="pre">get_phi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.get_phi" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.get_phi">
+<span class="sig-name descname"><span class="pre">get_phi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.get_phi" title="Permalink to this definition"></a></dt>
 <dd><p>Get phi value for Line-of-sight velocity</p>
 <p>See <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
 <dl class="field-list simple">
@@ -447,8 +447,8 @@ using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.get_vLOS">
-<span class="sig-name descname"><span class="pre">get_vLOS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.get_vLOS" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.get_vLOS">
+<span class="sig-name descname"><span class="pre">get_vLOS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.get_vLOS" title="Permalink to this definition"></a></dt>
 <dd><p>Calculate the line-of-site velocity</p>
 <p>See equation 13 in <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
 <dl class="field-list simple">
@@ -477,8 +477,8 @@ This parameter is effectively a constant of integration.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.parab_step_ET">
-<span class="sig-name descname"><span class="pre">parab_step_ET</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t0_old</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.parab_step_ET" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.parab_step_ET">
+<span class="sig-name descname"><span class="pre">parab_step_ET</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t0_old</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.parab_step_ET" title="Permalink to this definition"></a></dt>
 <dd><p>Determine phase difference caused by third-body</p>
 <p>Takes a step in the integration of the orbit. In this setup,
 the calculations can all be done in parallel because we are just
@@ -519,8 +519,8 @@ Shape is <code class="docutils literal notranslate"><span class="pre">(num</span
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.get_aLOS">
-<span class="sig-name descname"><span class="pre">get_aLOS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-09</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.get_aLOS" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.get_aLOS">
+<span class="sig-name descname"><span class="pre">get_aLOS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-09</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.get_aLOS" title="Permalink to this definition"></a></dt>
 <dd><p>Get line-of-sight acceleration</p>
 <p>Use central difference with LOS velocity to get
 LOS acceleration.</p>
@@ -551,8 +551,8 @@ This parameter is effectively a constant of integration.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="gbgpu.thirdbody.ThirdBody.get_f_derivatives">
-<span class="sig-name descname"><span class="pre">get_f_derivatives</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50000.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.ThirdBody.get_f_derivatives" title="Permalink to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody.get_f_derivatives">
+<span class="sig-name descname"><span class="pre">get_f_derivatives</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50000.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.get_f_derivatives" title="Permalink to this definition"></a></dt>
 <dd><p>Get instantaneous frequency derivatives in third-body waveform</p>
 <p>Computes the instantaneous frequency and frequency derivatives by
 calculating the effect of the third-body over the course of the orbit.</p>

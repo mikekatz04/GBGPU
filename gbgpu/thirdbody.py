@@ -19,7 +19,7 @@ from gbgpu.gbgpu import InheritGBGPU
 from gbgpu.utils.utility import *
 
 
-class ThirdBody(InheritGBGPU):
+class GBGPUThirdBody(InheritGBGPU):
     """Build the effect of a third body into Galactic binary waveforms.
 
     The third-body components are originally
