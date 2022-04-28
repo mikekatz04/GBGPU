@@ -105,9 +105,29 @@
 </style>
 <section id="gbgpu-gpu-cpu-galactic-binary-waveforms">
 <h1>gbgpu: GPU/CPU Galactic Binary Waveforms<a class="headerlink" href="#gbgpu-gpu-cpu-galactic-binary-waveforms" title="Permalink to this headline"></a></h1>
-<p>This package generates Galactic binary waveforms. It is based on code
-(FastGB) by Neil Cornish, Tyson Littenberg, Travis Robson, and Stas
-Babak.</p>
+<p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> is a GPU-accelerated version of the <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> waveform which
+has been developed by Neil Cornish, Tyson Littenberg, Travis Robson, and
+Stas Babak. It computes gravitational waveforms for Galactic binary
+systems observable by LISA using a fast/slow-type decomposition. For
+more details on the original construction of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> see
+<a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>.</p>
+<p>The current version of the code is very closely related to the
+implementation of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> in the LISA Data Challenges’ Python code
+package. The waveform code is entirely Python-based. It is about 1/2 the
+speed of the full C version, but much simpler in Python for right now.
+There are also many additional functions including fast likelihood
+computations for individual Galactic binaries, as well as fast C-based
+methods to combine waveforms into global fitting templates.</p>
+<p>The code is CPU/GPU agnostic. CUDA and NVIDIA GPUs are required to run
+these codes for GPUs.</p>
+<p>See the
+<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/index.html">documentation</a>
+for more details. This code was designed for (# TODO: add new arxiv
+number). If you use any part of this code, please cite (# TODO: add new
+arxiv number), its <a class="reference external" href="https://zenodo.org/record/6500434#.YmpofxNBzlw">Zenodo
+page</a>,
+<a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and
+<a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
 <section id="getting-started">
 <h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline"></a></h2>
 <p>Below is a quick set of instructions to get you started with <code class="docutils literal notranslate"><span class="pre">gbgpu</span></code>.</p>

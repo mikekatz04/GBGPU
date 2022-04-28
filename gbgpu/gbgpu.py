@@ -103,7 +103,7 @@ class GBGPU(object):
     @property
     def citation(self):
         """Get citations for this class"""
-        return cornish_fastb + robson_triple
+        return zenodo + cornish_fastb + robson_triple
 
     def run_wave(
         self,

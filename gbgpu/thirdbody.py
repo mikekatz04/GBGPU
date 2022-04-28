@@ -35,7 +35,7 @@ class GBGPUThirdBody(InheritGBGPU):
     @property
     def citation(self):
         """Get citations for this class"""
-        return cornish_fastb + robson_triple
+        return zenodo + cornish_fastb + robson_triple
 
     def prepare_additional_args(self, A2, varpi, e2, P2, T2):
         """Prepare the arguments special to this class

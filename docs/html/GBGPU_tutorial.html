@@ -366,7 +366,7 @@ div.rendered_html tbody tr:hover {
 <p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> is a GPU-accelerated version of the <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> waveform which has been developed by Neil Cornish, Tyson Littenberg, Travis Robson, and Stas Babak. It computes gravitational waveforms for Galactic binary systems observable by LISA using a fast/slow-type decomposition. For more details on the original construction of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> see <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>.</p>
 <p>The current version of the code is very closely related to the implementation of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> in the LISA Data Challenges’ Python code package. The waveform code is entirely Python-based. It is about 1/2 the speed of the full C version, but much simpler in Python for right now. There are also many additional functions including fast likelihood computations for individual Galactic binaries, as well as fast C-based methods to combine waveforms into global fitting templates.</p>
 <p>The code is CPU/GPU agnostic. CUDA and NVIDIA GPUs are required to run these codes for GPUs.</p>
-<p>See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/index.html">documentation</a> for more details. This code was designed for (# TODO: add new arxiv number). If you use any part of this code, please cite (# TODO: add new arxiv number), its Zenodo page (# TODO: add zenodo page), <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and <a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
+<p>See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/index.html">documentation</a> for more details. This code was designed for (# TODO: add new arxiv number). If you use any part of this code, please cite (# TODO: add new arxiv number), its <a class="reference external" href="https://zenodo.org/record/6500434#.YmpofxNBzlw">Zenodo page</a>, <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and <a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
@@ -708,7 +708,7 @@ array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x7f97f48912b0&gt;]
+[&lt;matplotlib.lines.Line2D at 0x7fc8d2892310&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -870,6 +870,17 @@ array([256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
+
+@software{michael_l_katz_2022_6500434,
+  author       = {Michael L. Katz},
+  title        = {mikekatz04/GBGPU: First official public release!},
+  month        = apr,
+  year         = 2022,
+  publisher    = {Zenodo},
+  version      = {v1.0.0},
+  doi          = {10.5281/zenodo.6500434},
+  url          = {https://doi.org/10.5281/zenodo.6500434}
+}
 
 @article{Cornish:2007if,
     author = &#34;Cornish, Neil J. and Littenberg, Tyson B.&#34;,
