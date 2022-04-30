@@ -238,7 +238,7 @@ class GBGPU(object):
 
         # figure out start inds
         q_check = (f0 * T).astype(np.int32)
-        self.start_inds = (q_check - N / 2).astype(xp.int32)
+        #self.start_inds = (q_check - N / 2).astype(xp.int32)
 
         cosiota = self.xp.cos(iota)
 
@@ -294,8 +294,9 @@ class GBGPU(object):
         )
 
         # transform to TDI observables
-        XYZf, f0_out = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
+        XYZf, f_min = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
+        self.start_inds = self.kmin = self.xp.round(f_min/df).astype(int)
         fctr = 0.5 * T / N
 
         # adjust for TDI2 if needed
