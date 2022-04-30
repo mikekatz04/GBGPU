@@ -72,7 +72,7 @@ def get_fGW(f0, fdot, fddot, t, xp=None):
     if dim_diff > 0:
         assert (t.shape[0] == len(f0)) or (t.shape[0] == 1)
 
-        dims_to_expand = list(np.arange(1, dim_diff + 1))
+        dims_to_expand = tuple(list(np.arange(1, dim_diff + 1)))
         f0 = xp.expand_dims(f0, dims_to_expand)
         fdot = xp.expand_dims(fdot, dims_to_expand)
         fddot = xp.expand_dims(fddot, dims_to_expand)

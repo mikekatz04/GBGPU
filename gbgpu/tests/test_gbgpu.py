@@ -5,7 +5,7 @@ import unittest
 
 try:
     import cupy as xp
-
+    xp.cuda.runtime.setDevice(2)
     gpu_available = True
 
 except (ImportError, ModuleNotFoundError) as e:
@@ -79,7 +79,7 @@ class WaveformTest(unittest.TestCase):
         gb.d_d = 0.0
 
         N = int(256)
-        num_bin = 10
+        num_bin = 1000
         amp = 1e-22  # amplitude
         f0 = 2e-3  # f0
         fdot = 1e-14  # fdot
@@ -148,7 +148,7 @@ class WaveformTest(unittest.TestCase):
 
         like = gb.get_ll(params, data, noise_factor, N=N, dt=dt, T=Tobs,)
 
-        self.assertFalse(xp.any(xp.isnan(like)))
+        self.assertFalse(np.any(np.isnan(like)))
 
     def test_information_matrix(self):
 
@@ -201,6 +201,6 @@ class WaveformTest(unittest.TestCase):
         )
 
         cov = np.linalg.pinv(info_matrix)
-        self.assertFalse(xp.any(xp.isnan(cov)))
+        self.assertFalse(np.any(np.isnan(cov)))
 
 

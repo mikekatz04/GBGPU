@@ -10,9 +10,9 @@ from gbgpu.utils.constants import *
 from gbgpu.utils.citation import *
 
 # import Cython classes
-from gbgpu_utils_cpu import get_ll as get_ll_cpu
-from gbgpu_utils_cpu import fill_global as fill_global_cpu
-from gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
+from gbgpu.gbgpu_utils_cpu import get_ll as get_ll_cpu
+from gbgpu.gbgpu_utils_cpu import fill_global as fill_global_cpu
+from gbgpu.gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 try:
     from lisatools import sensitivity as tdi
@@ -26,11 +26,9 @@ except (ModuleNotFoundError, ImportError) as e:
 # import for GPU if available
 try:
     import cupy as xp
-    from gbgpu_utils import (
-        get_ll,
-        fill_global,
-        direct_like_wrap,
-    )
+    from gbgpu.gbgpu_utils import get_ll as get_ll_gpu
+    from gbgpu.gbgpu_utils import fill_global as fill_global_gpu
+    from gbgpu.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -88,9 +86,9 @@ class GBGPU(object):
         # setup Cython/C++/CUDA calls based on if using GPU
         if self.use_gpu:
             self.xp = xp
-            self.get_ll_func = get_ll
-            self.fill_global_func = fill_global
-            self.global_get_ll_func = direct_like_wrap
+            self.get_ll_func = get_ll_gpu
+            self.fill_global_func = fill_global_gpu
+            self.global_get_ll_func = direct_like_wrap_gpu
 
         else:
             self.xp = np

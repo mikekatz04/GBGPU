@@ -19,6 +19,8 @@
 #include <gsl/gsl_cblas.h>
 #endif
 
+#define NUM_THREADS 256
+
 // Add functionality for proper summation in the kernel
 #ifdef __CUDACC__
 CUDA_DEVICE
