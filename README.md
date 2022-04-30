@@ -84,9 +84,13 @@ python setup.py install
 
 ## Running the Tests
 
-In the main directory of the package run in the terminal:
+Change to the testing directory:
 ```
-python -m unittest gbgpu/tests/test_gbgpu.py
+cd gbgpu/tests
+```
+Run in the terminal:
+```
+python -m unittest discover
 ```
 
 ## Versioning

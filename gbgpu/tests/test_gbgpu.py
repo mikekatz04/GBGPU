@@ -17,6 +17,9 @@ from gbgpu.gbgpu import GBGPU
 
 from gbgpu.utils.constants import *
 
+import sys
+
+sys.path.append(np.__file__[:-17])
 
 class WaveformTest(unittest.TestCase):
     def test_circ(self):
