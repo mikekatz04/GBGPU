@@ -13,6 +13,7 @@ from gbgpu.utils.citation import *
 from gbgpu.gbgpu_utils_cpu import get_ll as get_ll_cpu
 from gbgpu.gbgpu_utils_cpu import fill_global as fill_global_cpu
 from gbgpu.gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
+from gbgpu.gbgpu_utils_cpu import swap_ll_diff as swap_ll_diff_cpu
 
 try:
     from lisatools import sensitivity as tdi
@@ -29,6 +30,7 @@ try:
     from gbgpu.gbgpu_utils import get_ll as get_ll_gpu
     from gbgpu.gbgpu_utils import fill_global as fill_global_gpu
     from gbgpu.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
+    from gbgpu.gbgpu_utils import swap_ll_diff as swap_ll_diff_gpu
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -89,12 +91,14 @@ class GBGPU(object):
             self.get_ll_func = get_ll_gpu
             self.fill_global_func = fill_global_gpu
             self.global_get_ll_func = direct_like_wrap_gpu
+            self.swap_ll_diff_func = swap_ll_diff_gpu
 
         else:
             self.xp = np
             self.get_ll_func = get_ll_cpu
             self.fill_global_func = fill_global_cpu
             self.global_get_ll_func = direct_like_wrap_cpu
+            self.swap_ll_diff_func = swap_ll_diff_cpu
 
         self.d_d = None
 
@@ -868,6 +872,163 @@ class GBGPU(object):
             start_freq_ind=start_freq_ind,
         )
         return
+        
+    def swap_likelihood_difference(
+        self,
+        params_remove,
+        params_add,
+        data_minus_template,
+        psd,
+        start_freq_ind=0,
+        data_index=None,
+        noise_index=None,
+        adjust_inplace=False,
+        **kwargs,
+    ):
+        """Generate global templates from binary parameters
+
+        Generate waveforms in batches and then combine them into
+        global fit templates. This method wraps :func:`fill_global_template`
+        by building the waveforms first.
+
+        Args:
+            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
+                The shape is ``(number of parameters, number of binaries)``.
+            group_index (1D double int32 xp.ndarray): Index indicating to which template each individual binary belongs.
+            templates (3D complex128 xp.ndarray): Buffer array for template output to filled in place.
+                The shape is ``(number of templates, 2, data_length)``. The ``2`` is
+                for the ``A`` and ``E`` TDI channels in that order.
+            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
+                for the first entry of ``templates``. This is used if a subset of a full data stream
+                is presented for the computation.
+            **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
+
+        """
+
+        assert params_add.shape == params_remove.shape
+
+        # produce TDI templates
+        self.run_wave(*params_remove.T, **kwargs)
+        A_remove, E_remove, start_inds_remove = self.A_out.copy(), self.E_out.copy(), self.start_inds.copy()
+
+        # produce TDI templates
+        self.run_wave(*params_add.T, **kwargs)
+        A_add, E_add, start_inds_add = self.A_out.copy(), self.E_out.copy(), self.start_inds.copy()
+
+        assert A_remove.shape == A_add.shape
+        assert E_remove.shape == E_add.shape
+        assert start_inds_remove.shape == start_inds_add.shape
+
+        # get shape of information
+        num_data, nchannels, data_length = data_minus_template.shape
+        num_bin = params_remove.shape[0]
+        if nchannels < 2:
+            raise ValueError("Calculates for A and E channels.")
+        elif nchannels > 2:
+            warnings.warn("Only calculating A and E channels here currently.")
+
+        # check if arrays are of same type
+        if isinstance(data_minus_template, self.xp.ndarray) is False:
+            raise TypeError(
+                "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
+            )
+
+        df = self.df
+
+        # check if arrays are of same type
+        if isinstance(data_minus_template[0], self.xp.ndarray) is False:
+            raise TypeError(
+                "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
+            )
+
+        # make sure index information if provided properly
+        if data_minus_template[0].ndim == 1:
+            if data_index is not None:
+                raise ValueError("If inputing 1D data, cannot use data_index kwarg.")
+            if noise_index is not None:
+                raise ValueError("If inputing 1D data, cannot use noise_index kwarg.")
+
+            data_length = data_minus_template[0].shape[0]
+
+        elif data_minus_template[0].ndim == 2:
+            data_length = data_minus_template[0].shape[1]
+            data_minus_template = [dat.copy().flatten() for dat in data_minus_template.transpose(1, 0, 2)]
+
+        elif data_minus_template[0].ndim == 2:
+            data_length = data_minus_template[0].shape[1]
+            data_minus_template = [dat.copy().flatten() for dat in data_minus_template]
+
+        if psd[0].ndim == 2:
+            psd = [psd_i.copy().flatten() for psd_i in psd.transpose(1, 0, 2)]
+
+        
+
+        # fill index values if not given
+        if data_index is None:
+            data_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
+        if noise_index is None:
+            noise_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
+
+        # check that index values are ready for computation
+        assert len(data_index) == self.num_bin
+        assert len(data_index) == len(noise_index)
+        assert data_index.dtype == self.xp.int32
+        assert noise_index.dtype == self.xp.int32
+        assert data_index.max() * data_length <= len(data_minus_template[0])
+        assert noise_index.max() * data_length <= len(data_minus_template[0])
+
+        # initialize Likelihood terms <d|h> and <h|h>
+        d_h_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
+        d_h_add = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
+        add_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
+        remove_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
+        add_add = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
+
+        # shift start inds based on the starting index of the data stream
+        start_inds_temp_add = (start_inds_add - start_freq_ind).astype(self.xp.int32)
+        start_inds_temp_remove = (start_inds_remove - start_freq_ind).astype(self.xp.int32)
+
+        # get ll through C/CUDA
+        self.swap_ll_diff_func(
+            d_h_remove,
+            d_h_add,
+            add_remove,
+            remove_remove,
+            add_add,
+            A_remove,
+            E_remove,
+            start_inds_temp_remove,
+            A_add, 
+            E_add,
+            start_inds_temp_add,
+            data_minus_template[0],
+            data_minus_template[1],
+            psd[0],
+            psd[1],
+            df,
+            self.N,
+            self.num_bin,
+            data_index,
+            noise_index,
+            data_length,
+        )
+
+        # store these likelihood terms for later if needed
+        self.d_h_remove = d_h_remove
+        self.d_h_add = d_h_add
+        self.add_remove = add_remove
+        self.remove_remove = remove_remove
+        self.add_add = add_add
+
+        # compute Likelihood
+        ll_diff = -1 / 2 * (-2 * d_h_add + 2 * d_h_remove - 2 * add_remove + add_add + remove_remove).real
+
+        # back to CPU if on GPU
+        try:
+            return ll_diff.get()
+
+        except AttributeError:
+            return ll_diff
 
     def inject_signal(self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, **kwargs):
         """Inject a single signal

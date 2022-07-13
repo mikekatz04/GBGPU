@@ -24,6 +24,8 @@ cdef extern from "gbgpu_utils.hh":
     void set_threads(int num_threads);
     int get_threads();
 
+    void swap_ll_diff_wrap(cmplx* d_h_remove, cmplx* d_h_add, cmplx* add_remove, cmplx* remove_remove, cmplx* add_add, cmplx* A_remove, cmplx* E_remove, int* start_ind_all_remove, cmplx* A_add, cmplx* E_add, int* start_ind_all_add, cmplx* A_data, cmplx* E_data, double* A_psd, double* E_psd, double df, int M, int num_bin, int* data_index, int* noise_index, int data_length);
+
 
 def get_threads_wrap():
     return get_threads()
@@ -91,3 +93,26 @@ def direct_like_wrap(d_h, h_h,
                   <cmplx*> A_template_in, <cmplx*> E_template_in,
                   <cmplx*> A_data_in, <cmplx*> E_data_in,
                   data_length, start_freq_ind, nwalkers)
+
+@pointer_adjust
+def swap_ll_diff(d_h_remove, d_h_add, add_remove, remove_remove, add_add, A_remove, E_remove, start_ind_all_remove, A_add, E_add, start_ind_all_add, A_data, E_data, A_psd, E_psd, df, M, num_bin, data_index, noise_index, data_length):
+
+    cdef size_t d_h_remove_in = d_h_remove
+    cdef size_t d_h_add_in = d_h_add
+    cdef size_t add_remove_in = add_remove
+    cdef size_t remove_remove_in = remove_remove
+    cdef size_t add_add_in = add_add
+    cdef size_t A_remove_in = A_remove
+    cdef size_t E_remove_in = E_remove
+    cdef size_t start_ind_all_remove_in = start_ind_all_remove
+    cdef size_t A_add_in = A_add
+    cdef size_t E_add_in = E_add
+    cdef size_t start_ind_all_add_in = start_ind_all_add
+    cdef size_t A_data_in = A_data
+    cdef size_t E_data_in = E_data
+    cdef size_t A_psd_in = A_psd
+    cdef size_t E_psd_in = E_psd
+    cdef size_t data_index_in = data_index
+    cdef size_t noise_index_in = noise_index
+
+    swap_ll_diff_wrap(<cmplx*>d_h_remove_in, <cmplx*>d_h_add_in, <cmplx*>add_remove_in, <cmplx*>remove_remove_in, <cmplx*>add_add_in, <cmplx*>A_remove_in, <cmplx*>E_remove_in, <int*>start_ind_all_remove_in, <cmplx*>A_add_in, <cmplx*>E_add_in, <int*>start_ind_all_add_in, <cmplx*>A_data_in, <cmplx*>E_data_in, <double*>A_psd_in, <double*>E_psd_in, df, M, num_bin, <int*>data_index_in, <int*>noise_index_in, data_length)

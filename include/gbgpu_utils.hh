@@ -21,5 +21,6 @@ void direct_like(cmplx* d_h, cmplx* h_h,
 void set_threads(int num_threads);
 int get_threads();
 
+void swap_ll_diff_wrap(cmplx* d_h_remove, cmplx* d_h_add, cmplx* add_remove, cmplx* remove_remove, cmplx* add_add, cmplx* A_remove, cmplx* E_remove, int* start_ind_all_remove, cmplx* A_add, cmplx* E_add, int* start_ind_all_add, cmplx* A_data, cmplx* E_data, double* A_psd, double* E_psd, double df, int M, int num_bin, int* data_index, int* noise_index, int data_length);
 
 #endif // __NEW_FASTGB_HH__
