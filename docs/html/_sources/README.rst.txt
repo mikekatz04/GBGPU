@@ -21,9 +21,10 @@ these codes for GPUs.
 
 See the
 `documentation <https://mikekatz04.github.io/GBGPU/html/index.html>`__
-for more details. This code was designed for (# TODO: add new arxiv
-number). If you use any part of this code, please cite (# TODO: add new
-arxiv number), its `Zenodo
+for more details. This code was designed for
+`arXiv:2205.03461 <https://arxiv.org/abs/2205.03461>`__. If you use any
+part of this code, please cite
+`arXiv:2205.03461 <https://arxiv.org/abs/2205.03461>`__, its `Zenodo
 page <https://zenodo.org/record/6500434#.YmpofxNBzlw>`__,
 `arXiv:0704.1808 <https://arxiv.org/abs/0704.1808>`__, and
 `arXiv:1806.00500 <https://arxiv.org/abs/1806.00500>`__.
