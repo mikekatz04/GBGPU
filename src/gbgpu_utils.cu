@@ -120,8 +120,10 @@ void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_
 {
     // GPU / CPU difference
     #ifdef __CUDACC__
-
+    
     int num_blocks = std::ceil((num_bin + NUM_THREADS -1)/NUM_THREADS);
+
+    if (num_blocks == 0) return;
 
     fill_global<<<num_blocks, NUM_THREADS>>>(
         A_glob, E_glob, A_template, E_template, start_ind_all, M, num_bin, group_index, data_length
@@ -508,7 +510,7 @@ void swap_ll_diff(cmplx* d_h_remove, cmplx* d_h_add, cmplx* add_remove, cmplx* r
                         remove_remove_temp += gcmplx::conj(h_A) * h_A / A_noise;
                         remove_remove_temp += gcmplx::conj(h_E) * h_E / E_noise;
 
-                        if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
+                        //if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
                     }
                 }
                 else if (j >= lower_end_ind)

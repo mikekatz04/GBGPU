@@ -343,11 +343,13 @@ class GBGPUThirdBody(InheritGBGPU):
         adjust = e > 1e-6  # return u
 
         # adjust if not circular
-        beta = (1.0 - np.sqrt(1.0 - e[adjust] * e[adjust])) / e[adjust]
-        u[adjust] += 2.0 * np.arctan2(
-            beta[:, None, None] * np.sin(u[adjust]),
-            1.0 - beta[:, None, None] * np.cos(u[adjust]),
-        )
+        if np.any(adjust):
+            beta = (1.0 - np.sqrt(1.0 - e[adjust] * e[adjust])) / e[adjust]
+            u[adjust] += 2.0 * np.arctan2(
+                beta[:, None, None] * np.sin(u[adjust]),
+                1.0 - beta[:, None, None] * np.cos(u[adjust]),
+            )
+            
         return u
 
     def get_vLOS(self, t, A2, varpi, e2, n2, T2):
@@ -379,7 +381,7 @@ class GBGPUThirdBody(InheritGBGPU):
             np.sin(phi2 + varpi[:, None, None])
             + e2[:, None, None] * np.sin(varpi[:, None, None])
         )
-
+        
     def parab_step_ET(self, f0, fdot, fddot, A2, varpi, e2, n2, T2, t0, t0_old):
         """Determine phase difference caused by third-body
 
@@ -454,8 +456,8 @@ class GBGPUThirdBody(InheritGBGPU):
         """
         n2 = 2 * np.pi / (P2 * YEAR)
         # central differencing for derivative of velocity
-        up = self.get_vLOS(A2, varpi, e2, n2, T2, t + eps)
-        down = self.get_vLOS(A2, varpi, e2, n2, T2, t - eps)
+        up = self.get_vLOS(t + eps, A2, varpi, e2, n2, T2)
+        down = self.get_vLOS(t - eps, A2, varpi, e2, n2, T2)
 
         aLOS = (up - down) / (2 * eps)
 
@@ -527,13 +529,13 @@ class GBGPUThirdBody(InheritGBGPU):
         assert t.shape[0] == len(A2)
 
         f_temp = f0 + fdot * t + 0.5 * fddot * t * t
-        f_temp *= 1.0 + self.get_vLOS(A2, varpi, e2, n2, T2, t) / Clight
+        f_temp *= 1.0 + self.get_vLOS(t, A2, varpi, e2, n2, T2) / Clight
 
-        fdot_new = (f_temp[2] - f_temp[0]) / (2 * eps)
+        fdot_new = (f_temp[:, :, 2] - f_temp[:, :, 0]) / (2 * eps)
 
-        fddot_new = (f_temp[2] - 2 * f_temp[1] + f_temp[0]) / (2 * eps) ** 2
+        fddot_new = (f_temp[:, :, 2] - 2 * f_temp[:, :, 1] + f_temp[:, :, 0]) / (2 * eps) ** 2
 
-        return (f_temp[1], fdot_new, fddot_new)
+        return (f_temp[:, :, 1], fdot_new, fddot_new)
 
 
 def third_body_factors(
