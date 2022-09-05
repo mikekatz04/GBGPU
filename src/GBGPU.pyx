@@ -26,6 +26,8 @@ cdef extern from "gbgpu_utils.hh":
 
     void swap_ll_diff_wrap(cmplx* d_h_remove, cmplx* d_h_add, cmplx* add_remove, cmplx* remove_remove, cmplx* add_add, cmplx* A_remove, cmplx* E_remove, int* start_ind_all_remove, cmplx* A_add, cmplx* E_add, int* start_ind_all_add, cmplx* A_data, cmplx* E_data, double* A_psd, double* E_psd, double df, int M, int num_bin, int* data_index, int* noise_index, int data_length);
 
+    
+
 
 def get_threads_wrap():
     return get_threads()
@@ -116,3 +118,4 @@ def swap_ll_diff(d_h_remove, d_h_add, add_remove, remove_remove, add_add, A_remo
     cdef size_t noise_index_in = noise_index
 
     swap_ll_diff_wrap(<cmplx*>d_h_remove_in, <cmplx*>d_h_add_in, <cmplx*>add_remove_in, <cmplx*>remove_remove_in, <cmplx*>add_add_in, <cmplx*>A_remove_in, <cmplx*>E_remove_in, <int*>start_ind_all_remove_in, <cmplx*>A_add_in, <cmplx*>E_add_in, <int*>start_ind_all_add_in, <cmplx*>A_data_in, <cmplx*>E_data_in, <double*>A_psd_in, <double*>E_psd_in, df, M, num_bin, <int*>data_index_in, <int*>noise_index_in, data_length)
+
