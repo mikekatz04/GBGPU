@@ -95,7 +95,9 @@ void SharedMemoryLikeComp(
     int N,
     int num_bin_all,
     int start_freq_ind,
-    int data_length
+    int data_length,
+    int device,
+    bool do_synchronize
 );
 
 
@@ -158,7 +160,9 @@ void SharedMemoryGenerateGlobal(
     int N,
     int num_bin_all,
     int start_freq_ind,
-    int data_length
+    int data_length,
+    int device,
+    bool do_synchronize
 );
 
 #endif // __SHAREDMEMORY_GBGPU_HPP__
