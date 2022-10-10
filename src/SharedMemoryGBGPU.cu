@@ -618,13 +618,13 @@ void SharedMemoryWaveComp(
     
     switch (N) {
             // All SM supported by cuFFTDx
-            // case 32:example::sm_runner<simple_block_fft_functor, 32>(inputs); return;
-            // case 64:example::sm_runner<simple_block_fft_functor, 64>(inputs); return;
-            // case 128:example::sm_runner<simple_block_fft_functor, 128>(inputs); return;
+            case 32:example::sm_runner<simple_block_fft_functor, 32>(inputs); return;
+            case 64:example::sm_runner<simple_block_fft_functor, 64>(inputs); return;
+            case 128:example::sm_runner<simple_block_fft_functor, 128>(inputs); return;
             case 256: example::sm_runner<simple_block_fft_functor, 256>(inputs); return;
-            // case 512:example::sm_runner<simple_block_fft_functor, 512>(inputs); return;
-            // case 1024:example::sm_runner<simple_block_fft_functor, 1024>(inputs); return;
-            // case 2048:example::sm_runner<simple_block_fft_functor, 2048>(inputs); return;
+            case 512:example::sm_runner<simple_block_fft_functor, 512>(inputs); return;
+            case 1024:example::sm_runner<simple_block_fft_functor, 1024>(inputs); return;
+            case 2048:example::sm_runner<simple_block_fft_functor, 2048>(inputs); return;
 
             default: {
                 throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
@@ -787,6 +787,12 @@ template<unsigned int Arch, unsigned int N>
 void get_ll_wrap(InputInfo inputs) {
     using namespace cufftdx;
 
+    if (inputs.device >= 0)
+    {
+        // set the device
+        CUDA_CHECK_AND_EXIT(cudaSetDevice(inputs.device));
+    }
+
     // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
     // will be executed on block level. Shared memory is required for co-operation between threads.
     // Additionally,
@@ -844,7 +850,10 @@ void get_ll_wrap(InputInfo inputs) {
     );
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    if (inputs.do_synchronize)
+    {
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
 
     //std::cout << "output [1st FFT]:\n";
     //for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
@@ -885,7 +894,9 @@ void SharedMemoryLikeComp(
     int N,
     int num_bin_all,
     int start_freq_ind,
-    int data_length
+    int data_length,
+    int device,
+    bool do_synchronize
 ) 
 {
 
@@ -913,16 +924,18 @@ void SharedMemoryLikeComp(
     inputs.num_bin_all = num_bin_all;
     inputs.start_freq_ind = start_freq_ind;
     inputs.data_length = data_length;
+    inputs.device = device;
+    inputs.do_synchronize = do_synchronize;
     
     switch (N) {
             // All SM supported by cuFFTDx
-            // case 32:example::sm_runner<get_ll_wrap_functor, 32>(inputs); return;
-            // case 64:example::sm_runner<get_ll_wrap_functor, 64>(inputs); return;
-            // case 128:example::sm_runner<get_ll_wrap_functor, 128>(inputs); return;
+            case 32:example::sm_runner<get_ll_wrap_functor, 32>(inputs); return;
+            case 64:example::sm_runner<get_ll_wrap_functor, 64>(inputs); return;
+            case 128:example::sm_runner<get_ll_wrap_functor, 128>(inputs); return;
             case 256: example::sm_runner<get_ll_wrap_functor, 256>(inputs); return;
-            // case 512:example::sm_runner<get_ll_wrap_functor, 512>(inputs); return;
-            // case 1024:example::sm_runner<get_ll_wrap_functor, 1024>(inputs); return;
-            // case 2048:example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
+            case 512:example::sm_runner<get_ll_wrap_functor, 512>(inputs); return;
+            case 1024:example::sm_runner<get_ll_wrap_functor, 1024>(inputs); return;
+            case 2048:example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
 
             default: {
                 throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
@@ -1520,13 +1533,13 @@ void SharedMemorySwapLikeComp(
     
     switch (N) {
             // All SM supported by cuFFTDx
-            // case 32:example::sm_runner<get_swap_ll_diff_wrap_functor, 32>(inputs); return;
-            // case 64:example::sm_runner<get_swap_ll_diff_wrap_functor, 64>(inputs); return;
-            // case 128:example::sm_runner<get_swap_ll_diff_wrap_functor, 128>(inputs); return;
+            case 32:example::sm_runner<get_swap_ll_diff_wrap_functor, 32>(inputs); return;
+            case 64:example::sm_runner<get_swap_ll_diff_wrap_functor, 64>(inputs); return;
+            case 128:example::sm_runner<get_swap_ll_diff_wrap_functor, 128>(inputs); return;
             case 256: example::sm_runner<get_swap_ll_diff_wrap_functor, 256>(inputs); return;
-            // case 512:example::sm_runner<get_swap_ll_diff_wrap_functor, 512>(inputs); return;
-            // case 1024:example::sm_runner<get_swap_ll_diff_wrap_functor, 1024>(inputs); return;
-            // case 2048:example::sm_runner<get_swap_ll_diff_wrap_functor, 2048>(inputs); return;
+            case 512:example::sm_runner<get_swap_ll_diff_wrap_functor, 512>(inputs); return;
+            case 1024:example::sm_runner<get_swap_ll_diff_wrap_functor, 1024>(inputs); return;
+            case 2048:example::sm_runner<get_swap_ll_diff_wrap_functor, 2048>(inputs); return;
 
             default: {
                 throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
@@ -1678,6 +1691,12 @@ template<unsigned int Arch, unsigned int N>
 void generate_global_template_wrap(InputInfo inputs) {
     using namespace cufftdx;
 
+    if (inputs.device >= 0)
+    {
+        // set the device
+        CUDA_CHECK_AND_EXIT(cudaSetDevice(inputs.device));
+    }
+
     // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
     // will be executed on block level. Shared memory is required for co-operation between threads.
     // Additionally,
@@ -1730,7 +1749,10 @@ void generate_global_template_wrap(InputInfo inputs) {
     );
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    if (inputs.do_synchronize)
+    {
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
 
     //std::cout << "output [1st FFT]:\n";
     //for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
@@ -1766,7 +1788,9 @@ void SharedMemoryGenerateGlobal(
     int N,
     int num_bin_all,
     int start_freq_ind,
-    int data_length
+    int data_length,
+    int device,
+    bool do_synchronize
 ) 
 {
 
@@ -1789,16 +1813,19 @@ void SharedMemoryGenerateGlobal(
     inputs.num_bin_all = num_bin_all;
     inputs.start_freq_ind = start_freq_ind;
     inputs.data_length = data_length;
+    inputs.device = device;
+    inputs.do_synchronize = do_synchronize;
+    
     
     switch (N) {
             // All SM supported by cuFFTDx
-            // case 32:example::sm_runner<generate_global_template_wrap_functor, 32>(inputs); return;
-            // case 64:example::sm_runner<generate_global_template_wrap_functor, 64>(inputs); return;
-            // case 128:example::sm_runner<generate_global_template_wrap_functor, 128>(inputs); return;
+            case 32:example::sm_runner<generate_global_template_wrap_functor, 32>(inputs); return;
+            case 64:example::sm_runner<generate_global_template_wrap_functor, 64>(inputs); return;
+            case 128:example::sm_runner<generate_global_template_wrap_functor, 128>(inputs); return;
             case 256: example::sm_runner<generate_global_template_wrap_functor, 256>(inputs); return;
-            // case 512:example::sm_runner<generate_global_template_wrap_functor, 512>(inputs); return;
-            // case 1024:example::sm_runner<generate_global_template_wrap_functor, 1024>(inputs); return;
-            // case 2048:example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
+            case 512:example::sm_runner<generate_global_template_wrap_functor, 512>(inputs); return;
+            case 1024:example::sm_runner<generate_global_template_wrap_functor, 1024>(inputs); return;
+            case 2048:example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
 
             default: {
                 throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");

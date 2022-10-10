@@ -47,7 +47,9 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int N,
         int num_bin_all,
         int start_freq_ind, 
-        int data_length
+        int data_length,
+        int device,
+        bool do_synchronize
     ) except+
 
     void SharedMemorySwapLikeComp(
@@ -109,7 +111,9 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int N,
         int num_bin_all,
         int start_freq_ind,
-        int data_length
+        int data_length,
+        int device,
+        bool do_synchronize
     ) except+
         
 @pointer_adjust
@@ -182,7 +186,9 @@ def SharedMemoryLikeComp_wrap(
         N,
         num_bin_all,
         start_freq_ind,
-        data_length
+        data_length,
+        device,
+        do_synchronize
     ):
 
     cdef size_t d_h_in = d_h
@@ -226,7 +232,9 @@ def SharedMemoryLikeComp_wrap(
         N,
         num_bin_all,
         start_freq_ind,
-        data_length
+        data_length,
+        device,
+        do_synchronize
     )
 
 
@@ -362,7 +370,9 @@ def SharedMemoryGenerateGlobal_wrap(
         N,
         num_bin_all,
         start_freq_ind,
-        data_length
+        data_length,
+        device,
+        do_synchronize
     ):
 
     cdef size_t data_A_in = data_A
@@ -396,5 +406,7 @@ def SharedMemoryGenerateGlobal_wrap(
         N,
         num_bin_all,
         start_freq_ind,
-        data_length
+        data_length,
+        device,
+        do_synchronize
     )
