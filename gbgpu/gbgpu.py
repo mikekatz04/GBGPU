@@ -714,6 +714,9 @@ class GBGPU(object):
             1D double np.ndarray: Log likelihood values associated with each binary.
 
         """
+        if self.gpus is not None:
+            # set first index gpu device to control main operations
+            self.xp.cuda.runtime.setDevice(self.gpus[0])
 
         # get number of observation points and adjust T accordingly
         N_obs = int(T / dt)
@@ -1145,6 +1148,10 @@ class GBGPU(object):
             **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
 
         """
+        if self.gpus is not None:
+            # set first index gpu device to control main operations
+            self.xp.cuda.runtime.setDevice(self.gpus[0])
+
         self.num_bin = num_bin = params.shape[0]
 
         if N is None:
@@ -1252,8 +1259,7 @@ class GBGPU(object):
 
                     self.xp.cuda.runtime.setDevice(return_to_main_device)
                     self.xp.cuda.runtime.deviceSynchronize()
-
-                    
+             
                 else:
                     amp, f0, fdot, fddot, phi0, iota, psi, lam, beta = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_N.T]
                     self.num_bin = num_bin = len(amp)
@@ -1371,6 +1377,7 @@ class GBGPU(object):
         dt=10.0,
         data_length=None,
         data_splits=None,
+        phase_marginalize=False,
         **kwargs,
     ):
         """Generate global templates from binary parameters
@@ -1392,6 +1399,10 @@ class GBGPU(object):
             **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
 
         """
+
+        if self.gpus is not None:
+            # set first index gpu device to control main operations
+            self.xp.cuda.runtime.setDevice(self.gpus[0])
 
         assert params_add.shape == params_remove.shape
 
@@ -1674,15 +1685,28 @@ class GBGPU(object):
             self.start_inds_add = start_inds_add
 
         # store these likelihood terms for later if needed
+
+        if phase_marginalize:
+            self.phase_angle = self.xp.arctan2(d_h_add.imag + add_remove.imag, d_h_add.real + add_remove.real)  
+            self.non_marg_d_h_add = d_h_add.copy()
+            self.non_marg_add_remove = add_remove.copy()
+            try:
+                self.non_marg_d_h_add = self.non_marg_d_h_add.get()
+                self.non_marg_add_remove = self.non_marg_add_remove.get()
+            except AttributeError:
+                pass
+
+            d_h_add *= self.xp.exp(-1j * self.phase_angle)
+            add_remove *= self.xp.exp(-1j * self.phase_angle)
+            
         self.d_h_remove = d_h_remove
         self.d_h_add = d_h_add
         self.add_remove = add_remove
         self.remove_remove = remove_remove
         self.add_add = add_add
-
+        
         # compute Likelihood
         ll_diff = -1 / 2 * (-2 * d_h_add + 2 * d_h_remove - 2 * add_remove + add_add + remove_remove).real
-
         # back to CPU if on GPU
         try:
             return ll_diff.get()

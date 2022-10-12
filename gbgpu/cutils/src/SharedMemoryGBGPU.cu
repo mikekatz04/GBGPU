@@ -1240,8 +1240,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
                     remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
                     remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
 
-                    add_remove_temp += gcmplx::conj(h_A_add) * h_A_remove / n_A;
-                    add_remove_temp += gcmplx::conj(h_E_add) * h_E_remove / n_E;
+                    add_remove_temp += gcmplx::conj(h_A_remove) *  h_A_add / n_A;
+                    add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
                 }
             }
         }
