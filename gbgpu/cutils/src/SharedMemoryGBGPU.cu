@@ -1610,6 +1610,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     cmplx* template_A,
     cmplx* template_E,
     int* template_index,
+    double* factors,
     double* amp, 
     double* f0, 
     double* fdot0, 
@@ -1642,6 +1643,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     cmplx *E = &wave[N];
 
     int template_ind;
+    double factor;
 
     int jj = 0;
     //example::io<FFT>::load_to_smem(this_block_data, shared_mem);
@@ -1651,6 +1653,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     {
     
         template_ind = template_index[bin_i];
+        factor = factors[bin_i];
 
         build_single_waveform<FFT>(
             wave,
@@ -1675,8 +1678,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
         for (int i = threadIdx.x; i < N; i += blockDim.x)
         {
             jj = i + start_ind - start_freq_ind;
-            atomicAddComplex(&template_A[template_ind * data_length + jj], A[i]);
-            atomicAddComplex(&template_E[template_ind * data_length + jj], E[i]);
+            atomicAddComplex(&template_A[template_ind * data_length + jj], factor * A[i]);
+            atomicAddComplex(&template_E[template_ind * data_length + jj], factor * E[i]);
         }
         __syncthreads();
     }
@@ -1731,6 +1734,7 @@ void generate_global_template_wrap(InputInfo inputs) {
         inputs.data_A,
         inputs.data_E,
         inputs.data_index,
+        inputs.factors,
         inputs.amp,
         inputs.f0,
         inputs.fdot0,
@@ -1774,6 +1778,7 @@ void SharedMemoryGenerateGlobal(
     cmplx* data_A,
     cmplx* data_E,
     int* data_index,
+    double* factors,
     double* amp, 
     double* f0, 
     double* fdot0, 
@@ -1798,6 +1803,7 @@ void SharedMemoryGenerateGlobal(
     inputs.data_A = data_A;
     inputs.data_E = data_E;
     inputs.data_index = data_index;
+    inputs.factors = factors;
     inputs.amp = amp;
     inputs.f0 = f0;
     inputs.fdot0 = fdot0;
