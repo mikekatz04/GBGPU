@@ -1,3 +1,4 @@
+from copy import deepcopy
 from multiprocessing.sharedctypes import Value
 from re import A
 import time
@@ -715,7 +716,7 @@ class GBGPU(object):
         df = self.df  = 1. / T
 
         # make sure index information if provided properly
-        if (isinstance(data[0], self.xp.ndarray) and data[0].ndim == 1) or (isinstance(data[0][0], self.xp.ndarray) and data[0][0].ndim == 1):
+        if (isinstance(data[0], self.xp.ndarray) and data[0].ndim == 1) or ((isinstance(data[0], list)) and (isinstance(data[0][0], self.xp.ndarray)) and data[0][0].ndim == 1):
             if data_length is None:
                 if data_index is not None:
                     raise ValueError("If inputing 1D data, cannot use data_index kwarg if data_length kwarg is not set.")
@@ -730,10 +731,6 @@ class GBGPU(object):
         elif data[0].ndim == 2:
             data_length = data[0].shape[1]
             data = [dat.copy().flatten() for dat in data.transpose(1, 0, 2)]
-
-        elif data[0].ndim == 2:
-            data_length = data[0].shape[1]
-            data = [dat.copy().flatten() for dat in data]
 
         if not isinstance(psd, list):
             if psd[0].ndim == 2:
@@ -1073,6 +1070,7 @@ class GBGPU(object):
         oversample=1,
         data_length=None,
         data_splits=None,
+        factors=None,
         **kwargs,
     ):
         """Generate global templates from binary parameters
@@ -1117,6 +1115,15 @@ class GBGPU(object):
             N_groups = N_groups.get()
         except AttributeError:
             pass
+
+        if factors is None:
+            if use_c_implementation is False:
+                raise NotImplementedError("Currently factors is not implemented for use_c_implementation=False.")
+            factors = self.xp.ones(self.num_bin, dtype=self.xp.float64)
+
+        # check that index values are ready for computation
+        assert len(factors) == self.num_bin
+        assert factors.dtype == self.xp.float64
         
         assert group_index.dtype == self.xp.int32
 
@@ -1124,6 +1131,7 @@ class GBGPU(object):
             N_here = N_here.item()
             params_N = params[N_groups == nnn]
             group_index_N = group_index[N_groups == nnn]
+            factors_N = factors[N_groups == nnn]
 
             if use_c_implementation:
                 if self.gpus is not None:
@@ -1172,7 +1180,8 @@ class GBGPU(object):
                                 assert (max_split - min_split + 1) * data_length <= templates_in[0].shape[0]
 
                             group_index_in = self.xp.asarray(group_index_N[split]) - min_split
-                            
+                            factors_in = self.xp.asarray(factors_N[split])
+
                             if not isinstance(templates[0], list):
                                 raise ValueError
 
@@ -1181,6 +1190,7 @@ class GBGPU(object):
                                     templates_in[0],
                                     templates_in[1],
                                     group_index_in,
+                                    factors_in,
                                 )
                                 + params_N_tuple
                                 + (
@@ -1250,7 +1260,8 @@ class GBGPU(object):
 
                         total_groups = int(total_groups)
 
-                    group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
+                    group_index_in = self.xp.asarray(group_index_N, dtype=self.xp.int32)
+                    factors_in = self.xp.asarray(factors_N)
                     
                     # prepare temporary buffers for C/CUDA
                     # These are required to ensure the python memory order
@@ -1271,7 +1282,8 @@ class GBGPU(object):
                     SharedMemoryGenerateGlobal_wrap(
                         template_A,
                         template_E,
-                        group_index,
+                        group_index_in,
+                        factors_in,
                         amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N_here, num_bin, start_freq_ind, data_length, gpu, do_synchronize
                     )
 
@@ -1440,59 +1452,57 @@ class GBGPU(object):
                 raise ValueError("If use_c_implementation is True, N must be provided.")
             if not self.use_gpu:
                 raise ValueError("use_c_implementation is only for GPU usage.")
+
+            if isinstance(N, int):
+                N = self.xp.full(num_bin, N)
+
+            elif not isinstance(N, self.xp.ndarray) or len(N) != num_bin:
+                raise ValueError("N must be an integer or xp.ndarray with the same length as the number of binaries.")
+
+            unique_Ns = self.xp.unique(N)
+
             if self.gpus is not None:
                 do_synchronize = False
                 gpus = self.gpus
                 num_gpus = len(gpus)
                 params_add = self.xp.asarray(params_add)
                 params_remove = self.xp.asarray(params_remove)
-                inputs_in = [_ for _ in gpus]
 
                 if data_splits is None:
+                    raise NotImplementedError
                     splits = self.xp.array_split(self.xp.arange(num_bin), num_gpus)
                 else:
-                    splits = [_ for _ in range(len(data_splits))]
-                    for split_i, split in enumerate(data_splits):
+                    splits = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
+                    split_Ns = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
+                    split_gpus = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
+                    inputs_in = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
+                    for gpu_i, split in enumerate(data_splits):
                         max_split = split.max().item()
                         min_split = split.min().item()
-                        keep = self.xp.where((data_index <= max_split) & (data_index >= min_split))[0]
-                        splits[split_i] = keep
+                        for N_i, N_now in enumerate(unique_Ns):
+                            keep = self.xp.where(
+                                (data_index <= max_split) & (data_index >= min_split)
+                                & (N == N_now)
+                            )[0]
+                            if len(keep) > 0:
+                                splits[gpu_i][N_i] = keep
+                                split_Ns[gpu_i][N_i] = N_now
+                                split_gpus[gpu_i][N_i] = gpu_i
 
                 params_add = self.xp.asarray(params_add)
                 params_remove = self.xp.asarray(params_remove)
                 return_to_main_device = self.xp.cuda.runtime.getDevice()
 
                 self.xp.cuda.runtime.deviceSynchronize()
-                for gpu_i, (gpu, split) in enumerate(zip(gpus, splits)):
-                    if len(split) == 0:
-                            continue
+                for gpu_i, (gpu_splits, gpu_split_Ns) in enumerate(zip(splits, split_Ns)):
+                    gpu = gpus[gpu_i]
+                    if len(gpu_splits) == 0:
+                        continue
+
                     with self.xp.cuda.Device(gpu):
                         self.xp.cuda.runtime.deviceSynchronize()
-                        split_add = params_add[split]
-                        split_remove = params_remove[split]
-                        num_split_here = split_add.shape[0]
-                        assert split_add.shape == split_remove.shape
-                        params_add_in = self.xp.asarray(split_add)
-                        params_remove_in = self.xp.asarray(split_remove)
-                        
-                        # theta_add = np.pi / 2 - beta_add
-                        params_add_in[:, 8] = np.pi / 2 - params_add_in[:, 8]
-                        # theta_remove = np.pi / 2 - beta_remove
-                        params_remove_in[:, 8] = np.pi / 2 - params_remove_in[:, 8]
-                    
-
-                        params_add_tuple = tuple([pars_tmp.copy()for pars_tmp in params_add_in.T])
-
-                        params_remove_tuple = tuple([pars_tmp.copy()for pars_tmp in params_remove_in.T])
-
-                        # initialize Likelihood terms <d|h> and <h|h>
-                        d_h_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                        d_h_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                        add_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                        remove_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                        add_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-
                         if data_splits is None:
+                            raise NotImplementedError
                             data_minus_template_in = [self.xp.asarray(tmp_data[gpu_i]) for tmp_data in data_minus_template]
                             psd_in = [self.xp.asarray(tmp_psd[gpu_i]) for tmp_psd in psd]
                             min_split = 0
@@ -1503,42 +1513,81 @@ class GBGPU(object):
                             max_split = data_splits[gpu_i].max().item()
                             assert (max_split - min_split + 1) * data_length <= data_minus_template_in[0].shape[0]
 
-                        noise_index_in = self.xp.asarray(noise_index[split]) - min_split
-                        data_index_in = self.xp.asarray(data_index[split]) - min_split
-                        
-                        tuple_in = (
-                        ( d_h_remove_temp,
-                            d_h_add_temp,
-                            remove_remove_temp,
-                            add_add_temp,
-                            add_remove_temp,
-                            data_minus_template_in[0],
-                            data_minus_template_in[1],
-                            psd_in[0],
-                            psd_in[1],
-                            data_index_in,
-                            noise_index_in,)
-                            + params_add_tuple
-                            + params_remove_tuple
-                            + (T, dt, N, num_split_here, start_freq_ind, data_length, gpu, do_synchronize)
-                        )    
-                        self.xp.cuda.runtime.deviceSynchronize()
-                        SharedMemorySwapLikeComp_wrap(*tuple_in)
-                        # self.xp.cuda.runtime.deviceSynchronize()
-                        inputs_in[gpu_i] = tuple_in
-                
-                for gpu_i, (gpu, split) in enumerate(zip(gpus, splits)):
-                    if len(split) == 0:
+                        for N_i, (split, N_now) in enumerate(zip(gpu_splits, gpu_split_Ns)):
+                            if split is None or len(split) == 0:
                                 continue
+
+                            try:
+                                N_now = N_now.item()
+                            except AttributeError:
+                                pass
+
+                            split_add = params_add[split]
+                            split_remove = params_remove[split]
+                            num_split_here = split_add.shape[0]
+                            assert split_add.shape == split_remove.shape
+                            params_add_in = self.xp.asarray(split_add)
+                            params_remove_in = self.xp.asarray(split_remove)
+                            
+                            # theta_add = np.pi / 2 - beta_add
+                            params_add_in[:, 8] = np.pi / 2 - params_add_in[:, 8]
+                            # theta_remove = np.pi / 2 - beta_remove
+                            params_remove_in[:, 8] = np.pi / 2 - params_remove_in[:, 8]
+                        
+
+                            params_add_tuple = tuple([pars_tmp.copy()for pars_tmp in params_add_in.T])
+
+                            params_remove_tuple = tuple([pars_tmp.copy()for pars_tmp in params_remove_in.T])
+
+                            # initialize Likelihood terms <d|h> and <h|h>
+                            d_h_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                            d_h_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                            add_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                            remove_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                            add_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+
+                            noise_index_in = self.xp.asarray(noise_index[split]) - min_split
+                            data_index_in = self.xp.asarray(data_index[split]) - min_split
+                        
+                            tuple_in = (
+                            ( d_h_remove_temp,
+                                d_h_add_temp,
+                                remove_remove_temp,
+                                add_add_temp,
+                                add_remove_temp,
+                                data_minus_template_in[0],
+                                data_minus_template_in[1],
+                                psd_in[0],
+                                psd_in[1],
+                                data_index_in,
+                                noise_index_in,)
+                                + params_add_tuple
+                                + params_remove_tuple
+                                + (T, dt, N_now, num_split_here, start_freq_ind, data_length, gpu, do_synchronize)
+                            )    
+                            # self.xp.cuda.runtime.deviceSynchronize()
+                            SharedMemorySwapLikeComp_wrap(*tuple_in)
+                            # self.xp.cuda.runtime.deviceSynchronize()
+                            inputs_in[gpu_i][N_i] = tuple_in
+
+                for gpu_i, (gpu_splits, gpu_split_Ns) in enumerate(zip(splits, split_Ns)):
+                    gpu = gpus[gpu_i]
+                    if len(gpu_splits) == 0:
+                        continue
+
                     with self.xp.cuda.Device(gpu):
                         self.xp.cuda.runtime.deviceSynchronize()
                     with self.xp.cuda.Device(return_to_main_device):
                         self.xp.cuda.runtime.deviceSynchronize()
-                        d_h_remove[split] = inputs_in[gpu_i][0][:]
-                        d_h_add[split] = inputs_in[gpu_i][1][:]
-                        remove_remove[split] = inputs_in[gpu_i][2][:]
-                        add_add[split] = inputs_in[gpu_i][3][:]
-                        add_remove[split] = inputs_in[gpu_i][4][:]
+                        for N_i, (split, N_now) in enumerate(zip(gpu_splits, gpu_split_Ns)):
+                            if split is None or len(split) == 0:
+                                continue
+                            d_h_remove[split] = inputs_in[gpu_i][N_i][0][:]
+                            d_h_add[split] = inputs_in[gpu_i][N_i][1][:]
+                            remove_remove[split] = inputs_in[gpu_i][N_i][2][:]
+                            add_add[split] = inputs_in[gpu_i][N_i][3][:]
+                            add_remove[split] = inputs_in[gpu_i][N_i][4][:]
+                            
 
                 self.xp.cuda.runtime.setDevice(return_to_main_device)
                 self.xp.cuda.runtime.deviceSynchronize()

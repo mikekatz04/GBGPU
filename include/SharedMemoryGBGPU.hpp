@@ -70,6 +70,7 @@ typedef struct InputInfoTag{
     double* theta_remove;
     int device;
     bool do_synchronize;
+    double* factors;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -146,6 +147,7 @@ void SharedMemoryGenerateGlobal(
     cmplx* data_A,
     cmplx* data_E,
     int* data_index,
+    double* factors,
     double* amp, 
     double* f0, 
     double* fdot0, 

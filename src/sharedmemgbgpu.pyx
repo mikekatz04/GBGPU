@@ -97,6 +97,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         cmplx* data_A,
         cmplx* data_E,
         int* data_index,
+        double* factors,
         double* amp, 
         double* f0, 
         double* fdot0, 
@@ -356,6 +357,7 @@ def SharedMemoryGenerateGlobal_wrap(
         data_A,
         data_E,
         data_index,
+        factors,
         amp, 
         f0, 
         fdot0, 
@@ -387,11 +389,13 @@ def SharedMemoryGenerateGlobal_wrap(
     cdef size_t psi_in = psi
     cdef size_t lam_in = lam
     cdef size_t theta_in = theta
+    cdef size_t factors_in = factors
 
     SharedMemoryGenerateGlobal(
         <cmplx *> data_A_in,
         <cmplx *> data_E_in,
         <int*> data_index_in,
+        <double *> factors_in,
         <double *>amp_in, 
         <double *>f0_in, 
         <double *>fdot0_in, 
