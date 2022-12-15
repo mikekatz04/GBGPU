@@ -116,6 +116,23 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int device,
         bool do_synchronize
     ) except+
+
+    void specialty_piece_wise_likelihoods_wrap(
+        double* lnL,
+        cmplx* data_A,
+        cmplx* data_E,
+        double* noise_A,
+        double* noise_E,
+        int* data_index,
+        int* noise_index,
+        int* start_inds,
+        int* lengths,
+        double df, 
+        int num_parts,
+        int start_freq_ind,
+        int data_length,
+        bool do_synchronize
+    );
         
 @pointer_adjust
 def SharedMemoryWaveComp_wrap(
@@ -412,5 +429,50 @@ def SharedMemoryGenerateGlobal_wrap(
         start_freq_ind,
         data_length,
         device,
+        do_synchronize
+    )
+
+@pointer_adjust
+def specialty_piece_wise_likelihoods(
+        lnL,
+        data_A,
+        data_E,
+        noise_A,
+        noise_E,
+        data_index,
+        noise_index,
+        start_inds,
+        lengths,
+        df, 
+        num_parts,
+        start_freq_ind,
+        data_length,
+        do_synchronize
+    ):
+
+    cdef size_t lnL_in = lnL
+    cdef size_t data_A_in = data_A
+    cdef size_t data_E_in = data_E
+    cdef size_t noise_A_in = noise_A
+    cdef size_t noise_E_in = noise_E
+    cdef size_t data_index_in = data_index
+    cdef size_t noise_index_in = noise_index
+    cdef size_t start_inds_in = start_inds
+    cdef size_t lengths_in = lengths
+
+    specialty_piece_wise_likelihoods_wrap(
+        <double*> lnL_in,
+        <cmplx*> data_A_in,
+        <cmplx*> data_E_in,
+        <double*> noise_A_in,
+        <double*> noise_E_in,
+        <int*> data_index_in,
+        <int*> noise_index_in,
+        <int*> start_inds_in,
+        <int*> lengths_in,
+        df, 
+        num_parts,
+        start_freq_ind,
+        data_length,
         do_synchronize
     )
