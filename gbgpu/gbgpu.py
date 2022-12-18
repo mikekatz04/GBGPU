@@ -319,7 +319,7 @@ class GBGPU(object):
         )
 
         # transform to TDI observables
-        XYZf, f_min = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
+        XYZf, f_min = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm, *add_args)
 
         self.start_inds = self.kmin = self.xp.round(f_min/df).astype(int)
         fctr = 0.5 * T / N
@@ -341,7 +341,7 @@ class GBGPU(object):
 
         self.X_out = XYZf[:, 0].T.flatten()
 
-    def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
+    def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm, *add_args):
         """Compute TDI X, Y, Z from y_sr"""
 
         # get true frequency as a function of time
@@ -350,6 +350,10 @@ class GBGPU(object):
             + fdot[:, None] * tm[None, :]
             + 1 / 2 * fddot[:, None] * tm[None, :] ** 2
         )
+
+        if hasattr(self, "shift_frequency"):
+            # shift is performed in place to save memory
+            f[:] = self.shift_frequency(f[:, None, :], tm[None, None, :], *add_args)[:, 0]
 
         # compute transfer function
         omL = f / fstar
@@ -1158,9 +1162,10 @@ class GBGPU(object):
             pass
 
         if factors is None:
+            factors = self.xp.ones(self.num_bin, dtype=self.xp.float64)
+        else:
             if use_c_implementation is False:
                 raise NotImplementedError("Currently factors is not implemented for use_c_implementation=False.")
-            factors = self.xp.ones(self.num_bin, dtype=self.xp.float64)
 
         # check that index values are ready for computation
         assert len(factors) == self.num_bin

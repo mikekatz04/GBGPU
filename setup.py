@@ -193,6 +193,41 @@ if run_cuda_install:
     )
     ext_gpu2 = Extension("gbgpu.sharedmem", **ext_gpu_dict_2)
 
+    ext_gpu_dict_3 = dict(
+        sources=["src/ThirdSharedMemoryGBGPU.cu", "src/thirdsharedmemgbgpu.pyx"],
+        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
+        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
+        language="c++",
+        runtime_library_dirs=[CUDA["lib64"]],
+        # This syntax is specific to this build system
+        # we're only going to use certain compiler args with nvcc
+        # and not with gcc the implementation of this trick is in
+        # customize_compiler()
+        extra_compile_args={
+            "gcc": ["-std=c99"],  # '-g'],
+            "nvcc": [
+                "-arch=sm_80",
+                #"-gencode=arch=compute_35,code=sm_35",
+                #"-gencode=arch=compute_50,code=sm_50",
+                #"-gencode=arch=compute_52,code=sm_52",
+                #"-gencode=arch=compute_60,code=sm_60",
+                #"-gencode=arch=compute_61,code=sm_61",
+                #"-gencode=arch=compute_70,code=sm_70",
+                #"-gencode=arch=compute_80,code=sm_80",
+                "--default-stream=per-thread",
+                "--ptxas-options=-v",
+                "-c",
+                "--compiler-options",
+                "'-fPIC'",
+                # "-lineinfo",
+                "-Xcompiler",
+                "-fopenmp",
+            ],  # ,"-G", "-g"] # for debugging
+        },
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include", "cufftdx/include"],
+    )
+    ext_gpu3 = Extension("gbgpu.thirdsharedmem", **ext_gpu_dict_3)
+
 cu_files = ["gbgpu_utils"]
 pyx_files = ["GBGPU"]
 for fp in cu_files:
@@ -214,7 +249,7 @@ ext_cpu_dict = dict(
 ext_cpu = Extension("gbgpu.gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
-    extensions = [ext_gpu2, ext_gpu, ext_cpu]
+    extensions = [ext_gpu3, ext_gpu2, ext_gpu, ext_cpu]
 
 else:
     extensions = [ext_cpu]

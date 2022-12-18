@@ -17,6 +17,7 @@ except (ModuleNotFoundError, ImportError):
 
 from gbgpu.gbgpu import InheritGBGPU
 from gbgpu.utils.utility import *
+from gbgpu.thirdsharedmem import *
 
 
 class GBGPUThirdBody(InheritGBGPU):
@@ -537,6 +538,158 @@ class GBGPUThirdBody(InheritGBGPU):
         fddot_new = (f_temp[:, :, 2] - 2 * f_temp[:, :, 1] + f_temp[:, :, 0]) / (2 * eps) ** 2
 
         return (f_temp[:, :, 1], fdot_new, fddot_new)
+
+    def get_ll_special(
+        self,
+        params,
+        data,
+        psd,
+        phase_marginalize=False,
+        start_freq_ind=0,
+        use_c_implementation=True,
+        N=None,
+        T=4 * YEAR,
+        dt=10.0,
+        oversample=1,
+        multiply_integral_factor=None,
+        **kwargs,
+    ):
+    
+        assert params.shape[1] == 14 and params.ndim == 2
+
+        num_bin_all = params.shape[0]
+        
+        assert use_c_implementation is True
+        
+        if isinstance(psd, self.xp.ndarray) and psd.ndim == 2 and psd.shape[0] == 2:
+            psd = [psd[0].copy(), psd[1].copy()]
+
+        assert isinstance(data, list) and len(data) == 2 and isinstance(data[0], self.xp.ndarray) and data[0].ndim == 1 and isinstance(data[1], self.xp.ndarray) and data[1].ndim == 1 and data[0].dtype == self.xp.complex128 and data[1].dtype == self.xp.complex128
+        
+        assert isinstance(psd, list) and len(psd) == 2 and isinstance(psd[0], self.xp.ndarray) and psd[0].ndim == 1 and isinstance(psd[1], self.xp.ndarray) and psd[1].ndim == 1 and psd[0].dtype == self.xp.float64 and psd[1].dtype == self.xp.float64
+
+        assert N is not None and isinstance(N, int)
+
+        params_in = [self.xp.asarray(tmp) for tmp in params.T]
+
+        data_length = data[0].shape[0]
+
+        # adjust beta
+        beta = params_in[8]
+        theta = np.pi / 2 - beta
+        params_in[8] = theta
+
+        # adjust P2 --> n2
+        P2 = params_in[-2]
+        n2 = 2 * np.pi / (P2 * YEAR)
+        params_in[-2] = n2
+
+        # adjust T2 
+        T2 = params_in[-1] * YEAR
+        params_in[-1] = T2
+
+        # convert to tuple
+        params_in = tuple(params_in)
+
+        gpu = self.xp.cuda.runtime.getDevice()
+        do_synchronize = True
+
+        if multiply_integral_factor is None:
+            multiply_integral_factor = 1
+        assert isinstance(multiply_integral_factor, int)
+
+        data_index = self.xp.zeros((num_bin_all,), dtype=self.xp.int32)
+        noise_index = self.xp.zeros((num_bin_all,), dtype=self.xp.int32)
+        inputs_in = ((d_h,
+            h_h,
+            data[0],
+            data[1],
+            psd[0],
+            psd[1],
+            data_index,
+            noise_index)
+            + params_in
+            + (T, dt, N, num_bin_all, multiply_integral_factor, start_freq_ind, data_length, gpu, do_synchronize))
+
+        ThirdSharedMemoryLikeComp_wrap(
+            *inputs_in
+        )
+
+        if phase_marginalize:
+            self.non_marg_d_h = d_h.copy()
+            try:
+                self.non_marg_d_h = self.non_marg_d_h.get()
+            except AttributeError:
+                pass
+
+            d_h = self.xp.abs(d_h)
+
+        # store these likelihood terms for later if needed
+        self.h_h = h_h
+        self.d_h = d_h
+        # compute Likelihood
+        like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
+
+        # back to CPU if on GPU
+        try:
+            return like_out.get()
+
+        except AttributeError:
+            return like_out
+
+
+    def run_wave_special(
+        self,
+        params,
+        use_c_implementation=True,
+        N=None,
+        T=4 * YEAR,
+        dt=10.0,
+        oversample=1,
+        multiply_integral_factor=None,
+        **kwargs,
+    ):
+
+        assert params.shape[1] == 14 and params.ndim == 2
+
+        num_bin_all = params.shape[0]
+        
+        assert use_c_implementation is True
+        
+        assert N is not None and isinstance(N, int)
+
+        params_in = [self.xp.asarray(tmp) for tmp in params.T]
+
+        # adjust beta
+        beta = params_in[8]
+        theta = np.pi / 2 - beta
+        params_in[8] = theta
+
+        # adjust P2 --> n2
+        P2 = params_in[-2]
+        n2 = 2 * np.pi / (P2 * YEAR)
+        params_in[-2] = n2
+
+        # adjust T2 
+        T2 = params_in[-1] * YEAR
+        params_in[-1] = T2
+
+        # convert to tuple
+        params_in = tuple(params_in)
+
+        gpu = self.xp.cuda.runtime.getDevice()
+        do_synchronize = True
+
+        if multiply_integral_factor is None:
+            multiply_integral_factor = 1
+        assert isinstance(multiply_integral_factor, int)
+
+        AET_out = self.xp.zeros((num_bin_all * 3 * N,), dtype=complex)
+    
+        args_in = (AET_out,) + params_in + (T, dt, N, num_bin_all, multiply_integral_factor)
+        ThirdSharedMemoryWaveComp_wrap(*args_in)
+        
+        return AET_out.reshape((num_bin_all, 3, N))
 
 
 def third_body_factors(
