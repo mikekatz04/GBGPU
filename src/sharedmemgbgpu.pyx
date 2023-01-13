@@ -132,7 +132,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int start_freq_ind,
         int data_length,
         bool do_synchronize
-    );
+    ) except+
         
 @pointer_adjust
 def SharedMemoryWaveComp_wrap(
