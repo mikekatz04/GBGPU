@@ -1945,6 +1945,11 @@ void specialty_piece_wise_likelihoods_wrap(
     int data_length,
     bool do_synchronize)
 {
+    if (num_parts == 0)
+    {
+        printf("num_parts is 0\n");
+        return;
+    }
     specialty_piece_wise_likelihoods<<<num_parts, NUM_THREADS_LIKE>>>(
         lnL,
         data_A,
