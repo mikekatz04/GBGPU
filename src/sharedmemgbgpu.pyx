@@ -133,6 +133,39 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int data_length,
         bool do_synchronize
     ) except+
+
+    void SharedMemoryMakeMove(
+        cmplx *L_contribution,
+        cmplx *p_contribution,
+        cmplx *data_A,
+        cmplx *data_E,
+        double *noise_A,
+        double *noise_E,
+        int *data_index,
+        int *noise_index,
+        double *params_curr,
+        double *params_prop,
+        double *prior_all_curr,
+        double *prior_all_prop,
+        double *factors_all,
+        double *random_val_all,
+        int *band_start_bin_ind,
+        int *band_num_bins,
+        int *band_start_data_ind,
+        int *band_data_lengths,
+        double *band_inv_temperatures_all,
+        bool *accepted_out,
+        double T,
+        double dt,
+        int N,
+        int num_bin_all,
+        int start_freq_ind,
+        int data_length,
+        int num_bands,
+        int max_data_store_size,
+        int device,
+        bool do_synchronize
+    ) except+
         
 @pointer_adjust
 def SharedMemoryWaveComp_wrap(
@@ -474,5 +507,95 @@ def specialty_piece_wise_likelihoods(
         num_parts,
         start_freq_ind,
         data_length,
+        do_synchronize
+    )   
+
+
+@pointer_adjust
+def SharedMemoryMakeMove_wrap(
+        L_contribution,
+        p_contribution,
+        data_A,
+        data_E,
+        noise_A,
+        noise_E,
+        data_index, 
+        noise_index,
+        params_curr,
+        params_prop,
+        prior_all_curr,
+        prior_all_prop,
+        factors_all,
+        random_val_all,
+        band_start_bin_ind,
+        band_num_bins,
+        band_start_data_ind,
+        band_data_lengths,
+        band_inv_temperatures_all,
+        accepted_out,
+        T,
+        dt, 
+        N,
+        num_bin_all,
+        start_freq_ind,
+        data_length,
+        num_bands,
+        max_data_store_size,
+        device,
+        do_synchronize
+    ):
+
+    cdef size_t L_contribution_in = L_contribution
+    cdef size_t p_contribution_in = p_contribution
+    cdef size_t data_A_in = data_A
+    cdef size_t data_E_in = data_E
+    cdef size_t noise_A_in = noise_A
+    cdef size_t noise_E_in = noise_E
+    cdef size_t data_index_in = data_index
+    cdef size_t noise_index_in = noise_index
+    cdef size_t params_curr_in = params_curr
+    cdef size_t params_prop_in = params_prop
+    cdef size_t prior_all_curr_in = prior_all_curr
+    cdef size_t prior_all_prop_in = prior_all_prop
+    cdef size_t factors_all_in = factors_all
+    cdef size_t random_val_all_in = random_val_all
+    cdef size_t band_start_bin_ind_in = band_start_bin_ind
+    cdef size_t band_num_bins_in = band_num_bins
+    cdef size_t band_start_data_ind_in = band_start_data_ind
+    cdef size_t band_data_lengths_in = band_data_lengths
+    cdef size_t band_inv_temperatures_all_in = band_inv_temperatures_all
+    cdef size_t accepted_out_in = accepted_out
+    
+
+    SharedMemoryMakeMove(
+        <cmplx *>L_contribution_in,
+        <cmplx *>p_contribution_in,
+        <cmplx *>data_A_in,
+        <cmplx *>data_E_in,
+        <double *>noise_A_in,
+        <double *>noise_E_in,
+        <int *>data_index_in,
+        <int *>noise_index_in,
+        <double *>params_curr_in,
+        <double *>params_prop_in,
+        <double *>prior_all_curr_in,
+        <double *>prior_all_prop_in,
+        <double *>factors_all_in,
+        <double *>random_val_all_in,
+        <int *>band_start_bin_ind_in,
+        <int *>band_num_bins_in,
+        <int *>band_start_data_ind_in,
+        <int *>band_data_lengths_in,
+        <double *>band_inv_temperatures_all_in,
+        <bool *>accepted_out_in,
+        T, 
+        dt,
+        N,
+        num_bin_all,
+        start_freq_ind,
+        data_length,
+        num_bands,
+        max_data_store_size,
+        device,
         do_synchronize
     )

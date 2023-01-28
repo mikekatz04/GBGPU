@@ -34,7 +34,7 @@ try:
     from gbgpu.gbgpu_utils import fill_global as fill_global_gpu
     from gbgpu.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
     from gbgpu.gbgpu_utils import swap_ll_diff as swap_ll_diff_gpu
-    from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods
+    from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -98,6 +98,7 @@ class GBGPU(object):
             self.swap_ll_diff_func = swap_ll_diff_gpu
             self.gpus = gpus
             self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
+            self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
 
         else:
             self.xp = np
@@ -613,6 +614,7 @@ class GBGPU(object):
         oversample=1,
         data_splits=None,
         data_length=None,
+        return_cupy=False,
         **kwargs,
     ):
         """Get batched log likelihood
@@ -656,6 +658,7 @@ class GBGPU(object):
                 PSD to use for each source.
                 If ``None``, this will be filled with zeros and only analyzed with the first
                 PSD given. Default is ``None``.
+            return_cupy (bool, optional): If ``True``, return CuPy array. Default is ``False``.
             **kwargs (dict, optional): Passes keyword arguments to the :func:`run_wave` method.
 
         Raises:
@@ -987,6 +990,9 @@ class GBGPU(object):
 
         # compute Likelihood
         like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
+
+        if return_cupy:
+            return like_out
 
         # back to CPU if on GPU
         try:
