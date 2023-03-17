@@ -2167,6 +2167,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_move(
             total_i_vals = upper_end_ind - lower_start_ind;
             // ECK %d \n", total_i_vals);
             __syncthreads();
+            d_h_remove_temp = 0.0;
+            d_h_add_temp = 0.0;
+            remove_remove_temp = 0.0;
+            add_add_temp = 0.0;
+            add_remove_temp = 0.0;
+
             if (total_i_vals < 2 * N)
             {
                 for (int i = threadIdx.x;
@@ -2389,8 +2395,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_move(
 
             // accept or reject
             accept = lnpdiff > random_val;
+            // accept = false;
 
-            //if (blockIdx.x == 0) printf("%d %e %e %e %e %e %e %e %e\n", bin_i, prop_ll.real(), curr_ll.real(), this_band_inv_temp, prior_prop, prior_curr, factors, lnpdiff, random_val);
+            // if ((blockIdx.x == 0) && (threadIdx.x == 0))printf("%d %d %.12e %.12e %.12e %.12e %e %e %e %e %e %e\n", bin_i, accept, f0_prop, f0_curr, wave_remove[0].real(), wave_add[0].real(), ll_diff, this_band_inv_temp, lp_diff, factors, lnpdiff, random_val);
             
             // readout if it was accepted
             accepted_out[current_binary_start_index] = accept;
@@ -2415,8 +2422,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_move(
                     h_A = A_remove[i];
                     h_E = E_remove[i];
 
-                    data_A[this_band_data_index * data_length + j] += h_A;
-                    data_E[this_band_data_index * data_length + j] += h_E;
+                    //if (i == 0) printf("start: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data_A[this_band_data_index * data_length + j].real(), data_A[this_band_data_index * data_length + j].imag(), data_E[this_band_data_index * data_length + j].real(), data_E[this_band_data_index * data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
+
+                    //data_A[this_band_data_index * data_length + j] += h_A;
+                    //data_E[this_band_data_index * data_length + j] += h_E;
+
+                    atomicAddComplex(&data_A[this_band_data_index * data_length + j], h_A);
+                    atomicAddComplex(&data_E[this_band_data_index * data_length + j], h_E);
+                    //if (i == 0) printf("remove: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n", bin_i, data_A[this_band_data_index * data_length + j].real(), data_A[this_band_data_index * data_length + j].imag(), data_E[this_band_data_index * data_length + j].real(), data_E[this_band_data_index * data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
                 }
                 __syncthreads();
 
@@ -2430,8 +2443,13 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_move(
                     h_A = A_add[i];
                     h_E = E_add[i];
 
-                    data_A[this_band_data_index * data_length + j] -= h_A;
-                    data_E[this_band_data_index * data_length + j] -= h_E;
+                    // data_A[this_band_data_index * data_length + j] -= h_A;
+                    // data_E[this_band_data_index * data_length + j] -= h_E;
+
+                    atomicAddComplex(&data_A[this_band_data_index * data_length + j], -h_A);
+                    atomicAddComplex(&data_E[this_band_data_index * data_length + j], -h_E);
+
+                    //if (i == 0) printf("add: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data_A[this_band_data_index * data_length + j].real(), data_A[this_band_data_index * data_length + j].imag(), data_E[this_band_data_index * data_length + j].real(), data_E[this_band_data_index * data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
                 }
                 __syncthreads();
                 // do not need to adjust data as this one is already in there
