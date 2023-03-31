@@ -306,7 +306,7 @@ class GBGPU(object):
             fctr *= tdi2_factor
 
         if isinstance(fctr, float):
-            fctr = np.array([fctr])
+            fctr = self.xp.array([fctr])
             
         XYZf *= fctr[:, None, None]
 
