@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GBGPU Utility Functions &mdash; gbgpu  documentation</title>
@@ -11,10 +11,11 @@
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
         <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
         <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -30,11 +31,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search"  style="background: coral" >
-            <a href="../index.html" class="icon icon-home"> gbgpu
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            gbgpu
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -45,8 +50,23 @@
 <li class="toctree-l1"><a class="reference internal" href="main.html">Fast GB Waveforms and Likelihoods</a></li>
 <li class="toctree-l1"><a class="reference internal" href="derivedwaves.html">Extending GBGPU Waveforms</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">GBGPU Utility Functions</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#gravitational-wave-utilities">Gravitational-wave utilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#other-utilities">Other utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#gravitational-wave-utilities">Gravitational-wave utilities</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.AET"><code class="docutils literal notranslate"><span class="pre">AET()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_fGW"><code class="docutils literal notranslate"><span class="pre">get_fGW()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_chirp_mass"><code class="docutils literal notranslate"><span class="pre">get_chirp_mass()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_eta"><code class="docutils literal notranslate"><span class="pre">get_eta()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_amplitude"><code class="docutils literal notranslate"><span class="pre">get_amplitude()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_fdot"><code class="docutils literal notranslate"><span class="pre">get_fdot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_chirp_mass_from_f_fdot"><code class="docutils literal notranslate"><span class="pre">get_chirp_mass_from_f_fdot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.get_N"><code class="docutils literal notranslate"><span class="pre">get_N()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#other-utilities">Other utilities</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.omp_set_num_threads"><code class="docutils literal notranslate"><span class="pre">omp_set_num_threads()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.omp_get_num_threads"><code class="docutils literal notranslate"><span class="pre">omp_get_num_threads()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.cuda_set_device"><code class="docutils literal notranslate"><span class="pre">cuda_set_device()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -73,8 +93,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>GBGPU Utility Functions</li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">GBGPU Utility Functions</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/user/utils.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -87,50 +107,26 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
-<style>
-/* CSS overrides for sphinx_rtd_theme */
-
-/* 24px margin */
-.nbinput.nblast.container,
-.nboutput.nblast.container {
-    margin-bottom: 19px;  /* padding has already 5px */
-}
-
-/* ... except between code cells! */
-.nblast.container + .nbinput.container {
-    margin-top: -19px;
-}
-
-.admonition > p:before {
-    margin-right: 4px;  /* make room for the exclamation icon */
-}
-
-/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
-.math {
-    text-align: unset;
-}
-</style>
-<section id="gbgpu-utility-functions">
-<h1>GBGPU Utility Functions<a class="headerlink" href="#gbgpu-utility-functions" title="Permalink to this headline"></a></h1>
+  <section id="gbgpu-utility-functions">
+<h1>GBGPU Utility Functions<a class="headerlink" href="#gbgpu-utility-functions" title="Permalink to this heading"></a></h1>
 <section id="gravitational-wave-utilities">
-<h2>Gravitational-wave utilities<a class="headerlink" href="#gravitational-wave-utilities" title="Permalink to this headline"></a></h2>
+<h2>Gravitational-wave utilities<a class="headerlink" href="#gravitational-wave-utilities" title="Permalink to this heading"></a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="gbgpu.utils.utility.AET">
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">AET</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Z</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.AET" title="Permalink to this definition"></a></dt>
 <dd><p>Return the A,E,T channels from X,Y,Z</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>X</strong> (<em>xp.ndarray</em>) – Arrays holding <code class="docutils literal notranslate"><span class="pre">XYZ</span></code> TDI information. The signals can be in any domain.</p></li>
 <li><p><strong>Y</strong> (<em>xp.ndarray</em>) – Arrays holding <code class="docutils literal notranslate"><span class="pre">XYZ</span></code> TDI information. The signals can be in any domain.</p></li>
 <li><p><strong>Z</strong> (<em>xp.ndarray</em>) – Arrays holding <code class="docutils literal notranslate"><span class="pre">XYZ</span></code> TDI information. The signals can be in any domain.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">(A,E,T)</span></code> with array shapes the same as the input <code class="docutils literal notranslate"><span class="pre">XYZ</span></code>.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Tuple</p>
 </dd>
 </dl>
@@ -143,7 +139,7 @@
 <p>Computes <span class="math notranslate nohighlight">\(f(t)\approx f_0 + \dot{f}_0 t + \frac{1}{2}\ddot{f}_0 t^2.\)</span>
 This assumes the initial time is 0.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>f0</strong> (<em>1D xp.ndarray</em>) – Initial frequency of source in Hz. Shape is <code class="docutils literal notranslate"><span class="pre">(num_bin_all,)</span></code>.</p></li>
 <li><p><strong>fdot</strong> (<em>1D xp.ndarray</em>) – Initial frequency derivative of source in Hz/s. Shape is <code class="docutils literal notranslate"><span class="pre">(num_bin_all,)</span></code>.</p></li>
@@ -153,13 +149,13 @@ If <code class="docutils literal notranslate"><span class="pre">t.ndim</span> <s
 In this case, <code class="docutils literal notranslate"><span class="pre">t.shape[0]</span></code> must be equal to <code class="docutils literal notranslate"><span class="pre">num_bin_all</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>All frequencies evaluated at the given times.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>xp.ndarray</p>
 </dd>
-<dt class="field-even">Raises</dt>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>AssertionError</strong> – <code class="docutils literal notranslate"><span class="pre">t.shape[0]</span> <span class="pre">!=</span> <span class="pre">num_bin_all</span> <span class="pre">and</span> <span class="pre">t.shape[0]</span> <span class="pre">!=</span> <span class="pre">1</span></code>.</p>
 </dd>
 </dl>
@@ -170,16 +166,16 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_chirp_mass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_chirp_mass" title="Permalink to this definition"></a></dt>
 <dd><p>Get chirp mass</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>m1</strong> (<em>xp.ndarray</em>) – Mass 1.</p></li>
 <li><p><strong>m2</strong> (<em>xp.ndarray</em>) – Mass 2.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Chirp mass.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>xp.ndarray</p>
 </dd>
 </dl>
@@ -190,16 +186,16 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_eta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_eta" title="Permalink to this definition"></a></dt>
 <dd><p>Get symmetric mass ratio</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>m1</strong> (<em>xp.ndarray</em>) – Mass 1.</p></li>
 <li><p><strong>m2</strong> (<em>xp.ndarray</em>) – Mass 2.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Symetric mass ratio.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>xp.ndarray</p>
 </dd>
 </dl>
@@ -210,7 +206,7 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_amplitude</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_amplitude" title="Permalink to this definition"></a></dt>
 <dd><p>Get amplitude of GW</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>m1</strong> (<em>xp.ndarray</em>) – Mass 1 in solar masses.</p></li>
 <li><p><strong>m2</strong> (<em>xp.ndarray</em>) – Mass 2 in solar masses.</p></li>
@@ -218,10 +214,10 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <li><p><strong>d</strong> (<em>xp.ndarray</em>) – Luminosity distance in kpc.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Amplitude.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>xp.ndarray</p>
 </dd>
 </dl>
@@ -233,7 +229,7 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <dd><p>Get fdot of GW</p>
 <p>Must provide either <code class="docutils literal notranslate"><span class="pre">m1</span></code> and <code class="docutils literal notranslate"><span class="pre">m2</span></code> or <code class="docutils literal notranslate"><span class="pre">Mc</span></code>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>f</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
 <li><p><strong>m1</strong> (<em>xp.ndarray</em><em>, </em><em>optional</em>) – Mass 1 in solar masses.</p></li>
@@ -241,13 +237,13 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <li><p><strong>Mc</strong> (<em>xp.ndarray</em><em>, </em><em>optional</em>) – Chirp mass in solar masses.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>fdot.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>xp.ndarray</p>
 </dd>
-<dt class="field-even">Raises</dt>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>ValueError</strong> – Inputs are incorrect.</p></li>
 <li><p><strong>AssertionError</strong> – Inputs are incorrect.</p></li>
@@ -261,16 +257,16 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_chirp_mass_from_f_fdot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_chirp_mass_from_f_fdot" title="Permalink to this definition"></a></dt>
 <dd><p>Get chirp mass from f and fdot of GW</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>f</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
 <li><p><strong>fdot</strong> (<em>xp.ndarray</em>) – Frequency derivative of gravitational wave in Hz/s.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>chirp mass.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>xp.ndarray</p>
 </dd>
 </dl>
@@ -281,7 +277,7 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">get_N</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Tobs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.get_N" title="Permalink to this definition"></a></dt>
 <dd><p>Determine sampling rate for slow part of FastGB waveform.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>amp</strong> (<em>xp.ndarray</em>) – Amplitude of gravitational wave.</p></li>
 <li><p><strong>f0</strong> (<em>xp.ndarray</em>) – Frequency of gravitational wave in Hz.</p></li>
@@ -291,10 +287,10 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 (Default: <code class="docutils literal notranslate"><span class="pre">1</span></code>).</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>N values for each binary entered.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>int xp.ndarray</p>
 </dd>
 </dl>
@@ -302,13 +298,13 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 
 </section>
 <section id="other-utilities">
-<h2>Other utilities<a class="headerlink" href="#other-utilities" title="Permalink to this headline"></a></h2>
+<h2>Other utilities<a class="headerlink" href="#other-utilities" title="Permalink to this heading"></a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="gbgpu.utils.utility.omp_set_num_threads">
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">omp_set_num_threads</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.omp_set_num_threads" title="Permalink to this definition"></a></dt>
 <dd><p>Globally sets OMP_NUM_THREADS</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>num_threads</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of parallel threads to use in OpenMP.
 Default is 1.</p>
 </dd>
@@ -320,10 +316,10 @@ Default is 1.</p>
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">omp_get_num_threads</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.omp_get_num_threads" title="Permalink to this definition"></a></dt>
 <dd><p>Get global variable OMP_NUM_THREADS</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Number of OMP threads.</p>
 </dd>
-<dt class="field-even">Return type</dt>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>int</p>
 </dd>
 </dl>
@@ -334,7 +330,7 @@ Default is 1.</p>
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">cuda_set_device</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dev</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.cuda_set_device" title="Permalink to this definition"></a></dt>
 <dd><p>Globally sets CUDA device</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>dev</strong> (<em>int</em>) – CUDA device number.</p>
 </dd>
 </dl>

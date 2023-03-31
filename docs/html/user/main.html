@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fast GB Waveforms and Likelihoods &mdash; gbgpu  documentation</title>
@@ -11,10 +11,11 @@
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
         <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
         <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -30,11 +31,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search"  style="background: coral" >
-            <a href="../index.html" class="icon icon-home"> gbgpu
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            gbgpu
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -42,7 +47,37 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Documentation:</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Fast GB Waveforms and Likelihoods</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Fast GB Waveforms and Likelihoods</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU"><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.xp"><code class="docutils literal notranslate"><span class="pre">GBGPU.xp</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.use_gpu"><code class="docutils literal notranslate"><span class="pre">GBGPU.use_gpu</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_basis_tensors"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_basis_tensors</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.GenWave"><code class="docutils literal notranslate"><span class="pre">GBGPU.GenWave</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.GenWaveThird"><code class="docutils literal notranslate"><span class="pre">GBGPU.GenWaveThird</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.unpack_data_1"><code class="docutils literal notranslate"><span class="pre">GBGPU.unpack_data_1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.XYZ"><code class="docutils literal notranslate"><span class="pre">GBGPU.XYZ</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_ll_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll_func</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.num_bin"><code class="docutils literal notranslate"><span class="pre">GBGPU.num_bin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.N_max"><code class="docutils literal notranslate"><span class="pre">GBGPU.N_max</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.start_inds"><code class="docutils literal notranslate"><span class="pre">GBGPU.start_inds</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.df"><code class="docutils literal notranslate"><span class="pre">GBGPU.df</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.N"><code class="docutils literal notranslate"><span class="pre">GBGPU.N</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.d_d"><code class="docutils literal notranslate"><span class="pre">GBGPU.d_d</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.citation"><code class="docutils literal notranslate"><span class="pre">GBGPU.citation</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave"><code class="docutils literal notranslate"><span class="pre">GBGPU.run_wave()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.X"><code class="docutils literal notranslate"><span class="pre">GBGPU.X</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.A"><code class="docutils literal notranslate"><span class="pre">GBGPU.A</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.E"><code class="docutils literal notranslate"><span class="pre">GBGPU.E</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.freqs"><code class="docutils literal notranslate"><span class="pre">GBGPU.freqs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_ll"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_template"><code class="docutils literal notranslate"><span class="pre">GBGPU.fill_global_template()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.generate_global_template"><code class="docutils literal notranslate"><span class="pre">GBGPU.generate_global_template()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.inject_signal"><code class="docutils literal notranslate"><span class="pre">GBGPU.inject_signal()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.information_matrix"><code class="docutils literal notranslate"><span class="pre">GBGPU.information_matrix()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="derivedwaves.html">Extending GBGPU Waveforms</a></li>
 <li class="toctree-l1"><a class="reference internal" href="utils.html">GBGPU Utility Functions</a></li>
 </ul>
@@ -69,8 +104,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Fast GB Waveforms and Likelihoods</li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Fast GB Waveforms and Likelihoods</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/user/main.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -83,32 +118,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
-<style>
-/* CSS overrides for sphinx_rtd_theme */
-
-/* 24px margin */
-.nbinput.nblast.container,
-.nboutput.nblast.container {
-    margin-bottom: 19px;  /* padding has already 5px */
-}
-
-/* ... except between code cells! */
-.nblast.container + .nbinput.container {
-    margin-top: -19px;
-}
-
-.admonition > p:before {
-    margin-right: 4px;  /* make room for the exclamation icon */
-}
-
-/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
-.math {
-    text-align: unset;
-}
-</style>
-<section id="fast-gb-waveforms-and-likelihoods">
-<h1>Fast GB Waveforms and Likelihoods<a class="headerlink" href="#fast-gb-waveforms-and-likelihoods" title="Permalink to this headline"></a></h1>
+  <section id="fast-gb-waveforms-and-likelihoods">
+<h1>Fast GB Waveforms and Likelihoods<a class="headerlink" href="#fast-gb-waveforms-and-likelihoods" title="Permalink to this heading"></a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Permalink to this definition"></a></dt>
@@ -130,7 +141,7 @@ environmental variable or <code class="xref py py-func docutils literal notransl
 <p>The class determines which waveform is desired based on the number of argmuments
 input by the user (see the <code class="docutils literal notranslate"><span class="pre">*args</span></code> description below).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>use_gpu</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, run on GPUs. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
@@ -139,7 +150,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.xp" title="Permalink to this definition"></a></dt>
 <dd><p>NumPy if on CPU. CuPy if on GPU.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -150,7 +161,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">use_gpu</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.use_gpu" title="Permalink to this definition"></a></dt>
 <dd><p>Use GPU if True.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>bool</p>
 </dd>
 </dl>
@@ -161,7 +172,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">get_basis_tensors</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_basis_tensors" title="Permalink to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -172,7 +183,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">GenWave</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.GenWave" title="Permalink to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -183,7 +194,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">GenWaveThird</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.GenWaveThird" title="Permalink to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -194,7 +205,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">unpack_data_1</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.unpack_data_1" title="Permalink to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -205,7 +216,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">XYZ</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.XYZ" title="Permalink to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -216,7 +227,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll_func" title="Permalink to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>obj</p>
 </dd>
 </dl>
@@ -227,7 +238,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">num_bin</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.num_bin" title="Permalink to this definition"></a></dt>
 <dd><p>Number of binaries in the current calculation.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>int</p>
 </dd>
 </dl>
@@ -238,7 +249,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">N_max</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N_max" title="Permalink to this definition"></a></dt>
 <dd><p>Maximum points in a waveform based on maximum harmonic mode considered.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>int</p>
 </dd>
 </dl>
@@ -249,7 +260,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">start_inds</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.start_inds" title="Permalink to this definition"></a></dt>
 <dd><p>Start indices into data stream array. q - N/2.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>list of 1D int xp.ndarray</p>
 </dd>
 </dl>
@@ -260,7 +271,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <span class="sig-name descname"><span class="pre">df</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.df" title="Permalink to this definition"></a></dt>
 <dd><p>Fourier bin spacing.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>double</p>
 </dd>
 </dl>
@@ -274,7 +285,7 @@ Each array is a 2D complex array
 of shape (number of points, number of binaries) that is flattened. These can be
 accessed in python with the properties <code class="docutils literal notranslate"><span class="pre">X</span></code>, <code class="docutils literal notranslate"><span class="pre">A</span></code>, <code class="docutils literal notranslate"><span class="pre">E</span></code>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>1D complex xp.ndarrays</p>
 </dd>
 </dl>
@@ -285,7 +296,7 @@ accessed in python with the properties <code class="docutils literal notranslate
 <span class="sig-name descname"><span class="pre">N</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N" title="Permalink to this definition"></a></dt>
 <dd><p>Last N value used.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>int</p>
 </dd>
 </dl>
@@ -296,7 +307,7 @@ accessed in python with the properties <code class="docutils literal notranslate
 <span class="sig-name descname"><span class="pre">d_d</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.d_d" title="Permalink to this definition"></a></dt>
 <dd><p>&lt;d|d&gt; term in the likelihood.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type</dt>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>double</p>
 </dd>
 </dl>
@@ -319,7 +330,7 @@ in the LISA Data Challenges’ <code class="docutils literal notranslate"><span 
 with additional astrophysical effects.</p>
 <p># TODO: add citation property</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>amp</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Amplitude parameter.</p></li>
 <li><p><strong>f0</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial frequency of gravitational
@@ -392,17 +403,17 @@ only those with an “equal-arm length” condition. Default is <code class="doc
 <p>Generate the individual log likelihood for a batched set of Galactic binaries.
 This is also GPU/CPU agnostic.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>params</strong> (<em>2D double np.ndarrays</em>) – Parameters of all binaries to be calculated.
 The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">binaries)</span></code>.</p></li>
-<li><p><strong>data</strong> (<em>length 2 list of 1D</em><em> or </em><em>2D complex128 xp.ndarrays</em>) – List of arrays representing the data
+<li><p><strong>data</strong> (<em>length 2 list</em><em> of </em><em>1D</em><em> or </em><em>2D complex128 xp.ndarrays</em>) – List of arrays representing the data
 stream. These should be CuPy arrays if running on the GPU, NumPy
 arrays if running on a CPU. The list should be [A channel, E channel].
 Should be 1D if only one data stream is analyzed. If 2D, shape is
 <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">data</span> <span class="pre">streams,</span> <span class="pre">data_length)</span></code>. If 2D,
 user must also provide <code class="docutils literal notranslate"><span class="pre">data_index</span></code> kwarg.</p></li>
-<li><p><strong>psd</strong> (<em>length 2 list of 1D</em><em> or </em><em>2D double xp.ndarrays</em>) – List of arrays representing
+<li><p><strong>psd</strong> (<em>length 2 list</em><em> of </em><em>1D</em><em> or </em><em>2D double xp.ndarrays</em>) – List of arrays representing
 the power spectral density (PSD) in the noise.
 These should be CuPy arrays if running on the GPU, NumPy
 arrays if running on a CPU. The list should be [A channel, E channel].
@@ -432,13 +443,13 @@ PSD given. Default is <code class="docutils literal notranslate"><span class="pr
 <li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes keyword arguments to the <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> method.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Raises</dt>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while template arrays are CuPy/NumPy.</p>
 </dd>
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Log likelihood values associated with each binary.</p>
 </dd>
-<dt class="field-even">Return type</dt>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>1D double np.ndarray</p>
 </dd>
 </dl>
@@ -455,7 +466,7 @@ buffer tempalte arrays (<code class="docutils literal notranslate"><span class="
 When a user does not have the waveforms in hand, they should
 use the <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.generate_global_template" title="gbgpu.gbgpu.GBGPU.generate_global_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_global_template()</span></code></a> method.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>group_index</strong> (<em>1D double int32 xp.ndarray</em>) – Index indicating to which template each individual binary belongs.</p></li>
 <li><p><strong>templates</strong> (<em>3D complex128 xp.ndarray</em>) – Buffer array for template output to filled in place.
@@ -478,7 +489,7 @@ for the first entry of <code class="docutils literal notranslate"><span class="p
 is presented for the computation.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Raises</dt>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>TypeError</strong> – If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.</p></li>
 <li><p><strong>ValueError</strong> – Inputs are not correctly provided.</p></li>
@@ -495,7 +506,7 @@ is presented for the computation.</p></li>
 global fit templates. This method wraps <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="gbgpu.gbgpu.GBGPU.fill_global_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">fill_global_template()</span></code></a>
 by building the waveforms first.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>params</strong> (<em>2D double np.ndarrays</em>) – Parameters of all binaries to be calculated.
 The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">binaries)</span></code>.</p></li>
@@ -519,7 +530,7 @@ is presented for the computation.</p></li>
 <p>Provides the injection of a single signal into a data stream with frequencies
 spanning from 0.0 to fmax with 1/T spacing (from Fourier transform).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>*args</strong> (<em>list</em><em>, </em><em>tuple</em><em>, or </em><em>1D double np.array</em>) – Arguments to provide to
 <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a> to build the TDI templates for injection.</p></li>
@@ -531,7 +542,7 @@ Default is <code class="docutils literal notranslate"><span class="pre">None</sp
 <li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Passes kwargs to <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave" title="gbgpu.gbgpu.GBGPU.run_wave"><code class="xref py py-func docutils literal notranslate"><span class="pre">run_wave()</span></code></a>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><dl class="simple">
 <dt>NumPy arrays for the A channel and</dt><dd><p>E channel: <code class="docutils literal notranslate"><span class="pre">(A</span> <span class="pre">channel,</span> <span class="pre">E</span> <span class="pre">channel)</span></code>. Need to convert to CuPy if working
 on GPU.</p>
@@ -539,7 +550,7 @@ on GPU.</p>
 </dl>
 </p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Tuple of 1D np.ndarrays</p>
 </dd>
 </dl>
@@ -559,7 +570,7 @@ parameter, then the standard deviation in the frequency is <code class="docutils
 properly use with covariance values not on the diagonal, they will have to be
 multipled by the parameters: <span class="math notranslate nohighlight">\(C_{ij} \vec{\theta}_j\)</span>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>params</strong> (<em>2D double np.ndarrays</em>) – Parameters of all binaries to be calculated.
 The shape is <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">binaries)</span></code>.
@@ -588,13 +599,13 @@ Default is <code class="docutils literal notranslate"><span class="pre">False</s
 matrices in cupy array. Default is False.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Information Matrices for all binaries with shape: <code class="docutils literal notranslate"><span class="pre">(number</span> <span class="pre">of</span> <span class="pre">binaries,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">parameters,</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">parameters)</span></code>.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D xp.ndarray</p>
 </dd>
-<dt class="field-even">Raises</dt>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>ValueError</strong> – Step size issues.</p></li>
 <li><p><strong>ModuleNotFoundError</strong> – LISA Analysis Tools package not available.

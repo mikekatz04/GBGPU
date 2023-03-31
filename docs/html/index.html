@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>gbgpu: GPU/CPU Galactic Binary Waveforms &mdash; gbgpu  documentation</title>
@@ -11,10 +11,11 @@
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -27,11 +28,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search"  style="background: coral" >
-            <a href="#" class="icon icon-home"> gbgpu
+
+          
+          
+          <a href="#" class="icon icon-home">
+            gbgpu
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -66,8 +71,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-      <li>gbgpu: GPU/CPU Galactic Binary Waveforms</li>
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">gbgpu: GPU/CPU Galactic Binary Waveforms</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -79,32 +84,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
-<style>
-/* CSS overrides for sphinx_rtd_theme */
-
-/* 24px margin */
-.nbinput.nblast.container,
-.nboutput.nblast.container {
-    margin-bottom: 19px;  /* padding has already 5px */
-}
-
-/* ... except between code cells! */
-.nblast.container + .nbinput.container {
-    margin-top: -19px;
-}
-
-.admonition > p:before {
-    margin-right: 4px;  /* make room for the exclamation icon */
-}
-
-/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
-.math {
-    text-align: unset;
-}
-</style>
-<section id="gbgpu-gpu-cpu-galactic-binary-waveforms">
-<h1>gbgpu: GPU/CPU Galactic Binary Waveforms<a class="headerlink" href="#gbgpu-gpu-cpu-galactic-binary-waveforms" title="Permalink to this headline"></a></h1>
+  <section id="gbgpu-gpu-cpu-galactic-binary-waveforms">
+<h1>gbgpu: GPU/CPU Galactic Binary Waveforms<a class="headerlink" href="#gbgpu-gpu-cpu-galactic-binary-waveforms" title="Permalink to this heading"></a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> is a GPU-accelerated version of the <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> waveform which
 has been developed by Neil Cornish, Tyson Littenberg, Travis Robson, and
 Stas Babak. It computes gravitational waveforms for Galactic binary
@@ -130,7 +111,7 @@ page</a>,
 <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and
 <a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
 <section id="getting-started">
-<h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline"></a></h2>
+<h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this heading"></a></h2>
 <p>Below is a quick set of instructions to get you started with <code class="docutils literal notranslate"><span class="pre">gbgpu</span></code>.</p>
 <ol class="arabic simple" start="0">
 <li><p><a class="reference external" href="https://docs.anaconda.com/anaconda/install/">Install Anaconda</a> if
@@ -167,7 +148,7 @@ you will probably need to add libraries and include paths to the
 </pre></div>
 </div>
 <section id="prerequisites">
-<h3>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline"></a></h3>
+<h3>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this heading"></a></h3>
 <p>To install this software for CPU usage, you need <a class="reference external" href="https://www.gnu.org/software/gsl/">gsl
 &gt;2.0</a>, Python &gt;3.4, and NumPy. We
 generally recommend installing everything, including gcc and g++
@@ -184,7 +165,7 @@ CUDA toolkit version. Make sure the nvcc binary is on <code class="docutils lite
 it as the <code class="docutils literal notranslate"><span class="pre">CUDAHOME</span></code> environment variable.</p>
 </section>
 <section id="installing">
-<h3>Installing<a class="headerlink" href="#installing" title="Permalink to this headline"></a></h3>
+<h3>Installing<a class="headerlink" href="#installing" title="Permalink to this heading"></a></h3>
 <ol class="arabic simple" start="0">
 <li><p><a class="reference external" href="https://docs.anaconda.com/anaconda/install/">Install Anaconda</a> if
 you do not have it.</p></li>
@@ -224,7 +205,7 @@ you have cuda version 9.2, for example:</p></li>
 </section>
 </section>
 <section id="running-the-tests">
-<h2>Running the Tests<a class="headerlink" href="#running-the-tests" title="Permalink to this headline"></a></h2>
+<h2>Running the Tests<a class="headerlink" href="#running-the-tests" title="Permalink to this heading"></a></h2>
 <p>Change to the testing directory:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="n">gbgpu</span><span class="o">/</span><span class="n">tests</span>
 </pre></div>
@@ -235,14 +216,14 @@ you have cuda version 9.2, for example:</p></li>
 </div>
 </section>
 <section id="versioning">
-<h2>Versioning<a class="headerlink" href="#versioning" title="Permalink to this headline"></a></h2>
+<h2>Versioning<a class="headerlink" href="#versioning" title="Permalink to this heading"></a></h2>
 <p>We use <a class="reference external" href="http://semver.org/">SemVer</a> for versioning. For the versions
 available, see the <a class="reference external" href="https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/tags">tags on this
 repository</a>.</p>
-<p>Current Version: 1.0.0</p>
+<p>Current Version: 1.0.1</p>
 </section>
 <section id="authors">
-<h2>Authors<a class="headerlink" href="#authors" title="Permalink to this headline"></a></h2>
+<h2>Authors<a class="headerlink" href="#authors" title="Permalink to this heading"></a></h2>
 <ul class="simple">
 <li><p><strong>Michael Katz</strong></p></li>
 <li><p>Travis Robson</p></li>
@@ -252,25 +233,86 @@ repository</a>.</p>
 </ul>
 </section>
 <section id="license">
-<h2>License<a class="headerlink" href="#license" title="Permalink to this headline"></a></h2>
+<h2>License<a class="headerlink" href="#license" title="Permalink to this heading"></a></h2>
 <p>This project is licensed under the GNU License - see the
 <a class="reference external" href="LICENSE.md">LICENSE.md</a> file for details.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Documentation:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="user/main.html">Fast GB Waveforms and Likelihoods</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user/main.html">Fast GB Waveforms and Likelihoods</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU"><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.xp"><code class="docutils literal notranslate"><span class="pre">GBGPU.xp</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.use_gpu"><code class="docutils literal notranslate"><span class="pre">GBGPU.use_gpu</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.get_basis_tensors"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_basis_tensors</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.GenWave"><code class="docutils literal notranslate"><span class="pre">GBGPU.GenWave</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.GenWaveThird"><code class="docutils literal notranslate"><span class="pre">GBGPU.GenWaveThird</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.unpack_data_1"><code class="docutils literal notranslate"><span class="pre">GBGPU.unpack_data_1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.XYZ"><code class="docutils literal notranslate"><span class="pre">GBGPU.XYZ</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.get_ll_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll_func</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.num_bin"><code class="docutils literal notranslate"><span class="pre">GBGPU.num_bin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.N_max"><code class="docutils literal notranslate"><span class="pre">GBGPU.N_max</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.start_inds"><code class="docutils literal notranslate"><span class="pre">GBGPU.start_inds</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.df"><code class="docutils literal notranslate"><span class="pre">GBGPU.df</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.N"><code class="docutils literal notranslate"><span class="pre">GBGPU.N</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.d_d"><code class="docutils literal notranslate"><span class="pre">GBGPU.d_d</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.citation"><code class="docutils literal notranslate"><span class="pre">GBGPU.citation</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.run_wave"><code class="docutils literal notranslate"><span class="pre">GBGPU.run_wave()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.X"><code class="docutils literal notranslate"><span class="pre">GBGPU.X</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.A"><code class="docutils literal notranslate"><span class="pre">GBGPU.A</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.E"><code class="docutils literal notranslate"><span class="pre">GBGPU.E</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.freqs"><code class="docutils literal notranslate"><span class="pre">GBGPU.freqs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.get_ll"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.fill_global_template"><code class="docutils literal notranslate"><span class="pre">GBGPU.fill_global_template()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.generate_global_template"><code class="docutils literal notranslate"><span class="pre">GBGPU.generate_global_template()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.inject_signal"><code class="docutils literal notranslate"><span class="pre">GBGPU.inject_signal()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/main.html#gbgpu.gbgpu.GBGPU.information_matrix"><code class="docutils literal notranslate"><span class="pre">GBGPU.information_matrix()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="user/derivedwaves.html">Extending GBGPU Waveforms</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="user/derivedwaves.html#inheritgbgpu-base-class"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user/derivedwaves.html#inheritgbgpu-base-class"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU.prepare_additional_args"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.prepare_additional_args()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU.special_get_N"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.special_get_N()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU.shift_frequency"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.shift_frequency()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU.add_to_argS"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.add_to_argS()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="user/derivedwaves.html#third-body-inclusion">Third-body inclusion</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="user/derivedwaves.html#third-body-waveform">Third-body waveform</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user/derivedwaves.html#third-body-utility-functions">Third-body utility functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/derivedwaves.html#third-body-waveform">Third-body waveform</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.thirdbody.GBGPUThirdBody"><code class="docutils literal notranslate"><span class="pre">GBGPUThirdBody</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="user/derivedwaves.html#third-body-utility-functions">Third-body utility functions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.thirdbody.third_body_factors"><code class="docutils literal notranslate"><span class="pre">third_body_factors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="user/derivedwaves.html#gbgpu.thirdbody.get_T2"><code class="docutils literal notranslate"><span class="pre">get_T2()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="user/utils.html">GBGPU Utility Functions</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="user/utils.html#gravitational-wave-utilities">Gravitational-wave utilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="user/utils.html#other-utilities">Other utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user/utils.html#gravitational-wave-utilities">Gravitational-wave utilities</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.AET"><code class="docutils literal notranslate"><span class="pre">AET()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_fGW"><code class="docutils literal notranslate"><span class="pre">get_fGW()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_chirp_mass"><code class="docutils literal notranslate"><span class="pre">get_chirp_mass()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_eta"><code class="docutils literal notranslate"><span class="pre">get_eta()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_amplitude"><code class="docutils literal notranslate"><span class="pre">get_amplitude()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_fdot"><code class="docutils literal notranslate"><span class="pre">get_fdot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_chirp_mass_from_f_fdot"><code class="docutils literal notranslate"><span class="pre">get_chirp_mass_from_f_fdot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.get_N"><code class="docutils literal notranslate"><span class="pre">get_N()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="user/utils.html#other-utilities">Other utilities</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.omp_set_num_threads"><code class="docutils literal notranslate"><span class="pre">omp_set_num_threads()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.omp_get_num_threads"><code class="docutils literal notranslate"><span class="pre">omp_get_num_threads()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="user/utils.html#gbgpu.utils.utility.cuda_set_device"><code class="docutils literal notranslate"><span class="pre">cuda_set_device()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

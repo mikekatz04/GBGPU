@@ -301,11 +301,14 @@ class GBGPU(object):
 
         # adjust for TDI2 if needed
         if tdi2:
-            omegaL = 2 * np.pi * f0_out * (Larm / Clight)
+            omegaL = 2 * np.pi * f0 * (Larm / Clight)
             tdi2_factor = 2.0j * self.xp.sin(2 * omegaL) * self.xp.exp(-2j * omegaL)
             fctr *= tdi2_factor
 
-        XYZf *= fctr
+        if isinstance(fctr, float):
+            fctr = np.array([fctr])
+            
+        XYZf *= fctr[:, None, None]
 
         # we do not care about T right now
         Af, Ef, Tf = AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])

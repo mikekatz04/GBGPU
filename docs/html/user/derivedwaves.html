@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Extending GBGPU Waveforms &mdash; gbgpu  documentation</title>
@@ -11,10 +11,11 @@
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
         <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
         <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
         <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -30,11 +31,15 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search"  style="background: coral" >
-            <a href="../index.html" class="icon icon-home"> gbgpu
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            gbgpu
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
@@ -44,10 +49,26 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="main.html">Fast GB Waveforms and Likelihoods</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Extending GBGPU Waveforms</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#inheritgbgpu-base-class"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inheritgbgpu-base-class"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU.prepare_additional_args"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.prepare_additional_args()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU.special_get_N"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.special_get_N()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU.shift_frequency"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.shift_frequency()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU.add_to_argS"><code class="docutils literal notranslate"><span class="pre">InheritGBGPU.add_to_argS()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#third-body-inclusion">Third-body inclusion</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#third-body-waveform">Third-body waveform</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#third-body-utility-functions">Third-body utility functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#third-body-waveform">Third-body waveform</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.thirdbody.GBGPUThirdBody"><code class="docutils literal notranslate"><span class="pre">GBGPUThirdBody</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#third-body-utility-functions">Third-body utility functions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.thirdbody.third_body_factors"><code class="docutils literal notranslate"><span class="pre">third_body_factors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gbgpu.thirdbody.get_T2"><code class="docutils literal notranslate"><span class="pre">get_T2()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -77,8 +98,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Extending GBGPU Waveforms</li>
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Extending GBGPU Waveforms</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/user/derivedwaves.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -91,39 +112,15 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
-<style>
-/* CSS overrides for sphinx_rtd_theme */
-
-/* 24px margin */
-.nbinput.nblast.container,
-.nboutput.nblast.container {
-    margin-bottom: 19px;  /* padding has already 5px */
-}
-
-/* ... except between code cells! */
-.nblast.container + .nbinput.container {
-    margin-top: -19px;
-}
-
-.admonition > p:before {
-    margin-right: 4px;  /* make room for the exclamation icon */
-}
-
-/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
-.math {
-    text-align: unset;
-}
-</style>
-<section id="extending-gbgpu-waveforms">
-<h1>Extending GBGPU Waveforms<a class="headerlink" href="#extending-gbgpu-waveforms" title="Permalink to this headline"></a></h1>
+  <section id="extending-gbgpu-waveforms">
+<h1>Extending GBGPU Waveforms<a class="headerlink" href="#extending-gbgpu-waveforms" title="Permalink to this heading"></a></h1>
 <p>The base class <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a> can be inherited in order to build other waveforms in the model of FastGB. To do this, there are required methods that need to be added to the new waveform class. They are described in the Abstract Base Class <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a>. After the base class, waveform models that have already been extended beyond the base are described.</p>
 <section id="inheritgbgpu-base-class">
-<h2><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class<a class="headerlink" href="#inheritgbgpu-base-class" title="Permalink to this headline"></a></h2>
+<h2><code class="docutils literal notranslate"><span class="pre">InheritGBGPU</span></code> base class<a class="headerlink" href="#inheritgbgpu-base-class" title="Permalink to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.InheritGBGPU">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">InheritGBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.InheritGBGPU" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <a class="reference internal" href="main.html#gbgpu.gbgpu.GBGPU" title="gbgpu.gbgpu.GBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.GBGPU</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code></p>
+<dd><p>Bases: <a class="reference internal" href="main.html#gbgpu.gbgpu.GBGPU" title="gbgpu.gbgpu.GBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">GBGPU</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
 <p>Inherit this class to expand on GBGPU waveforms.</p>
 <p>The required methods to be added are shown below.</p>
 <dl class="py method">
@@ -135,13 +132,13 @@ into <a class="reference internal" href="main.html#gbgpu.gbgpu.GBGPU.run_wave" t
 to input into the rest of the code. If using GPUs,
 this is where the parameters are copied to GPUs.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>*args</strong> (<em>tuple</em>) – Any additional args to be dealt with.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>New args. In the rest of the code this is <code class="docutils literal notranslate"><span class="pre">add_args</span></code>.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Tuple</p>
 </dd>
 </dl>
@@ -152,7 +149,7 @@ this is where the parameters are copied to GPUs.</p>
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">special_get_N</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.InheritGBGPU.special_get_N" title="Permalink to this definition"></a></dt>
 <dd><p>Determine proper sampling rate in time domain for slow-part.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>amp</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Amplitude parameter.</p></li>
 <li><p><strong>f0</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial frequency of gravitational
@@ -164,10 +161,10 @@ value. Final N will be <code class="docutils literal notranslate"><span class="p
 not provided. Default is <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Number of time-domain points recommended for each binary.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>1D int32 xp.ndarray</p>
 </dd>
 </dl>
@@ -178,7 +175,7 @@ not provided. Default is <code class="docutils literal notranslate"><span class=
 <span class="sig-name descname"><span class="pre">shift_frequency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xi</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.InheritGBGPU.shift_frequency" title="Permalink to this definition"></a></dt>
 <dd><p>Shift the evolution of the frequency in the slow part</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>fi</strong> (<em>3D double xp.ndarray</em>) – Instantaneous frequencies of the
 wave before applying third-body effect at each spacecraft as a function of time.
@@ -188,10 +185,10 @@ The shape is <code class="docutils literal notranslate"><span class="pre">(num</
 <li><p><strong>*args</strong> (<em>tuple</em>) – Args returned from <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU.prepare_additional_args" title="gbgpu.gbgpu.InheritGBGPU.prepare_additional_args"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepare_additional_args()</span></code></a>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Updated frequencies with third-body effect.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -206,7 +203,7 @@ of the slow part of the waveform. <code class="docutils literal notranslate"><sp
 in the transfer function. See <code class="xref py py-meth docutils literal notranslate"><span class="pre">gbgpu.gbgpu.GBGPU._construct_slow_part()</span></code>
 for the use of argS in the larger code.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>argS</strong> (<em>3D double xp.ndarray</em>) – Special phase evaluation that goes into <code class="docutils literal notranslate"><span class="pre">kdotP</span></code>.
 Shape is <code class="docutils literal notranslate"><span class="pre">(num</span> <span class="pre">binaries,</span> <span class="pre">3</span> <span class="pre">spacecraft,</span> <span class="pre">N)</span></code>.</p></li>
@@ -222,10 +219,10 @@ The shape is <code class="docutils literal notranslate"><span class="pre">(num</
 <li><p><strong>*args</strong> (<em>tuple</em>) – Args returned from <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU.prepare_additional_args" title="gbgpu.gbgpu.InheritGBGPU.prepare_additional_args"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepare_additional_args()</span></code></a>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Updated <code class="docutils literal notranslate"><span class="pre">argS</span></code> with third-body effect</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -235,19 +232,19 @@ The shape is <code class="docutils literal notranslate"><span class="pre">(num</
 
 </section>
 <section id="third-body-inclusion">
-<h2>Third-body inclusion<a class="headerlink" href="#third-body-inclusion" title="Permalink to this headline"></a></h2>
+<h2>Third-body inclusion<a class="headerlink" href="#third-body-inclusion" title="Permalink to this heading"></a></h2>
 <p><a class="reference internal" href="main.html#gbgpu.gbgpu.GBGPU" title="gbgpu.gbgpu.GBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.GBGPU</span></code></a> has been extended to include a third-body in long orbit around the inner binary. This waveform was first built in <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>. It was more recently used and adapted into this code base for # TODO: add arxiv. Please cite both papers, as well as the base FastGB papers, if you use this waveform.</p>
 <section id="third-body-waveform">
-<h3>Third-body waveform<a class="headerlink" href="#third-body-waveform" title="Permalink to this headline"></a></h3>
+<h3>Third-body waveform<a class="headerlink" href="#third-body-waveform" title="Permalink to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="gbgpu.thirdbody.GBGPUThirdBody">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.thirdbody.</span></span><span class="sig-name descname"><span class="pre">GBGPUThirdBody</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">gbgpu.gbgpu.InheritGBGPU</span></code></a></p>
+<dd><p>Bases: <a class="reference internal" href="#gbgpu.gbgpu.InheritGBGPU" title="gbgpu.gbgpu.InheritGBGPU"><code class="xref py py-class docutils literal notranslate"><span class="pre">InheritGBGPU</span></code></a></p>
 <p>Build the effect of a third body into Galactic binary waveforms.</p>
 <p>The third-body components are originally
 by Travis Robson for the paper <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>use_gpu</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, run on GPUs. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
@@ -263,7 +260,7 @@ by Travis Robson for the paper <a class="reference external" href="https://arxiv
 <span class="sig-name descname"><span class="pre">prepare_additional_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.prepare_additional_args" title="Permalink to this definition"></a></dt>
 <dd><p>Prepare the arguments special to this class</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>A2</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Special amplitude parameter related to the
 line-of-site velocity for the third body orbit as defined in the paper
@@ -277,14 +274,14 @@ given in the description above.</p></li>
 This parameter is effectively a constant of integration.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><dl class="simple">
 <dt>(A2, varpi, e2, n2, T2) adjusted for GPU usage if necessary.</dt><dd><p>(<span class="math notranslate nohighlight">\(n_2=\frac{2\pi}{P_2}\)</span> is the angular frequency of the orbit.)</p>
 </dd>
 </dl>
 </p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Tuple</p>
 </dd>
 </dl>
@@ -295,7 +292,7 @@ This parameter is effectively a constant of integration.</p></li>
 <span class="sig-name descname"><span class="pre">special_get_N</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.special_get_N" title="Permalink to this definition"></a></dt>
 <dd><p>Determine proper sampling rate in time domain for slow-part.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>amp</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Amplitude parameter.</p></li>
 <li><p><strong>f0</strong> (<em>double</em><em> or </em><em>1D double np.ndarray</em>) – Initial frequency of gravitational
@@ -313,13 +310,13 @@ given in the description above. (Not needed in this function)</p></li>
 This parameter is effectively a constant of integration. (Not needed in this function)</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Number of time-domain points recommended for each binary.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>1D int32 xp.ndarray</p>
 </dd>
-<dt class="field-even">Raises</dt>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>AssertionError</strong> – Shapes of inputs are wrong.</p>
 </dd>
 </dl>
@@ -330,7 +327,7 @@ This parameter is effectively a constant of integration. (Not needed in this fun
 <span class="sig-name descname"><span class="pre">shift_frequency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">varpi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.GBGPUThirdBody.shift_frequency" title="Permalink to this definition"></a></dt>
 <dd><p>Shift the evolution of the frequency in the slow part</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>fi</strong> (<em>3D double xp.ndarray</em>) – Instantaneous frequencies of the
 wave before applying third-body effect at each spacecraft as a function of time.
@@ -349,10 +346,10 @@ given in the description above.</p></li>
 This parameter is effectively a constant of integration.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Updated frequencies with third-body effect.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -367,7 +364,7 @@ of the slow part of the waveform. <code class="docutils literal notranslate"><sp
 in the transfer function. See <code class="xref py py-meth docutils literal notranslate"><span class="pre">gbgpu.gbgpu.GBGPU._construct_slow_part()</span></code>
 for the use of argS in the larger code.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>argS</strong> (<em>3D double xp.ndarray</em>) – Special phase evaluation that goes into <code class="docutils literal notranslate"><span class="pre">kdotP</span></code>.
 Shape is <code class="docutils literal notranslate"><span class="pre">(num</span> <span class="pre">binaries,</span> <span class="pre">3</span> <span class="pre">spacecraft,</span> <span class="pre">N)</span></code>.</p></li>
@@ -392,10 +389,10 @@ given in the description above.</p></li>
 This parameter is effectively a constant of integration.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Updated <code class="docutils literal notranslate"><span class="pre">argS</span></code> with third-body effect</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -408,16 +405,16 @@ This parameter is effectively a constant of integration.</p></li>
 <p>Invert Kepler’s equation (<span class="math notranslate nohighlight">\(l = u - e \sin{u}\)</span>)
 using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>l</strong> (<em>1D double xp.ndarray</em>) – Mean anomaly in radians.</p></li>
 <li><p><strong>e</strong> (<em>1D double xp.ndarray</em>) – Eccentricity.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Eccentric anomaly</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -429,7 +426,7 @@ using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
 <dd><p>Get phi value for Line-of-sight velocity</p>
 <p>See <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>t</strong> (<em>3D double xp.ndarray</em>) – Time values to evaluate <span class="math notranslate nohighlight">\(\bar{\phi}\)</span>.</p></li>
 <li><p><strong>T</strong> (<em>1D double xp.ndarray</em>) – Time of periastron passage (<code class="docutils literal notranslate"><span class="pre">T2</span></code>) in seconds.</p></li>
@@ -437,10 +434,10 @@ using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
 <li><p><strong>n</strong> (<em>1D double xp.ndarray</em>) – Angular frequency of third-body orbit (<code class="docutils literal notranslate"><span class="pre">n2</span></code>) in per seconds.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Phi values for line-of-sight velocities.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -452,7 +449,7 @@ using Mikkola’s method (1987) referenced in Tessmer &amp; Gopakumar 2007.</p>
 <dd><p>Calculate the line-of-site velocity</p>
 <p>See equation 13 in <a class="reference external" href="https://arxiv.org/pdf/1806.00500.pdf">arXiv:1806.00500</a>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>t</strong> (<em>3D double xp.ndarray</em>) – Time values to evaluate <span class="math notranslate nohighlight">\(\bar{\phi}\)</span>.</p></li>
 <li><p><strong>A2</strong> (<em>1D double np.ndarray</em>) – Special amplitude parameter related to the
@@ -467,10 +464,10 @@ given in the description above.</p></li>
 This parameter is effectively a constant of integration.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>LOS velocity.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -485,7 +482,7 @@ the calculations can all be done in parallel because we are just
 inverted Kepler’s equation rather than integrating an ODE where
 a serial operation is required. TODO: Check this.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>f0</strong> (<em>1D double np.ndarray</em>) – Initial frequency of gravitational
 wave in Hz.</p></li>
@@ -509,10 +506,10 @@ Shape is <code class="docutils literal notranslate"><span class="pre">(num</span
 Shape is <code class="docutils literal notranslate"><span class="pre">(num</span> <span class="pre">binaries,</span> <span class="pre">3</span> <span class="pre">spacecraft,</span> <span class="pre">N</span> <span class="pre">-</span> <span class="pre">1)</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Phase shifts due to third-body effect.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -525,7 +522,7 @@ Shape is <code class="docutils literal notranslate"><span class="pre">(num</span
 <p>Use central difference with LOS velocity to get
 LOS acceleration.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>A2</strong> (<em>1D double np.ndarray</em>) – Special amplitude parameter related to the
 line-of-site velocity for the third body orbit as defined in the paper
@@ -541,10 +538,10 @@ This parameter is effectively a constant of integration.</p></li>
 <code class="docutils literal notranslate"><span class="pre">(num</span> <span class="pre">binaries,</span> <span class="pre">3</span> <span class="pre">spacecraft,</span> <span class="pre">N)</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>LOS acceleration</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -558,7 +555,7 @@ This parameter is effectively a constant of integration.</p></li>
 calculating the effect of the third-body over the course of the orbit.</p>
 <p>Central difference is used for both first and second derivatives.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>f0</strong> (<em>1D double np.ndarray</em>) – Initial frequency of gravitational
 wave in Hz.</p></li>
@@ -587,10 +584,10 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 <li><p><strong>eps</strong> (<em>double</em>) – Step size for central differencing. Only used if <code class="docutils literal notranslate"><span class="pre">t</span></code> is not provided.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Phase shifts due to third-body effect.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>3D double xp.ndarray</p>
 </dd>
 </dl>
@@ -600,7 +597,7 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 
 </section>
 <section id="third-body-utility-functions">
-<h3>Third-body utility functions<a class="headerlink" href="#third-body-utility-functions" title="Permalink to this headline"></a></h3>
+<h3>Third-body utility functions<a class="headerlink" href="#third-body-utility-functions" title="Permalink to this heading"></a></h3>
 <dl class="py function">
 <dt class="sig sig-object py" id="gbgpu.thirdbody.third_body_factors">
 <span class="sig-prename descclassname"><span class="pre">gbgpu.thirdbody.</span></span><span class="sig-name descname"><span class="pre">third_body_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">M</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Omega2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">omega2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">third_mass_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Mjup'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">third_period_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'yrs'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.third_body_factors" title="Permalink to this definition"></a></dt>
@@ -608,7 +605,7 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 <p>Get all the third-body factors that go into the waveform computation:
 <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">varpi</span></code>, and <code class="docutils literal notranslate"><span class="pre">T2</span></code>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>M</strong> (<em>double</em><em> or </em><em>double np.ndarray</em>) – Total mass of inner
 Galactic binary in Solar Masses.</p></li>
@@ -637,10 +634,10 @@ the ecliptic frame. See the Figure 1 in <a class="reference external" href="http
 <code class="docutils literal notranslate"><span class="pre">&quot;sec&quot;</span></code> for seconds or <code class="docutils literal notranslate"><span class="pre">&quot;yrs</span></code>” for years. Default is <code class="docutils literal notranslate"><span class="pre">&quot;yrs&quot;</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">(A2,</span> <span class="pre">varpi,</span> <span class="pre">T2)</span></code> associated with the input parameters.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Tuple</p>
 </dd>
 </dl>
@@ -651,7 +648,7 @@ the ecliptic frame. See the Figure 1 in <a class="reference external" href="http
 <span class="sig-prename descclassname"><span class="pre">gbgpu.thirdbody.</span></span><span class="sig-name descname"><span class="pre">get_T2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">third_period_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'yrs'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.thirdbody.get_T2" title="Permalink to this definition"></a></dt>
 <dd><p>Get <code class="docutils literal notranslate"><span class="pre">T2</span></code> from third-body parameters</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>P2</strong> (<em>double</em><em> or </em><em>double np.ndarray</em>) – Orbital period of third body
 in units of <code class="docutils literal notranslate"><span class="pre">third_period_unit</span></code> kwarg.</p></li>
@@ -661,10 +658,10 @@ in units of <code class="docutils literal notranslate"><span class="pre">third_p
 <code class="docutils literal notranslate"><span class="pre">&quot;sec&quot;</span></code> for seconds or <code class="docutils literal notranslate"><span class="pre">&quot;yrs</span></code>” for years. Default is <code class="docutils literal notranslate"><span class="pre">&quot;yrs&quot;</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">T2</span></code> associated with the input parameters.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>double xp.ndarray</p>
 </dd>
 </dl>
