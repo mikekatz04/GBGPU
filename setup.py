@@ -33,6 +33,9 @@ def locate_cuda():
     if "CUDAHOME" in os.environ:
         home = os.environ["CUDAHOME"]
         nvcc = pjoin(home, "bin", "nvcc")
+    elif "CUDA_HOME" in os.environ:
+        home = os.environ["CUDA_HOME"]
+        nvcc = pjoin(home, "bin", "nvcc")
     else:
         # Otherwise, search the PATH for NVCC
         nvcc = find_in_path("nvcc", os.environ["PATH"])
@@ -187,6 +190,7 @@ if run_cuda_install:
                 # "-lineinfo",
                 "-Xcompiler",
                 "-fopenmp",
+                "-std=c++17"
             ],  # ,"-G", "-g"] # for debugging
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include", "cufftdx/include"],
