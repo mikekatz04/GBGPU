@@ -35,6 +35,7 @@ try:
     from gbgpu.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
     from gbgpu.gbgpu_utils import swap_ll_diff as swap_ll_diff_gpu
     from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
+    from gbgpu.sharedmem import pyGalacticBinaryParams, pyDataPackage, pyBandPackage, pyMCMCInfo, SharedMemoryMakeNewMove_wrap
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -100,7 +101,12 @@ class GBGPU(object):
             self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
             self.psd_likelihood = psd_likelihood
             self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
+            self.SharedMemoryMakeNewMove_wrap = SharedMemoryMakeNewMove_wrap
             self.compute_logpdf = compute_logpdf
+            self.pyGalacticBinaryParams = pyGalacticBinaryParams
+            self.pyDataPackage = pyDataPackage
+            self.pyBandPackage = pyBandPackage
+            self.pyMCMCInfo = pyMCMCInfo
 
         else:
             self.xp = np
