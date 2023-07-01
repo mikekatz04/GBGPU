@@ -36,6 +36,7 @@ try:
     from gbgpu.gbgpu_utils import swap_ll_diff as swap_ll_diff_gpu
     from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
     from gbgpu.sharedmem import pyGalacticBinaryParams, pyDataPackage, pyBandPackage, pyMCMCInfo, SharedMemoryMakeNewMove_wrap
+    from gbgpu.sharedmem import pyPriorPackage, pyPeriodicPackage, pyStretchProposalPackage
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -107,6 +108,9 @@ class GBGPU(object):
             self.pyDataPackage = pyDataPackage
             self.pyBandPackage = pyBandPackage
             self.pyMCMCInfo = pyMCMCInfo
+            self.pyPriorPackage = pyPriorPackage
+            self.pyPeriodicPackage = pyPeriodicPackage
+            self.pyStretchProposalPackage = pyStretchProposalPackage
 
         else:
             self.xp = np
