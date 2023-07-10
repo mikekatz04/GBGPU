@@ -34,7 +34,7 @@ try:
     from gbgpu.gbgpu_utils import fill_global as fill_global_gpu
     from gbgpu.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
     from gbgpu.gbgpu_utils import swap_ll_diff as swap_ll_diff_gpu
-    from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
+    from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, psd_likelihood, compute_logpdf
     from gbgpu.sharedmem import pyGalacticBinaryParams, pyDataPackage, pyBandPackage, pyMCMCInfo, SharedMemoryMakeNewMove_wrap
     from gbgpu.sharedmem import pyPriorPackage, pyPeriodicPackage, pyStretchProposalPackage
 
@@ -101,7 +101,7 @@ class GBGPU(object):
             self.gpus = gpus
             self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
             self.psd_likelihood = psd_likelihood
-            self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
+            # self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
             self.SharedMemoryMakeNewMove_wrap = SharedMemoryMakeNewMove_wrap
             self.compute_logpdf = compute_logpdf
             self.pyGalacticBinaryParams = pyGalacticBinaryParams
