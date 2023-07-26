@@ -3049,7 +3049,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         SingleBand band_here = bands[band_i];
 
         this_band_inv_temp = mcmc_info->band_inv_temperatures_all[band_i];
-
+        
         for (int i = threadIdx.x; i < band_here.band_data_lengths; i += blockDim.x)
         {
             A_data[i] = data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i];
@@ -3144,6 +3144,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             curr_binary.lam = band_here.gb_params.lam[bin_i_gen];
             curr_binary.sinbeta = band_here.gb_params.sinbeta[bin_i_gen];
 
+            // if (threadIdx.x == 0) printf("curr: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i_gen, curr_binary.snr, curr_binary.f0_ms, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.cosinc, curr_binary.psi, curr_binary.lam, curr_binary.sinbeta);
+
             if (!mcmc_info->is_rj)
             {
                 stretch_info->get_proposal(&prop_binary, &factors, localState, curr_binary, *periodic_info);
@@ -3165,12 +3167,16 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             }
 
             // if ((prop_binary.N == 1024) && (threadIdx.x == 0)) printf("%d %d %d %e %e %e %e %e %e %e %e %e\n", blockIdx.x, prop_i, bin_i_gen, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
-                
+            // if (threadIdx.x == 0) printf("check 1\n");
+ 
             prior_prop = prior_info->get_prior_val(prop_binary);
             lp_diff = prior_prop - prior_curr;
             
+            // if (threadIdx.x == 0) printf("prop: %d %e %e %e %e %e %e %e %e %e %e %e %e\n", band_i, prior_prop, band_here.fmin_allow, band_here.fmax_allow, prop_binary.snr, prop_binary.f0_ms, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.cosinc, prop_binary.psi, prop_binary.lam, prop_binary.sinbeta);
+
             if ((prior_prop > -1e100) && (prop_binary.f0_ms / 1e3 >= band_here.fmin_allow) && (prop_binary.f0_ms / 1e3 <= band_here.fmax_allow))
             { 
+                
                 curr_binary.transform();
                 prop_binary.transform();
 
@@ -3473,6 +3479,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                 // determine detailed balance with tempering on the Likelihood term
                 lnpdiff = factors + (this_band_inv_temp * ll_diff) + lp_diff;
+                //if ((this_band_inv_temp != 0.0) && (threadIdx.x == 0)) printf("WHAT3: %d %e\n", band_i, this_band_inv_temp);
 
                 // accept or reject
                 accept = lnpdiff > random_val;
@@ -3489,10 +3496,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     // if ((band_here.data_index == 0) && (threadIdx.x == 0)) printf("NIXED %e %e %e %e\n", mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
                     accept = false;
                 }
-                else
-                {
+                // else
+                // {
                     //if ((this_band_inv_temp < 0.005) & (threadIdx.x == 0)) printf("KEPT  %e %e %e %e %e\n", this_band_inv_temp, mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
-                }
+                // }
             }
 
             // if ((mcmc_info->is_rj) && (amp_curr / amp_prop > 1e10) && (!accept) && (N == 1024) && (band_here.band_start_data_ind >= 740556))
@@ -3508,6 +3515,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             // if ((blockIdx.x == 0) && (threadIdx.x == 0))printf("%d %d %.12e %.12e %.12e %.12e %e %e %e %e %e %e\n", bin_i, accept, f0_prop, f0_curr, wave_remove[0].real(), wave_add[0].real(), ll_diff, this_band_inv_temp, lp_diff, factors, lnpdiff, random_val);
 
             // readout if it was accepted
+            // if (!(band_i == 123)) accept = false;
             if (accept)
             {
                 if (tid == 0)
@@ -3532,9 +3540,19 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     {
                         stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen] = (!stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen]);
                     }
+
+                    // if ((band_i == 123) && (threadIdx.x == 0)) printf("base: %d %d %d %d %e %e %e %e %e %e\n", band_i, band_here.data_index, band_here.update_data_index, mcmc_info->accepted_out[band_i], ll_diff, lp_diff, factors, random_val, mcmc_info->L_contribution[band_i], this_band_inv_temp);
+                    // if ((band_i == 123) && (threadIdx.x == 0)) printf("curr acc: %d %e %e %e %e %e %e %e %e %e\n", band_i, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+                    // if ((band_i == 123) && (threadIdx.x == 0)) printf("prop acc: %d %e %e %e %e %e %e %e %e %e\n", band_i, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
+
                 }
                 __syncthreads();
                 // change current Likelihood
+
+                if ((start_ind_remove - band_here.band_start_data_ind < 0) || (start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
+                {
+                    printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
+                }
 
                 for (int i = threadIdx.x;
                      i < band_here.gb_params.N;
@@ -3560,6 +3578,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     // if (i == 0) printf("remove: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n", bin_i, data->data_A[band_here.data_index * data->data_length + j].real(), data->data_A[band_here.data_index * data->data_length + j].imag(), data->data_E[band_here.data_index * data->data_length + j].real(), data->data_E[band_here.data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
                 }
                 __syncthreads();
+
+                if ((start_ind_add - band_here.band_start_data_ind < 0) || (start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
+                {
+                    printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
+                }
 
                 for (int i = threadIdx.x;
                      i < band_here.gb_params.N;
@@ -3608,15 +3631,38 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                 // adjust for rj
                 if (mcmc_info->is_rj)
-                {   
-                    rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen];
+                {
+                    // got to be the opposite becuase it is changed
+                    rj_is_there_already = !stretch_info->inds[band_here.band_start_bin_ind + bin_i];
+                    prop_binary = curr_binary;
+
                     if (!rj_is_there_already)
                     {
                         curr_binary.snr = 1e-20;
                     }
+                    else
+                    {
+                        prop_binary.snr = 1e-20;
+                    }
+                }
+                else
+                {
+                    prop_binary.snr = band_here.gb_params.snr[bin_i];
+                    prop_binary.f0_ms = band_here.gb_params.f0_ms[bin_i];
+                    prop_binary.fdot = band_here.gb_params.fdot0[bin_i];
+                    prop_binary.phi0 = band_here.gb_params.phi0[bin_i];
+                    prop_binary.cosinc = band_here.gb_params.cosinc[bin_i];
+                    prop_binary.psi = band_here.gb_params.psi[bin_i];
+                    prop_binary.lam = band_here.gb_params.lam[bin_i];
+                    prop_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
                 }
 
                 curr_binary.transform();
+                prop_binary.transform();
+
+                // if ((band_here.walker_ind == 10) && (band_i == 122) && (threadIdx.x == 0)) printf("base: %d %d %d %d\n", band_i, band_here.data_index, band_here.update_data_index, mcmc_info->accepted_out[band_i]);
+                // if ((band_here.walker_ind == 10) && (band_i == 122) && (threadIdx.x == 0)) printf("curr: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+                // if ((band_here.walker_ind == 10) && (band_i == 122) && (threadIdx.x == 0)) printf("prop: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
 
                 // if (threadIdx.x == 0)
                 //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
@@ -3627,6 +3673,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     &start_ind_remove,
                     curr_binary,
                     bin_i);
+                __syncthreads();
+                build_new_single_waveform<FFT>(
+                    wave_add,
+                    &start_ind_add,
+                    prop_binary,
+                    bin_i_gen);
                 __syncthreads();
 
                 // remove from residual with (+)
@@ -3641,19 +3693,21 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     }
                 }
                 __syncthreads();
-
-                // add new residual from shared (or global memory)
-                for (int i = threadIdx.x; i < band_here.band_data_lengths; i += blockDim.x)
+                // remove from residual with (+)
+                for (int i = threadIdx.x; i < band_here.gb_params.N; i += blockDim.x)
                 {
-                    j = band_here.band_start_data_ind + i;
+                    
+                    j = start_ind_add + i;
                     if ((j < data->data_length) && (j >= 0))
                     {
-                        data->data_A[band_here.update_data_index * data->data_length + j] -= A_data[i];
-                        data->data_E[band_here.update_data_index * data->data_length + j] -= E_data[i];
+                        data->data_A[band_here.update_data_index * data->data_length + j] -= A_add[i];
+                        data->data_E[band_here.update_data_index * data->data_length + j] -= E_add[i];
                     }
                 }
+                __syncthreads();
             }
             __syncthreads();
+            // add new residual from shared (or global memory)
         }
     }
     __syncthreads();
@@ -3694,7 +3748,7 @@ void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinar
         //     gb_params_all->snr[band_info->band_start_data_ind[band_i]]);
 
         band_here->setup(
-            band_i,
+            band_info->loc_index[band_i],
             band_info->data_index[band_i],
             band_info->noise_index[band_i],
             band_info->band_start_bin_ind[band_i],
@@ -3732,8 +3786,9 @@ void extract_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBin
         //     band_info->update_data_index[band_i],
         //     gb_params_all->snr[band_info->band_start_data_ind[band_i]]);
 
-        band_info->walker_ind[band_i] = band_here.walker_ind;
-        band_info->temp_ind[band_i] = band_here.temp_ind;
+        band_info->loc_index[band_i] = band_here.loc_index;
+        band_info->band_start_bin_ind[band_i] = band_here.band_start_bin_ind;
+        band_info->band_num_bins[band_i] = band_here.band_num_bins;
     }
 }
 
@@ -3908,6 +3963,7 @@ void make_new_move_wrap(InputInfo inputs)
 
     // std::cout << shared_memory_size << std::endl;
     // std::cout << "Success" <<  std::endl;
+
     CUDA_CHECK_AND_EXIT(cudaFree(params_curr_d));
     CUDA_CHECK_AND_EXIT(cudaFree(data_d));
     CUDA_CHECK_AND_EXIT(cudaFree(band_info_d));
@@ -4166,7 +4222,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
             ll = -1. / 2. * d_h_d_h_arr[0].real();
             __syncthreads();
             band_here_i->current_like = ll;
-            if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("check 2 %d %d %d %d %e\n", band_i, temp_i, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->current_like);
+            // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("check 2 %d %d %d %d %e\n", band_i, temp_i, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->current_like);
 
         }
         __syncthreads();
@@ -4286,14 +4342,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
             }
             __syncthreads();
             accept = paccept > random_val;
-            if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("check 3 %d %d %d %d %d %d %d %d %d %d \n %e %e %e %e %e %e %e %e %d\n\n", band_i, temp_i, band_here_i->loc_index, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->band_num_bins, band_here_i1->loc_index, band_here_i1->walker_ind, band_here_i1->temp_ind, band_here_i1->band_num_bins, bi, bi1, band_here_i->current_like, band_here_i->swapped_like, band_here_i1->current_like, band_here_i1->swapped_like, paccept, random_val, int(accept));
+            // if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("check 3 %d %d %d %d %d %d %d %d %d %d \n %e %e %e %e %e %e %e %e %d\n\n", band_i, temp_i, band_here_i->loc_index, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->band_num_bins, band_here_i1->loc_index, band_here_i1->walker_ind, band_here_i1->temp_ind, band_here_i1->band_num_bins, bi, bi1, band_here_i->current_like, band_here_i->swapped_like, band_here_i1->current_like, band_here_i1->swapped_like, paccept, random_val, int(accept));
              __syncthreads();
-            band_info->swaps_proposed[band_i] += 1;
+            band_info->swaps_proposed[band_i * (band_info->ntemps - 1) + temp_i - 1] += 1;
             if (accept)
             {
                 if (threadIdx.x == 0){
 
-                    band_info->swaps_accepted[band_i] += 1;
+                    band_info->swaps_accepted[band_i * (band_info->ntemps - 1) + temp_i - 1] += 1;
                     // switch the log like values
                     band_here_i->current_like = band_here_i1->swapped_like;
                     band_here_i1->current_like = band_here_i->swapped_like;
@@ -4321,19 +4377,19 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
             {
                 // update the cold chain information
                 // need to be careful not to overlap with other bands running simultaneous (every 3 or 4 or something)
-                for (int bin_i = 0; bin_i < band_here_i1->band_num_bins; bin_i += 1)
+                for (int bin_i = 0; bin_i < band_here_i->band_num_bins; bin_i += 1)
                 {
-                    current_binary_start_index = band_here_i1->band_start_bin_ind + bin_i;
+                    current_binary_start_index = band_here_i->band_start_bin_ind + bin_i;
                     // get the parameters to add and remove
                     
-                    curr_binary.snr = band_here_i1->gb_params.snr_orig[bin_i];
-                    curr_binary.f0_ms = band_here_i1->gb_params.f0_ms_orig[bin_i];
-                    curr_binary.fdot = band_here_i1->gb_params.fdot0_orig[bin_i];
-                    curr_binary.phi0 = band_here_i1->gb_params.phi0_orig[bin_i];
-                    curr_binary.cosinc = band_here_i1->gb_params.cosinc_orig[bin_i];
-                    curr_binary.psi = band_here_i1->gb_params.psi_orig[bin_i];
-                    curr_binary.lam = band_here_i1->gb_params.lam_orig[bin_i];
-                    curr_binary.sinbeta = band_here_i1->gb_params.sinbeta_orig[bin_i];
+                    curr_binary.snr = band_here_i->gb_params.snr[bin_i];
+                    curr_binary.f0_ms = band_here_i->gb_params.f0_ms[bin_i];
+                    curr_binary.fdot = band_here_i->gb_params.fdot0[bin_i];
+                    curr_binary.phi0 = band_here_i->gb_params.phi0[bin_i];
+                    curr_binary.cosinc = band_here_i->gb_params.cosinc[bin_i];
+                    curr_binary.psi = band_here_i->gb_params.psi[bin_i];
+                    curr_binary.lam = band_here_i->gb_params.lam[bin_i];
+                    curr_binary.sinbeta = band_here_i->gb_params.sinbeta[bin_i];
 
                     curr_binary.transform();
 
@@ -4349,14 +4405,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                     __syncthreads();
 
                     // remove from residual with (+)
-                    for (int i = threadIdx.x; i < band_here_i1->gb_params.N; i += blockDim.x)
+                    for (int i = threadIdx.x; i < band_here_i->gb_params.N; i += blockDim.x)
                     {
                         
                         j = start_ind + i;
                         if ((j < data->data_length) && (j >= 0))
                         {
-                            data->data_A[band_here_i1->update_data_index * data->data_length + j] += A[i];
-                            data->data_E[band_here_i1->update_data_index * data->data_length + j] += E[i];
+                            data->data_A[band_here_i->update_data_index * data->data_length + j] += A[i];
+                            data->data_E[band_here_i->update_data_index * data->data_length + j] += E[i];
                         }
                     }
                     __syncthreads();
@@ -4365,19 +4421,19 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                 
                 // update the cold chain information
                 // need to be careful not to overlap with other bands running simultaneous (every 3 or 4 or something)
-                for (int bin_i = 0; bin_i < band_here_i->band_num_bins; bin_i += 1)
+                for (int bin_i = 0; bin_i < band_here_i1->band_num_bins; bin_i += 1)
                 {
-                    current_binary_start_index = band_here_i->band_start_bin_ind + bin_i;
+                    current_binary_start_index = band_here_i1->band_start_bin_ind + bin_i;
                     // get the parameters to add and remove
                     
-                    curr_binary.snr = band_here_i->gb_params.snr_orig[bin_i];
-                    curr_binary.f0_ms = band_here_i->gb_params.f0_ms_orig[bin_i];
-                    curr_binary.fdot = band_here_i->gb_params.fdot0_orig[bin_i];
-                    curr_binary.phi0 = band_here_i->gb_params.phi0_orig[bin_i];
-                    curr_binary.cosinc = band_here_i->gb_params.cosinc_orig[bin_i];
-                    curr_binary.psi = band_here_i->gb_params.psi_orig[bin_i];
-                    curr_binary.lam = band_here_i->gb_params.lam_orig[bin_i];
-                    curr_binary.sinbeta = band_here_i->gb_params.sinbeta_orig[bin_i];
+                    curr_binary.snr = band_here_i1->gb_params.snr[bin_i];
+                    curr_binary.f0_ms = band_here_i1->gb_params.f0_ms[bin_i];
+                    curr_binary.fdot = band_here_i1->gb_params.fdot0[bin_i];
+                    curr_binary.phi0 = band_here_i1->gb_params.phi0[bin_i];
+                    curr_binary.cosinc = band_here_i1->gb_params.cosinc[bin_i];
+                    curr_binary.psi = band_here_i1->gb_params.psi[bin_i];
+                    curr_binary.lam = band_here_i1->gb_params.lam[bin_i];
+                    curr_binary.sinbeta = band_here_i1->gb_params.sinbeta[bin_i];
 
                     curr_binary.transform();
 
@@ -4393,14 +4449,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                     __syncthreads();
 
                     // add to residual with (-)
-                    for (int i = threadIdx.x; i < band_here_i->gb_params.N; i += blockDim.x)
+                    for (int i = threadIdx.x; i < band_here_i1->gb_params.N; i += blockDim.x)
                     {
                         
                         j = start_ind + i;
                         if ((j < data->data_length) && (j >= 0))
                         {
-                            data->data_A[band_here_i->update_data_index * data->data_length + j] -= A[i];
-                            data->data_E[band_here_i->update_data_index * data->data_length + j] -= E[i];
+                            data->data_A[band_here_i1->update_data_index * data->data_length + j] -= A[i];
+                            data->data_E[band_here_i1->update_data_index * data->data_length + j] -= E[i];
                         }
                     }
                     __syncthreads();
@@ -4578,6 +4634,12 @@ void make_tempering_swap_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
     std::cout << "after real kernel " << 32 << std::endl; 
+
+    extract_single_bands<<<num_blocks_band_setup, 32>>>(
+        bands, band_info_d, params_curr_d, mcmc_info_d
+    );
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
     
     // if (inputs.do_synchronize)
     // {
@@ -5137,6 +5199,7 @@ DataPackage::DataPackage(
 }
 
 BandPackage::BandPackage(
+    int *loc_index_,
     int *data_index_,
     int *noise_index_,
     int *band_start_bin_ind_,
@@ -5156,6 +5219,7 @@ BandPackage::BandPackage(
     int *swaps_accepted_
 )
 {
+    loc_index = loc_index_;
     data_index = data_index_;
     noise_index = noise_index_;
     band_start_bin_ind = band_start_bin_ind_;
@@ -5256,39 +5320,51 @@ CUDA_HOSTDEV double PriorPackage::get_snr_prior(const double rho)
     else {return -INFINITY;}
 }
 
+CUDA_HOSTDEV double PriorPackage::uniform_dist_logpdf(const double x, const double x_min, const double x_max)
+{
+    if ((x >= x_min) && (x <= x_max))
+    {
+        return log(1.0 / (x_max - x_min));
+    }
+    else
+    {
+        return -INFINITY;
+    }
+}
+
 CUDA_HOSTDEV double PriorPackage::get_f0_prior(const double f0)
 {
-    return log(1.0 / (f0_max - f0_min));
+    return uniform_dist_logpdf(f0, f0_min, f0_max);
 }
 
 CUDA_HOSTDEV double PriorPackage::get_fdot_prior(const double fdot)
 {
-    return log(1.0 / (fdot_max - fdot_min));
+    return uniform_dist_logpdf(fdot, fdot_min, fdot_max);
 }
 
 CUDA_HOSTDEV double PriorPackage::get_phi0_prior(const double phi0)
 {
-    return log(1.0 / (phi0_max - phi0_min));
+    return uniform_dist_logpdf(phi0, phi0_min, phi0_max);
 }
 
 CUDA_HOSTDEV double PriorPackage::get_cosinc_prior(const double cosinc)
 {
-    return log(1.0 / (cosinc_max - cosinc_min));
+    return uniform_dist_logpdf(cosinc, cosinc_min, cosinc_max);
 }
 
 CUDA_HOSTDEV double PriorPackage::get_psi_prior(const double psi)
 {
-    return log(1.0 / (psi_max - psi_min));
+    return uniform_dist_logpdf(psi, psi_min, psi_max);
 }
 
 CUDA_HOSTDEV double PriorPackage::get_lam_prior(const double lam)
 {
-    return log(1.0 / (lam_max - lam_min));
+    return uniform_dist_logpdf(lam, lam_min, lam_max);
 }
 
 CUDA_HOSTDEV double PriorPackage::get_sinbeta_prior(const double sinbeta)
 {
-    return log(1.0 / (sinbeta_max - sinbeta_min));
+    return uniform_dist_logpdf(sinbeta, sinbeta_min, sinbeta_max);
 }
 
 PeriodicPackage::PeriodicPackage(
@@ -5301,8 +5377,12 @@ PeriodicPackage::PeriodicPackage(
 }
 
 CUDA_HOSTDEV
-void wrap_val(double *x, double x_period)
+void wrap_val(double *x, const double x_period)
 {
+    while(*x < 0.0)
+    {
+        *x = *x + x_period;
+    }
     *x = fmod(*x, x_period);
 }
 
@@ -5328,6 +5408,7 @@ int eval(double* f_vals, int i, double val, int imin, int imax)
     }
 }
 
+// TODO: make this faster by using all threads?
 __device__ __host__
 int binary_search(double* f_vals, double val, int imin, int imax)
 {
@@ -5390,7 +5471,22 @@ void StretchProposalPackage::dealloc()
 CUDA_DEV
 void StretchProposalPackage::find_friends(SingleGalacticBinary *gb_out, double f_val_in, curandState localState)
 {
-    int ind_friend = binary_search(f0_friends, f_val_in, 0, num_friends_init - 1) - 1;
+
+    int ind_friend;
+    
+    // lower than minimum
+    if (f_val_in <= f0_friends[0])
+    {
+        ind_friend = 0;
+    }
+    else if (f_val_in >= f0_friends[num_friends_init - 1])
+    {
+        ind_friend = num_friends_init - 1;
+    }
+    else
+    {
+        ind_friend = binary_search(f0_friends, f_val_in, 0, num_friends_init - 1) - 1;
+    }
 
     int random_ind_change = (((unsigned int)(ceil(curand_uniform_double(&localState) * nfriends))) - 1) - int(nfriends / 2);
 
@@ -5402,6 +5498,12 @@ void StretchProposalPackage::find_friends(SingleGalacticBinary *gb_out, double f
     {
         ind_friend = num_friends_init - 1 - int(nfriends / 2) + random_ind_change;
     }
+    else
+    {
+        ind_friend += random_ind_change;
+    }
+    
+    // check boundaries
     if (ind_friend > num_friends_init - 1) ind_friend = num_friends_init - 1;
     if (ind_friend < 0) ind_friend = 0;
 
@@ -5427,8 +5529,6 @@ void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double 
     
     find_friends(&gb_friend, gb_in.f0_ms, localState);
 
-    // if (threadIdx.x == 0) printf("CHECK: %.12e %.12e\n", gb_in.f0_ms, gb_friend.f0_ms);
-
     direct_change(&(gb_prop->snr), gb_in.snr, gb_friend.snr, zz);
     direct_change(&(gb_prop->f0_ms), gb_in.f0_ms, gb_friend.f0_ms, zz);
     direct_change(&(gb_prop->fdot), gb_in.fdot, gb_friend.fdot, zz);
@@ -5438,6 +5538,8 @@ void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double 
     wrap_change(&(gb_prop->lam), gb_in.lam, gb_friend.lam, zz, periodic_info.lam_period);
     direct_change(&(gb_prop->sinbeta), gb_in.sinbeta, gb_friend.sinbeta, zz);
     *factors = (ndim - 1.0) * log(zz);
+    // if ((blockIdx.x == 122) && (threadIdx.x == 0)) printf("CHECK: %.12e %.12e\n", zz, *factors);
+
 }
 
 CUDA_HOSTDEV 

@@ -184,6 +184,7 @@ class DataPackage{
 
 class BandPackage{
     public:
+        int *loc_index;
         int *data_index;
         int *noise_index;
         int *band_start_bin_ind;
@@ -203,6 +204,7 @@ class BandPackage{
         int *swaps_accepted;
 
         BandPackage(
+            int *loc_index,
             int *data_index,
             int *noise_index,
             int *band_start_bin_ind,
@@ -269,6 +271,7 @@ class PriorPackage{
         CUDA_HOSTDEV double get_psi_prior(const double psi);
         CUDA_HOSTDEV double get_lam_prior(const double lam);
         CUDA_HOSTDEV double get_sinbeta_prior(const double sinbeta);
+        CUDA_HOSTDEV double uniform_dist_logpdf(const double x, const double x_min, const double x_max);
 };
 
 class PeriodicPackage{
