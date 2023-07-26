@@ -223,6 +223,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
     
     cdef cppclass BandPackageWrap "BandPackage":
         BandPackageWrap(
+            int *loc_index,
             int *data_index,
             int *noise_index,
             int *band_start_bin_ind,
@@ -431,6 +432,7 @@ cdef class pyBandPackage:
         **kwargs
     ):
         (
+            loc_index,
             data_index,
             noise_index,
             band_start_bin_ind,
@@ -450,6 +452,7 @@ cdef class pyBandPackage:
             swaps_accepted
         ), tkwargs = wrapper(*args, **kwargs)
 
+        cdef size_t loc_index_in = loc_index
         cdef size_t data_index_in = data_index
         cdef size_t noise_index_in = noise_index
         cdef size_t band_start_bin_ind_in = band_start_bin_ind
@@ -466,6 +469,7 @@ cdef class pyBandPackage:
         cdef size_t swaps_accepted_in = swaps_accepted
 
         self.g = new BandPackageWrap(
+            <int *>loc_index_in,
             <int *>data_index_in,
             <int *>noise_index_in,
             <int *>band_start_bin_ind_in,
