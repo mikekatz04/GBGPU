@@ -3549,10 +3549,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 __syncthreads();
                 // change current Likelihood
 
-                if ((start_ind_remove - band_here.band_start_data_ind < 0) || (start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
-                {
-                    printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
-                }
+                // if ((start_ind_remove - band_here.band_start_data_ind < 0) || (start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
+                // {
+                //     printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
+                // }
 
                 for (int i = threadIdx.x;
                      i < band_here.gb_params.N;
@@ -3579,10 +3579,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 }
                 __syncthreads();
 
-                if ((start_ind_add - band_here.band_start_data_ind < 0) || (start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
-                {
-                    printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
-                }
+                // if ((start_ind_add - band_here.band_start_data_ind < 0) || (start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
+                // {
+                //     printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
+                // }
 
                 for (int i = threadIdx.x;
                      i < band_here.gb_params.N;
@@ -3769,7 +3769,7 @@ void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinar
 }
 
 __global__
-void extract_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinaryParams *gb_params_all, MCMCInfo *mcmc_info)
+void extract_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinaryParams *gb_params_all, MCMCInfo *mcmc_info, bool is_tempering_swap)
 {
     for (int band_i = threadIdx.x + blockIdx.x * blockDim.x; band_i < band_info->num_bands; band_i += blockDim.x * gridDim.x)
     {
@@ -3789,6 +3789,11 @@ void extract_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBin
         band_info->loc_index[band_i] = band_here.loc_index;
         band_info->band_start_bin_ind[band_i] = band_here.band_start_bin_ind;
         band_info->band_num_bins[band_i] = band_here.band_num_bins;
+
+        if (is_tempering_swap)
+        {
+            mcmc_info->L_contribution[band_i] = band_here.current_like - band_here.start_like;
+        }
     }
 }
 
@@ -4069,7 +4074,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
     SingleBand *bands,
     int num_swap_setups,
     bool use_global_memory,
-    cmplx *global_memory_buffer
+    cmplx *global_memory_buffer,
+    int min_val,
+    int max_val
 )
 {
     using complex_type = cmplx;
@@ -4222,6 +4229,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
             ll = -1. / 2. * d_h_d_h_arr[0].real();
             __syncthreads();
             band_here_i->current_like = ll;
+            band_here_i->start_like = ll;
             // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("check 2 %d %d %d %d %e\n", band_i, temp_i, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->current_like);
 
         }
@@ -4342,9 +4350,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
             }
             __syncthreads();
             accept = paccept > random_val;
-            // if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("check 3 %d %d %d %d %d %d %d %d %d %d \n %e %e %e %e %e %e %e %e %d\n\n", band_i, temp_i, band_here_i->loc_index, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->band_num_bins, band_here_i1->loc_index, band_here_i1->walker_ind, band_here_i1->temp_ind, band_here_i1->band_num_bins, bi, bi1, band_here_i->current_like, band_here_i->swapped_like, band_here_i1->current_like, band_here_i1->swapped_like, paccept, random_val, int(accept));
+            // if ((band_i == 855) && (threadIdx.x == 0)) printf("check 3 %d %d %d %d %d %d %d %d %d %d \n %e %e %e %e %e %e %e %e %d\n\n", band_i, temp_i, band_here_i->loc_index, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->band_num_bins, band_here_i1->loc_index, band_here_i1->walker_ind, band_here_i1->temp_ind, band_here_i1->band_num_bins, bi, bi1, band_here_i->current_like, band_here_i->swapped_like, band_here_i1->current_like, band_here_i1->swapped_like, paccept, random_val, int(accept));
              __syncthreads();
             band_info->swaps_proposed[band_i * (band_info->ntemps - 1) + temp_i - 1] += 1;
+            if ((band_i < min_val) || (band_i > max_val)) accept = false;
             if (accept)
             {
                 if (threadIdx.x == 0){
@@ -4411,8 +4420,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                         j = start_ind + i;
                         if ((j < data->data_length) && (j >= 0))
                         {
-                            data->data_A[band_here_i->update_data_index * data->data_length + j] += A[i];
-                            data->data_E[band_here_i->update_data_index * data->data_length + j] += E[i];
+                            // NEEDS to be i1->update_data_index
+                            data->data_A[band_here_i1->update_data_index * data->data_length + j] += A[i];
+                            data->data_E[band_here_i1->update_data_index * data->data_length + j] += E[i];
                         }
                     }
                     __syncthreads();
@@ -4627,7 +4637,9 @@ void make_tempering_swap_wrap(InputInfo inputs)
         bands,
         inputs.num_swap_setups,
         use_global_memory,
-        global_memory_buffer
+        global_memory_buffer,
+        inputs.min_val,
+        inputs.max_val
     );
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -4636,7 +4648,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     std::cout << "after real kernel " << 32 << std::endl; 
 
     extract_single_bands<<<num_blocks_band_setup, 32>>>(
-        bands, band_info_d, params_curr_d, mcmc_info_d
+        bands, band_info_d, params_curr_d, mcmc_info_d, true
     );
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
@@ -4685,7 +4697,9 @@ void SharedMemoryMakeTemperingMove(
     PeriodicPackage *periodic_info,
     int num_swap_setups,
     int device,
-    bool do_synchronize
+    bool do_synchronize,
+    int min_val,
+    int max_val
 )
 {
 
@@ -4701,6 +4715,8 @@ void SharedMemoryMakeTemperingMove(
     inputs.num_swap_setups = num_swap_setups;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
+    inputs.min_val = min_val;
+    inputs.max_val = max_val;
 
     switch (params_curr->N)
     {

@@ -129,6 +129,7 @@ class SingleBand{
         double fmin_allow;
         double fmax_allow;
         int update_data_index;
+        double start_like;
         double current_like;
         double swapped_like;
         double inv_temp;
@@ -419,6 +420,8 @@ typedef struct InputInfoTag{
     StretchProposalPackage *stretch_info;
     PeriodicPackage *periodic_info;
     int num_swap_setups;
+    int min_val;
+    int max_val;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -563,7 +566,9 @@ void SharedMemoryMakeTemperingMove(
     PeriodicPackage *periodic_info,
     int num_swap_setups,
     int device,
-    bool do_synchronize
+    bool do_synchronize,
+    int min_val,
+    int max_val
 );
 
 void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
