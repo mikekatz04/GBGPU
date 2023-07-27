@@ -168,7 +168,9 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         PeriodicPackageWrap *periodic_info,
         int num_swap_setups,
         int device,
-        bool do_synchronize
+        bool do_synchronize,
+        int min_val,
+        int max_val
     ) except +
 
     void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
@@ -1051,7 +1053,9 @@ def SharedMemoryMakeTemperingMove_wrap(
         periodic_info,
         num_swap_setups,
         device,
-        do_synchronize
+        do_synchronize,
+        min_val,
+        max_val
     ):
 
     cdef size_t params_curr_in = params_curr.g_in()
@@ -1073,6 +1077,8 @@ def SharedMemoryMakeTemperingMove_wrap(
         num_swap_setups,
         device,
         do_synchronize,
+        min_val,
+        max_val
     )
 
 
