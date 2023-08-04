@@ -215,6 +215,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         DataPackageWrap(
             cmplx* data_A,
             cmplx* data_E,
+            cmplx* base_data_A,
+            cmplx* base_data_E,
             double* psd_A,
             double* psd_E,
             double df,
@@ -232,6 +234,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             int *band_num_bins,
             int *band_start_data_ind,
             int *band_data_lengths,
+            int *band_interest_start_data_ind,
+            int *band_interest_data_lengths,
             int num_bands,
             int max_data_store_size,
             double *fmin_allow,
@@ -281,6 +285,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         );
 
         void dealloc();
+
+    void check_prior_vals_wrap(double* prior_out, PriorPackageWrap *prior_info, GalacticBinaryParamsWrap *gb_params, int num_func);
 
 
 cdef class pyStretchProposalPackage:
@@ -441,6 +447,8 @@ cdef class pyBandPackage:
             band_num_bins,
             band_start_data_ind,
             band_data_lengths,
+            band_interest_start_data_ind,
+            band_interest_data_lengths,
             num_bands,
             max_data_store_size,
             fmin_allow,
@@ -461,6 +469,8 @@ cdef class pyBandPackage:
         cdef size_t band_num_bins_in = band_num_bins
         cdef size_t band_start_data_ind_in = band_start_data_ind
         cdef size_t band_data_lengths_in = band_data_lengths
+        cdef size_t band_interest_start_data_ind_in = band_interest_start_data_ind
+        cdef size_t band_interest_data_lengths_in = band_interest_data_lengths
         cdef size_t fmin_allow_in = fmin_allow
         cdef size_t fmax_allow_in = fmax_allow
         cdef size_t update_data_index_in = update_data_index
@@ -478,6 +488,8 @@ cdef class pyBandPackage:
             <int *>band_num_bins_in,
             <int *>band_start_data_ind_in,
             <int *>band_data_lengths_in,
+            <int *>band_interest_start_data_ind_in,
+            <int *>band_interest_data_lengths_in,
             num_bands,
             max_data_store_size,
             <double *>fmin_allow_in,
@@ -509,6 +521,8 @@ cdef class pyDataPackage:
         (
             data_A,
             data_E,
+            base_data_A,
+            base_data_E,
             psd_A,
             psd_E,
             df,
@@ -519,12 +533,16 @@ cdef class pyDataPackage:
 
         cdef size_t data_A_in = data_A
         cdef size_t data_E_in = data_E
+        cdef size_t base_data_A_in = base_data_A
+        cdef size_t base_data_E_in = base_data_E
         cdef size_t psd_A_in = psd_A
         cdef size_t psd_E_in = psd_E
 
         self.g = new DataPackageWrap(
             <cmplx*> data_A_in,
             <cmplx*> data_E_in,
+            <cmplx*> base_data_A_in,
+            <cmplx*> base_data_E_in,
             <double*> psd_A_in,
             <double*> psd_E_in,
             df,
@@ -1080,6 +1098,14 @@ def SharedMemoryMakeTemperingMove_wrap(
         min_val,
         max_val
     )
+
+@pointer_adjust
+def check_prior_vals(prior_vals, prior_info, gb_params, num_func):
+    cdef size_t prior_vals_in = prior_vals
+    cdef size_t gb_params_in = gb_params.g_in()
+    cdef size_t prior_info_in = prior_info.g_in()
+
+    check_prior_vals_wrap(<double*> prior_vals_in, <PriorPackageWrap *>prior_info_in, <GalacticBinaryParamsWrap *>gb_params_in, num_func)
 
 
 @pointer_adjust
