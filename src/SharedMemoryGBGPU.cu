@@ -3062,13 +3062,13 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             E_data[i] = data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i];
             // if (blockIdx.x == gridDim.x - 1) printf("%d %e, %e\n", i, A_data[i].real(), E_data[i].imag());
 
-            if ((i + band_here.band_start_data_ind < band_here.band_interest_start_data_ind - int((float)band_here.gb_params.N / 2.0)) || (i + band_here.band_start_data_ind >= band_here.band_interest_start_data_ind + band_here.band_interest_data_lengths + int((float)band_here.gb_params.N / 2.0)))
-            {
-                A_data[i] += (data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i] - data->base_data_A[tmp_data_index * data->data_length + band_here.band_start_data_ind + i]);
-                E_data[i] += (data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i] - data->base_data_E[tmp_data_index * data->data_length + band_here.band_start_data_ind + i]);
-                if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM2: %d %d %.12e %d %.12e %d %.12e %.12e \n", i, band_here.data_index * data->data_length + band_here.band_start_data_ind + i, data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i].real(), band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i, data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i].real(), tmp_data_index * data->data_length + band_here.band_start_data_ind + i, data->base_data_A[tmp_data_index * data->data_length + band_here.band_start_data_ind + i].real(), A_data[i].real());
+            // if ((i + band_here.band_start_data_ind < band_here.band_interest_start_data_ind - int((float)band_here.gb_params.N / 2.0) - 1) || (i + band_here.band_start_data_ind >= band_here.band_interest_start_data_ind + band_here.band_interest_data_lengths + int((float)band_here.gb_params.N / 2.0) + 2))
+            // {
+            //     A_data[i] += (data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i] - data->base_data_A[tmp_data_index * data->data_length + band_here.band_start_data_ind + i]);
+            //     E_data[i] += (data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i] - data->base_data_E[tmp_data_index * data->data_length + band_here.band_start_data_ind + i]);
+            //     // if ((band_here.band_start_data_ind == 3591) && (i % 25 == 0)) printf("HMMM2: %d %d %.12e %d %.12e %d %.12e %.12e \n", i, band_here.data_index * data->data_length + band_here.band_start_data_ind + i, data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i].real(), band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i, data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i].real(), tmp_data_index * data->data_length + band_here.band_start_data_ind + i, data->base_data_A[tmp_data_index * data->data_length + band_here.band_start_data_ind + i].real(), A_data[i].real());
                 
-            }
+            // }
             
         }
         __syncthreads();
@@ -3110,7 +3110,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 bin_i);
             __syncthreads();
 
-            if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e \n", bin_i, start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
+            //if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e \n", bin_i, start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
 
             for (int i = threadIdx.x; i < band_here.gb_params.N; i += blockDim.x)
             {
@@ -3127,22 +3127,22 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 }
             }
             __syncthreads();
-            if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM27: %d %.12e %.12e \n", 100, A_data[100].real(), A_data[100].imag());
+            // if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM27: %d %.12e %.12e \n", 100, A_data[100].real(), A_data[100].imag());
                 
         }
         __syncthreads();
-        double like_share_before = 0.0;
-        if (threadIdx.x == 0)
-        {
-            for (int i = 0; i < band_here.band_data_lengths; i += 1)
-            {
-                if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM3: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
+        // double like_share_before = 0.0;
+        // if (threadIdx.x == 0)
+        // {
+        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+        //     {
+        //         // if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM3: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
                 
-                like_share_before += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-                like_share_before += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-            }
-        }
-        __syncthreads();
+        //         like_share_before += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+        //         like_share_before += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+        //     }
+        // }
+        // __syncthreads();
 
         for (int prop_i = 0; prop_i < stretch_info->num_proposals * band_here.band_num_bins; prop_i += 1)
         {
@@ -3693,7 +3693,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 // if ((threadIdx.x == 0)) printf("curr acc: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i_gen, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
                 // if ((threadIdx.x == 0)) printf("prop acc: %d %d %e %e %e %e %e %e %e %e %e\n\n", band_i, bin_i_gen, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
 
-                if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e %d %.12e %.12e  %.12e %.12e \n", bin_i_gen, start_ind_add, prop_binary.f0_ms, A_add[0].real(), A_add[1].real(), A_add[3].real(), start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
+                // if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e %d %.12e %.12e  %.12e %.12e \n", bin_i_gen, start_ind_add, prop_binary.f0_ms, A_add[0].real(), A_add[1].real(), A_add[3].real(), start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
 
                 // if ((start_ind_remove - band_here.band_start_data_ind < 0) || (start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
                 // {
@@ -3787,31 +3787,31 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     }
                 }
                 __syncthreads();
-                if (threadIdx.x == 0)
-                {
-                    double like_share_middle = 0.0;
-                    for (int i = 0; i < band_here.band_data_lengths; i += 1)
-                    {
-                        if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM4: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
-                        like_share_middle += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-                        like_share_middle += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-                    }
+                // if (threadIdx.x == 0)
+                // {
+                //     double like_share_middle = 0.0;
+                //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+                //     {
+                //         // if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM4: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
+                //         like_share_middle += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                //         like_share_middle += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                //     }
 
-                    // printf("start ind: %d\n A: \n", start_ind_remove);
-                    // for (int i = 0; i < band_here.gb_params.N; i += 1)
-                    // {
-                    //     printf("%.16e + 1j * %.16e, ", A_remove[i].real(), A_remove[i].imag());
-                    // }
-                    // printf("\n\nstart ind: %d\n E: \n", start_ind_remove);
-                    // for (int i = 0; i < band_here.gb_params.N; i += 1)
-                    // {
-                    //     printf("%.16e + 1j * %.16e, ", E_remove[i].real(), E_remove[i].imag());
-                    // }
-                    // printf("\n\n\n");
+                //     // printf("start ind: %d\n A: \n", start_ind_remove);
+                //     // for (int i = 0; i < band_here.gb_params.N; i += 1)
+                //     // {
+                //     //     printf("%.16e + 1j * %.16e, ", A_remove[i].real(), A_remove[i].imag());
+                //     // }
+                //     // printf("\n\nstart ind: %d\n E: \n", start_ind_remove);
+                //     // for (int i = 0; i < band_here.gb_params.N; i += 1)
+                //     // {
+                //     //     printf("%.16e + 1j * %.16e, ", E_remove[i].real(), E_remove[i].imag());
+                //     // }
+                //     // printf("\n\n\n");
                     
-                    printf("middle: %d %e %e %e %e %e %.16e %.16e %.16e %.16e %.16e \n", band_i, like_share_before, like_share_middle, like_share_middle - like_share_before, mcmc_info->L_contribution[band_i].real(), like_share_middle - like_share_before - mcmc_info->L_contribution[band_i].real(), d_h_remove_arr[0].real(), d_h_add_arr[0].real(), add_remove_arr[0].real(), add_add_arr[0].real(), remove_remove_arr[0].real());
+                //     //printf("middle: %d %e %e %e %e %e %.16e %.16e %.16e %.16e %.16e \n", band_i, like_share_before, like_share_middle, like_share_middle - like_share_before, mcmc_info->L_contribution[band_i].real(), like_share_middle - like_share_before - mcmc_info->L_contribution[band_i].real(), d_h_remove_arr[0].real(), d_h_add_arr[0].real(), add_remove_arr[0].real(), add_add_arr[0].real(), remove_remove_arr[0].real());
 
-                }
+                // }
             }
             __syncthreads();
         }
@@ -3863,7 +3863,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 prop_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
                 //}
 
-                if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM25: %d %d %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms);
+                // if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM25: %d %d %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms);
 
 
                 curr_binary.transform();
@@ -3886,7 +3886,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     bin_i_gen);
                 __syncthreads();
 
-                if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e %d %.12e %.12e  %.12e %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms, A_add[0].real(), A_add[1].real(), A_add[3].real(), start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
+                // if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e %d %.12e %.12e  %.12e %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms, A_add[0].real(), A_add[1].real(), A_add[3].real(), start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
 
                 // if ((threadIdx.x == 0)) printf("base up: %d %d %d %d %d %d\n", band_i, band_here.data_index, band_here.update_data_index, mcmc_info->accepted_out[band_i], start_ind_add, start_ind_remove);
                 // if ((threadIdx.x == 0)) printf("curr up: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
@@ -3930,25 +3930,26 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             // add new residual from shared (or global memory)
         }
         __syncthreads();
-        double like_share_after = 0.0;
-        // double like_all_check = 0.0;
-        if ((threadIdx.x == 0) && (3811 == band_here.band_start_data_ind))
-        {
+        // double like_share_after = 0.0;
+        // // double like_all_check = 0.0;
+        // if ((threadIdx.x == 0))
+        // {
                
-            for (int i = 0; i < band_here.band_data_lengths; i += 1)
-            {
-                if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM5: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
-                // printf("%.16e + 1j * %.16e,", A_data[i].real(), A_data[i].imag());
-                like_share_after += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-                like_share_after += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+        //     {
+        //         // printf("%.16e + 1j * %.16e,", A_data[i].real(), A_data[i].imag());
+        //         like_share_after += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+        //         like_share_after += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
 
-                /// like_all_check += (-1./2. * 4 * df * (data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i]) * gcmplx::conj((data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i])) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-                // like_all_check += (-1./2. * 4 * df * (data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i]) * gcmplx::conj((data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i])) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
-            }
-            printf("\nYAYAYAYAY: %d %e %.12e %e %e %e \n", band_i, like_share_before, like_share_after, like_share_after - like_share_before, mcmc_info->L_contribution[band_i].real(), like_share_after - like_share_before - mcmc_info->L_contribution[band_i].real());
-            // mcmc_info->L_contribution[band_i] = like_share_after - like_share_before;
-        }
-        __syncthreads();
+        //         // if ((band_here.band_start_data_ind == 3951)) printf("HMMM5: %d %.12e %.12e %.12e %.12e %.12e  \n", i, A_data[i].real(), E_data[i].real(), data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i], data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i], like_share_after);
+                
+        //         /// like_all_check += (-1./2. * 4 * df * (data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i]) * gcmplx::conj((data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i])) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+        //         // like_all_check += (-1./2. * 4 * df * (data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i]) * gcmplx::conj((data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i])) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+        //     }
+        //     // printf("\nYAYAYAYAY: %d %d %d %e %.12e %e %e %e \n", band_i, band_here.band_start_data_ind, band_here.band_data_lengths, like_share_before, like_share_after, like_share_after - like_share_before, mcmc_info->L_contribution[band_i].real(), like_share_after - like_share_before - mcmc_info->L_contribution[band_i].real());
+        //     // mcmc_info->L_contribution[band_i] = like_share_after - like_share_before;
+        // }
+        // __syncthreads();
     }
     __syncthreads();
 
@@ -4180,7 +4181,7 @@ void make_new_move_wrap(InputInfo inputs)
     
     // if (inputs.mcmc_info->is_rj) num_blocks_run = 1;
     //  Invokes kernel with FFT::block_dim threads in CUDA block
-    make_new_move<FFT><<<1, FFT::block_dim, shared_memory_size_mine>>>(
+    make_new_move<FFT><<<num_blocks_run, FFT::block_dim, shared_memory_size_mine>>>(
         data_d,
         band_info_d,
         params_curr_d,
