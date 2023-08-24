@@ -3082,7 +3082,6 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             
         }
         __syncthreads();
-
         for (int bin_i = 0; bin_i < band_here.band_num_bins; bin_i += 1)
         {
             current_binary_start_index = band_here.band_start_bin_ind + bin_i;
@@ -3141,6 +3140,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 
         }
         __syncthreads();
+
+        // if (!mcmc_info.is_rj) continue;
         // double like_share_before = 0.0;
         // if (threadIdx.x == 0)
         // {
@@ -3940,32 +3941,32 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             // add new residual from shared (or global memory)
         }
         __syncthreads();
-        double like_share_after = 0.0;
-        double like_all_check = 0.0;
-        if ((threadIdx.x == 0) && (this_band_inv_temp == 1.0))
-        {
+        // double like_share_after = 0.0;
+        // double like_all_check = 0.0;
+        // if ((threadIdx.x == 0) && (this_band_inv_temp == 1.0))
+        // {
                
-            for (int i = 0; i < band_here.band_data_lengths; i += 1)
-            {
-                if ((i < (band_here.band_interest_start_data_ind - band_here.band_start_data_ind)) || (i > (band_here.band_interest_start_data_ind - band_here.band_start_data_ind + band_here.band_interest_data_lengths))) continue;
-                // printf("%.16e + 1j * %.16e,", A_data[i].real(), A_data[i].imag());
-                like_share_after += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data.psd_A[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
-                like_share_after += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data.psd_E[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
+        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+        //     {
+        //         if ((i < (band_here.band_interest_start_data_ind - band_here.band_start_data_ind)) || (i > (band_here.band_interest_start_data_ind - band_here.band_start_data_ind + band_here.band_interest_data_lengths))) continue;
+        //         // printf("%.16e + 1j * %.16e,", A_data[i].real(), A_data[i].imag());
+        //         like_share_after += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data.psd_A[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
+        //         like_share_after += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data.psd_E[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
 
-                int base_ind; 
+        //         int base_ind; 
 
-                if (band_here.data_index > band_here.update_data_index) base_ind = band_here.update_data_index;
-                else base_ind = band_here.data_index;
-                cmplx tmp_A = data.data_A[band_here.data_index * data.data_length + band_here.band_start_data_ind + i] + data.data_A[band_here.update_data_index * data.data_length + band_here.band_start_data_ind + i] - data.base_data_A[base_ind * data.data_length + band_here.band_start_data_ind + i];
-                cmplx tmp_E = data.data_E[band_here.data_index * data.data_length + band_here.band_start_data_ind + i] + data.data_E[band_here.update_data_index * data.data_length + band_here.band_start_data_ind + i] - data.base_data_E[base_ind * data.data_length + band_here.band_start_data_ind + i];
-                like_all_check += (-1./2. * 4 * df * tmp_A * gcmplx::conj(tmp_A) / data.psd_A[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
-                like_all_check += (-1./2. * 4 * df * tmp_E * gcmplx::conj(tmp_E) / data.psd_E[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
-                // if ((band_i)) printf("HMMM5: %d %.12e %.12e %.12e %.12e %.12e  \n", i, A_data[i].real(), E_data[i].real(), tmp_A.real(), tmp_E.real(), like_all_check, like_share_after);
+        //         if (band_here.data_index > band_here.update_data_index) base_ind = band_here.update_data_index;
+        //         else base_ind = band_here.data_index;
+        //         cmplx tmp_A = data.data_A[band_here.data_index * data.data_length + band_here.band_start_data_ind + i] + data.data_A[band_here.update_data_index * data.data_length + band_here.band_start_data_ind + i] - data.base_data_A[base_ind * data.data_length + band_here.band_start_data_ind + i];
+        //         cmplx tmp_E = data.data_E[band_here.data_index * data.data_length + band_here.band_start_data_ind + i] + data.data_E[band_here.update_data_index * data.data_length + band_here.band_start_data_ind + i] - data.base_data_E[base_ind * data.data_length + band_here.band_start_data_ind + i];
+        //         like_all_check += (-1./2. * 4 * df * tmp_A * gcmplx::conj(tmp_A) / data.psd_A[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
+        //         like_all_check += (-1./2. * 4 * df * tmp_E * gcmplx::conj(tmp_E) / data.psd_E[band_here.noise_index * data.data_length + band_here.band_start_data_ind + i]).real();
+        //         // if ((band_i)) printf("HMMM5: %d %.12e %.12e %.12e %.12e %.12e  \n", i, A_data[i].real(), E_data[i].real(), tmp_A.real(), tmp_E.real(), like_all_check, like_share_after);
                 
-            }
-            if (abs(like_all_check - like_share_after) > 1e-5) printf("\nYAYAYAYAY: %d %d %d %.12e %.12e %.12e \n", band_i, band_here.band_start_data_ind, band_here.band_data_lengths, like_share_after, like_all_check, like_share_after - like_all_check);
-            // mcmc_info.L_contribution[band_i] = like_share_after - like_share_before;
-        }
+        //     }
+        //     if (abs(like_all_check - like_share_after) > 1e-5) printf("\nYAYAYAYAY: %d %d %d %.12e %.12e %.12e \n", band_i, band_here.band_start_data_ind, band_here.band_data_lengths, like_share_after, like_all_check, like_share_after - like_all_check);
+        //     // mcmc_info.L_contribution[band_i] = like_share_after - like_share_before;
+        // }
         __syncthreads();
     }
     __syncthreads();

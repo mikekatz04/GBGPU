@@ -117,6 +117,7 @@ class GBGPU(object):
             self.fill_global_func = fill_global_cpu
             self.global_get_ll_func = direct_like_wrap_cpu
             self.swap_ll_diff_func = swap_ll_diff_cpu
+            self.gpus = None
             
         self.d_d = None
         self.orbits = orbits
@@ -1231,9 +1232,11 @@ class GBGPU(object):
         except AttributeError:
             pass
 
-        if factors is None:
+        if factors is not None:
             if use_c_implementation is False:
                 raise NotImplementedError("Currently factors is not implemented for use_c_implementation=False.")
+            
+        else:
             factors = self.xp.ones(self.num_bin, dtype=self.xp.float64)
 
         # check that index values are ready for computation
