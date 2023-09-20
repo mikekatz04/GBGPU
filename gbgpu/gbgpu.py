@@ -37,6 +37,7 @@ try:
     from gbgpu.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, psd_likelihood, compute_logpdf
     from gbgpu.sharedmem import pyGalacticBinaryParams, pyDataPackage, pyBandPackage, pyMCMCInfo, SharedMemoryMakeNewMove_wrap
     from gbgpu.sharedmem import pyPriorPackage, pyPeriodicPackage, pyStretchProposalPackage, SharedMemoryMakeTemperingMove_wrap, check_prior_vals
+    from gbgpu.sharedmem import get_psd_val
 
 except (ModuleNotFoundError, ImportError):
     import numpy as xp
@@ -113,6 +114,7 @@ class GBGPU(object):
             self.pyPeriodicPackage = pyPeriodicPackage
             self.pyStretchProposalPackage = pyStretchProposalPackage
             self.check_prior_vals = check_prior_vals
+            self.get_psd_val = get_psd_val
 
         else:
             self.xp = np

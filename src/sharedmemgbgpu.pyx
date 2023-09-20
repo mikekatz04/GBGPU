@@ -182,7 +182,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
 
     cdef cppclass GalacticBinaryParamsWrap "GalacticBinaryParams":
         GalacticBinaryParamsWrap(
-            double* snr,
+            double* amp,
             double* f0, 
             double* fdot0, 
             double* phi0, 
@@ -190,7 +190,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             double* psi, 
             double* lam,
             double* sinbeta,
-            double* snr_orig,
+            double* amp_orig,
             double* f0_orig, 
             double* fdot0_orig, 
             double* phi0_orig, 
@@ -287,7 +287,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         void dealloc();
 
     void check_prior_vals_wrap(double* prior_out, PriorPackageWrap *prior_info, GalacticBinaryParamsWrap *gb_params, int num_func);
-
+    void get_psd_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f) except+
 
 cdef class pyStretchProposalPackage:
     cdef StretchProposalPackageWrap *g
@@ -568,7 +569,7 @@ cdef class pyGalacticBinaryParams:
         **kwargs
     ):
         (
-            snr, 
+            amp, 
             f0, 
             fdot0, 
             phi0, 
@@ -576,7 +577,7 @@ cdef class pyGalacticBinaryParams:
             psi, 
             lam, 
             sinbeta,
-            snr_orig, 
+            amp_orig, 
             f0_orig, 
             fdot0_orig, 
             phi0_orig, 
@@ -598,7 +599,7 @@ cdef class pyGalacticBinaryParams:
             sl2
         ), tkwargs = wrapper(*args, **kwargs)
 
-        cdef size_t snr_in = snr
+        cdef size_t amp_in = amp
         cdef size_t f0_in = f0
         cdef size_t fdot0_in = fdot0
         cdef size_t phi0_in = phi0
@@ -607,7 +608,7 @@ cdef class pyGalacticBinaryParams:
         cdef size_t lam_in = lam
         cdef size_t sinbeta_in = sinbeta
         
-        cdef size_t snr_orig_in = snr_orig
+        cdef size_t amp_orig_in = amp_orig
         cdef size_t f0_orig_in = f0_orig
         cdef size_t fdot0_orig_in = fdot0_orig
         cdef size_t phi0_orig_in = phi0_orig
@@ -617,7 +618,7 @@ cdef class pyGalacticBinaryParams:
         cdef size_t sinbeta_orig_in = sinbeta_orig
 
         self.g = new GalacticBinaryParamsWrap(
-            <double *>snr_in, 
+            <double *>amp_in, 
             <double *>f0_in, 
             <double *>fdot0_in, 
             <double *>phi0_in, 
@@ -625,7 +626,7 @@ cdef class pyGalacticBinaryParams:
             <double *>psi_in, 
             <double *>lam_in,
             <double *>sinbeta_in,
-            <double *>snr_orig_in, 
+            <double *>amp_orig_in, 
             <double *>f0_orig_in, 
             <double *>fdot0_orig_in, 
             <double *>phi0_orig_in, 
@@ -1126,7 +1127,7 @@ def psd_likelihood(like_contrib_final, f_arr, A_data, E_data, data_index_all,  A
     cdef size_t sl1_all_in = sl1_all
     cdef size_t kn_all_in = kn_all
     cdef size_t sl2_all_in = sl2_all
-    cdef check
+
     psd_likelihood_wrap(<double*> like_contrib_final_in, <double*> f_arr_in, <cmplx*> A_data_in, <cmplx*> E_data_in, <int*> data_index_all_in, <double*> A_Soms_d_in_all_in, <double*> A_Sa_a_in_all_in, <double*> E_Soms_d_in_all_in, <double*> E_Sa_a_in_all_in, 
                     <double*> Amp_all_in, <double*> alpha_all_in, <double*> sl1_all_in, <double*> kn_all_in, <double*> sl2_all_in, df, data_length, num_data, num_psds)
 
@@ -1150,3 +1151,25 @@ def compute_logpdf(logpdf_out, component_index, points,
     compute_logpdf_wrap(<double*>logpdf_out_in, <int *>component_index_in, <double*>points_in,
                     <double *>weights_in, <double*>mins_in, <double*>maxs_in, <double*>means_in, <double*>invcovs_in, <double*>dets_in, <double *>log_Js_in, 
                     num_points, <int *>start_index_in, num_components, ndim)
+
+
+@pointer_adjust
+def get_psd_val(Sn_A_out, Sn_E_out, f_arr, noise_index_all, A_Soms_d_in_all, A_Sa_a_in_all, E_Soms_d_in_all, E_Sa_a_in_all,
+                               Amp_all, alpha_all, sl1_all, kn_all, sl2_all, num_f):
+    
+    cdef size_t Sn_A_out_in = Sn_A_out
+    cdef size_t Sn_E_out_in = Sn_E_out
+    cdef size_t f_arr_in = f_arr
+    cdef size_t noise_index_all_in = noise_index_all
+    cdef size_t A_Soms_d_in_all_in = A_Soms_d_in_all
+    cdef size_t A_Sa_a_in_all_in = A_Sa_a_in_all
+    cdef size_t E_Soms_d_in_all_in = E_Soms_d_in_all
+    cdef size_t E_Sa_a_in_all_in = E_Sa_a_in_all
+    cdef size_t Amp_all_in = Amp_all
+    cdef size_t alpha_all_in = alpha_all
+    cdef size_t sl1_all_in = sl1_all
+    cdef size_t kn_all_in = kn_all
+    cdef size_t sl2_all_in = sl2_all
+
+    get_psd_val_wrap(<double *>Sn_A_out_in, <double *>Sn_E_out_in, <double *>f_arr_in, <int *>noise_index_all_in, <double *>A_Soms_d_in_all_in, <double *>A_Sa_a_in_all_in, <double *>E_Soms_d_in_all_in, <double *>E_Sa_a_in_all_in,
+                               <double *>Amp_all_in, <double *>alpha_all_in, <double *>sl1_all_in, <double *>kn_all_in, <double *>sl2_all_in, num_f)
