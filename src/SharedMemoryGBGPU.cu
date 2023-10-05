@@ -3000,7 +3000,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     double ll_diff, lp_diff;
     double prior_curr, prior_prop, factors, lnpdiff;
     bool accept;
-    double psd_val_prior;
+    double sens_val_prior;
     __shared__ int bin_i_gen;
     __shared__ curandState localState;
     __shared__ double random_val;
@@ -3199,14 +3199,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 f0_ind = (int)floor((prop_binary.f0_ms / 1e3) * prop_binary.T);
                 if ((f0_ind > 0) && (f0_ind < data.data_length - 1))
                 {
-                    psd_val_prior = ((data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.psd_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((prop_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.psd_A[band_here.noise_index * data.data_length + f0_ind]);
-                    // if ((threadIdx.x == 0) && (blockIdx.x < 5)) printf("PSD: %.12e %.12e %.12e %.12e %.12e %.12e\n", (prop_binary.f0_ms / 1e3) - (data.df * f0_ind), (prop_binary.f0_ms / 1e3), (data.df * f0_ind), data.psd_A[band_here.noise_index * data.data_length + f0_ind], psd_val_prior, data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1]);
+                    sens_val_prior = ((data.lisasens_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.lisasens_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((prop_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.lisasens_A[band_here.noise_index * data.data_length + f0_ind]);
+                    // if ((threadIdx.x == 0) && (blockIdx.x < 5)) printf("PSD: %.12e %.12e %.12e %.12e %.12e %.12e\n", (prop_binary.f0_ms / 1e3) - (data.df * f0_ind), (prop_binary.f0_ms / 1e3), (data.df * f0_ind), data.psd_A[band_here.noise_index * data.data_length + f0_ind], sens_val_prior, data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1]);
                 }
                 else
                 {
-                    psd_val_prior = -100.0;
+                    sens_val_prior = -100.0;
                 }
-                prior_prop = prior_info.get_prior_val(prop_binary, 100, psd_val_prior);
+                prior_prop = prior_info.get_prior_val(prop_binary, 100, sens_val_prior);
             }
             else
             { 
@@ -3220,13 +3220,13 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     f0_ind = (int)floor((curr_binary.f0_ms / 1e3) * curr_binary.T);
                     if ((f0_ind > 0) && (f0_ind < data.data_length - 1))
                     {
-                        psd_val_prior = ((data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.psd_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((curr_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.psd_A[band_here.noise_index * data.data_length + f0_ind]);
+                        sens_val_prior = ((data.lisasens_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.lisasens_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((curr_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.lisasens_A[band_here.noise_index * data.data_length + f0_ind]);
                     }
                     else
                     {
-                        psd_val_prior = -100.0;
+                        sens_val_prior = -100.0;
                     }
-                    prior_curr = prior_info.get_prior_val(curr_binary, 100, psd_val_prior);
+                    prior_curr = prior_info.get_prior_val(curr_binary, 100, sens_val_prior);
                     prior_prop = 0.0;
                 }
                 else
@@ -3236,13 +3236,13 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     f0_ind = (int)floor((prop_binary.f0_ms / 1e3) * prop_binary.T);
                     if ((f0_ind > 0) && (f0_ind < data.data_length - 1))
                     {
-                        psd_val_prior = ((data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.psd_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((prop_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.psd_A[band_here.noise_index * data.data_length + f0_ind]);
+                        sens_val_prior = ((data.lisasens_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.lisasens_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((prop_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.lisasens_A[band_here.noise_index * data.data_length + f0_ind]);
                     }
                     else
                     {
-                        psd_val_prior = -100.0;
+                        sens_val_prior = -100.0;
                     }
-                    prior_prop = prior_info.get_prior_val(prop_binary, 100, psd_val_prior);
+                    prior_prop = prior_info.get_prior_val(prop_binary, 100, sens_val_prior);
                 }
             }
 
@@ -5068,7 +5068,7 @@ void SharedMemoryMakeTemperingMove(
 const double lisaL = 2.5e9;           // LISA's arm meters
 const double lisaLT = lisaL / Clight; // LISA's armn in sec
 
-__device__ void lisanoises(double *Spm, double *Sop, double f, double Soms_d_in, double Sa_a_in)
+__device__ void lisanoises(double *Spm, double *Sop, double f, double Soms_d_in, double Sa_a_in, bool return_relative_frequency)
 {
     double frq = f;
     // Acceleration noise
@@ -5078,7 +5078,15 @@ __device__ void lisanoises(double *Spm, double *Sop, double f, double Soms_d_in,
     double Sa_d = Sa_a * pow((2.0 * M_PI * frq), (-4.0));
     // In relative frequency unit
     double Sa_nu = Sa_d * pow((2.0 * M_PI * frq / Clight), 2);
-    *Spm = Sa_nu;
+
+    if (return_relative_frequency)
+    {
+        *Spm = Sa_nu;
+    }
+    else
+    {
+        *Spm = Sa_d;
+    }
 
     // Optical Metrology System
     // In displacement
@@ -5086,6 +5094,15 @@ __device__ void lisanoises(double *Spm, double *Sop, double f, double Soms_d_in,
     // In relative frequency unit
     double Soms_nu = Soms_d * pow((2.0 * M_PI * frq / Clight), 2);
     *Sop = Soms_nu;
+
+    if (return_relative_frequency)
+    {
+        *Sop = Soms_nu;
+    }
+    else
+    {
+        *Sop = Soms_d;
+    }
 
     // if ((threadIdx.x == 10) && (blockIdx.x == 0) && (blockIdx.y == 0))
     //     printf("%.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e \n", frq, Sa_a_in, Soms_d_in, Sa_a, Sa_d, Sa_nu, *Spm, Soms_d, Soms_nu, *Sop);
@@ -5120,11 +5137,38 @@ __device__ double WDconfusionAE(double f, double Amp, double alpha, double sl1, 
     return 1.5 * SgX;
 }
 
+__device__ double lisasens(const double f, const double Soms_d_in, const double Sa_a_in, const double Amp, const double alpha, const double sl1, const double kn, const double sl2)
+{
+    double x = 2.0 * M_PI * lisaLT * f;
+    double Sa_d, Sop;
+    bool return_relative_frequency = false;
+    lisanoises(&Sa_d, &Sop, f, Soms_d_in, Sa_a_in, return_relative_frequency);
+
+    double ALL_m = sqrt(4.0 * Sa_d + Sop);
+    // Average the antenna response
+    double AvResp = sqrt(5.);
+    // Projection effect
+    double Proj = 2.0 / sqrt(3.);
+    // Approximative transfert function
+    double f0 = 1.0 / (2.0 * lisaLT);
+    double a = 0.41;
+    double T = sqrt(1. + pow((f / (a * f0)), 2));
+    double Sens = pow((AvResp * Proj * T * ALL_m / lisaL), 2);
+
+    if (Amp > 0.0)
+    {
+        Sens += GalConf(f, Amp, alpha, sl1, kn, sl2);
+    }
+
+    return Sens;
+}
+
 __device__ double noisepsd_AE(const double f, const double Soms_d_in, const double Sa_a_in, const double Amp, const double alpha, const double sl1, const double kn, const double sl2)
 {
     double x = 2.0 * M_PI * lisaLT * f;
     double Spm, Sop;
-    lisanoises(&Spm, &Sop, f, Soms_d_in, Sa_a_in);
+    bool return_relative_frequency = true;
+    lisanoises(&Spm, &Sop, f, Soms_d_in, Sa_a_in, return_relative_frequency);
 
     double Sa = (8.0 * (sin(x) * sin(x)) * (2.0 * Spm * (3.0 + 2.0 * cos(x) + cos(2 * x)) + Sop * (2.0 + cos(x))));
 
@@ -5502,6 +5546,8 @@ DataPackage::DataPackage(
     cmplx* base_data_E_,
     double* psd_A_,
     double* psd_E_,
+    double* lisasens_A_,
+    double* lisasens_E_,
     double df_,
     int data_length_,
     int num_data_,
@@ -5514,6 +5560,8 @@ DataPackage::DataPackage(
     base_data_E = base_data_E_;
     psd_A = psd_A_;
     psd_E = psd_E_;
+    lisasens_A = lisasens_A_;
+    lisasens_E = lisasens_E_;
     df = df_;
     data_length = data_length_;
     num_data = num_data_;
@@ -5623,12 +5671,12 @@ CUDA_DEV
 double PriorPackage::get_prior_val(
     SingleGalacticBinary gb,
     int num_func,
-    double psd_val_prior
+    double sens_val_prior
 )
 {
     double prior_val_out = 0.0;
 
-    gb.snr = gb.amp_transform(gb.amp, gb.f0_ms / 1e3, psd_val_prior);
+    gb.snr = gb.amp_transform(gb.amp, gb.f0_ms / 1e3, sens_val_prior);
     if ((num_func < 0) || (num_func > 7) || (num_func == 0))
         prior_val_out += get_amp_prior(gb);
     if ((num_func < 0) || (num_func > 7) || (num_func == 1))
@@ -5734,8 +5782,8 @@ __global__ void check_prior_vals(double* prior_out, PriorPackage *prior_info, Ga
         gb.lam = gb_params->lam[bin_i];
         gb.sinbeta = gb_params->sinbeta[bin_i];
 
-        double psd_val_prior = -100.0;
-        prior_out[bin_i] = prior_info->get_prior_val(gb, num_func, psd_val_prior);
+        double sens_val_prior = -100.0;
+        prior_out[bin_i] = prior_info->get_prior_val(gb, num_func, sens_val_prior);
     }
 }
 
@@ -5992,7 +6040,7 @@ double  SingleGalacticBinary::amp_transform(double amp, double f0, double Sn_f)
 {
     double f_star = 1 / (2. * M_PI * lisaL) * Clight;
     if (Sn_f <= 0.0){
-        Sn_f = noisepsd_AE(f0, Soms_d * Soms_d, Sa_a * Sa_a, Amp, alpha, sl1, kn, sl2);
+        Sn_f = lisasens(f0, Soms_d * Soms_d, Sa_a * Sa_a, Amp, alpha, sl1, kn, sl2);
     }
     double factor = 1./2. * sqrt((T * pow(sin(f0 / f_star), 2.)) / Sn_f);
     return amp * factor;
@@ -6144,6 +6192,65 @@ void get_psd_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *no
     int num_blocks = std::ceil((num_f + NUM_THREADS_LIKE - 1) / NUM_THREADS_LIKE);
 
     get_psd_val<<<num_blocks, NUM_THREADS_LIKE>>>(Sn_A_out, Sn_E_out, f_arr, noise_index_all, A_Soms_d_in_all, A_Sa_a_in_all, E_Soms_d_in_all, E_Sa_a_in_all,
+                                               Amp_all, alpha_all, sl1_all, kn_all, sl2_all, num_f);
+
+    cudaDeviceSynchronize();
+    CUDA_CHECK_AND_EXIT(cudaGetLastError());
+}
+
+
+
+
+#define NUM_THREADS_LIKE 256
+__global__ void get_lisasens_val(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f)
+{
+    int tid = threadIdx.x;
+    int bid = blockIdx.x;
+    int num_blocks = gridDim.x;
+    int noise_index;
+    double A_Soms_d_in, A_Sa_a_in, E_Soms_d_in, E_Sa_a_in, Amp, alpha, sl1, kn, sl2;
+    double f, Sn_A, Sn_E;
+    double A_Soms_d_val, A_Sa_a_val, E_Soms_d_val, E_Sa_a_val;
+    for (int f_i = blockIdx.x * blockDim.x + threadIdx.x; f_i < num_f; f_i += gridDim.x * blockDim.x)
+    {
+        noise_index = noise_index_all[f_i];
+
+        A_Soms_d_in = A_Soms_d_in_all[noise_index];
+        A_Sa_a_in = A_Sa_a_in_all[noise_index];
+        E_Soms_d_in = E_Soms_d_in_all[noise_index];
+        E_Sa_a_in = E_Sa_a_in_all[noise_index];
+        Amp = Amp_all[noise_index];
+        alpha = alpha_all[noise_index];
+        sl1 = sl1_all[noise_index];
+        kn = kn_all[noise_index];
+        sl2 = sl2_all[noise_index];
+        f = f_arr[f_i];
+        
+        A_Soms_d_val = A_Soms_d_in * A_Soms_d_in;
+        A_Sa_a_val = A_Sa_a_in * A_Sa_a_in;
+        E_Soms_d_val = E_Soms_d_in * E_Soms_d_in;
+        E_Sa_a_val = E_Sa_a_in * E_Sa_a_in;
+        Sn_A = lisasens(f, A_Soms_d_val, A_Sa_a_val, Amp, alpha, sl1, kn, sl2);
+        Sn_E = lisasens(f, E_Soms_d_val, E_Sa_a_val, Amp, alpha, sl1, kn, sl2);
+
+        // if (Sn_A != Sn_A)
+        // {
+        //     printf("BADDDDD: %d %e %e %e %e %e %e %e %e\n", f_i, f, A_Soms_d_val, A_Sa_a_val, Amp, alpha, sl1, kn, sl2);
+        // }
+
+        Sn_A_out[f_i] = Sn_A;
+        Sn_E_out[f_i] = Sn_E;
+    }
+}
+
+void get_lisasens_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f)
+{
+
+    int num_blocks = std::ceil((num_f + NUM_THREADS_LIKE - 1) / NUM_THREADS_LIKE);
+
+    get_lisasens_val<<<num_blocks, NUM_THREADS_LIKE>>>(Sn_A_out, Sn_E_out, f_arr, noise_index_all, A_Soms_d_in_all, A_Sa_a_in_all, E_Soms_d_in_all, E_Sa_a_in_all,
                                                Amp_all, alpha_all, sl1_all, kn_all, sl2_all, num_f);
 
     cudaDeviceSynchronize();

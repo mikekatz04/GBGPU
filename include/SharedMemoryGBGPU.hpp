@@ -171,6 +171,8 @@ class DataPackage{
         cmplx* base_data_E; 
         double* psd_A; 
         double* psd_E; 
+        double* lisasens_A; 
+        double* lisasens_E; 
         double df; 
         int data_length;
         int num_data;
@@ -181,6 +183,8 @@ class DataPackage{
             cmplx* data_E,
             cmplx* base_data_A,
             cmplx* base_data_E,
+            double* lisasens_A_,
+            double* lisasens_E_,
             double* psd_A,
             double* psd_E,
             double df,
@@ -593,6 +597,9 @@ void compute_logpdf_wrap(double *logpdf_out, int *component_index, double *point
                     int num_points, int *start_index, int num_components, int ndim);
 
 void get_psd_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f);
+
+void get_lisasens_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
                                double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f);
 
 #endif // __SHAREDMEMORY_GBGPU_HPP__
