@@ -93,6 +93,31 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         bool do_synchronize
     ) except+
 
+    void SharedMemoryChiSquaredComp(
+        cmplx *h1_h1,
+        cmplx *h2_h2,
+        cmplx *h1_h2,
+        double *noise_A,
+        double *noise_E,
+        int *noise_index,
+        double *amp,
+        double *f0,
+        double *fdot0,
+        double *fddot0,
+        double *phi0,
+        double *iota,
+        double *psi,
+        double *lam,
+        double *theta,
+        double T,
+        double dt,
+        int N,
+        int num_bin_all,
+        int start_freq_ind,
+        int data_length,
+        int device,
+        bool do_synchronize
+    ) except+
 
     void SharedMemoryGenerateGlobal(
         cmplx* data_A,
@@ -259,6 +284,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             int *accepted_out,
             double *band_inv_temperatures_all,
             bool is_rj,
+            bool phase_maximize,
             double snr_lim
         )
     cdef cppclass PriorPackageWrap "PriorPackage":
@@ -409,6 +435,7 @@ cdef class pyMCMCInfo:
             accepted_out,
             band_inv_temperatures_all,
             is_rj,
+            phase_maximize,
             snr_lim
         ), tkwargs = wrapper(*args, **kwargs)
 
@@ -425,6 +452,7 @@ cdef class pyMCMCInfo:
             <int *>accepted_out_in,
             <double *>band_inv_temperatures_all_in,
             is_rj,
+            phase_maximize,
             snr_lim
         )
 
@@ -788,7 +816,6 @@ def SharedMemoryLikeComp_wrap(
     )
 
 
-
 @pointer_adjust
 def SharedMemorySwapLikeComp_wrap(
         d_h_remove,
@@ -890,6 +917,77 @@ def SharedMemorySwapLikeComp_wrap(
         <double *>psi_remove_in, 
         <double *>lam_remove_in,
         <double *>theta_remove_in,
+        T, 
+        dt,
+        N,
+        num_bin_all,
+        start_freq_ind,
+        data_length,
+        device,
+        do_synchronize
+    )
+
+
+
+@pointer_adjust
+def SharedMemoryChiSquaredComp_wrap(
+        h1_h1,
+        h2_h2,
+        h1_h2,
+        noise_A,
+        noise_E,
+        noise_index,
+        amp, 
+        f0, 
+        fdot0, 
+        fddot0, 
+        phi0, 
+        iota, 
+        psi, 
+        lam, 
+        theta,
+        T,
+        dt, 
+        N,
+        num_bin_all,
+        start_freq_ind,
+        data_length,
+        device,
+        do_synchronize
+    ):
+
+    cdef size_t h1_h1_in = h1_h1
+    cdef size_t h2_h2_in = h2_h2
+    cdef size_t h1_h2_in = h1_h2
+    cdef size_t noise_A_in = noise_A
+    cdef size_t noise_E_in = noise_E
+    cdef size_t noise_index_in = noise_index
+    cdef size_t amp_in = amp
+    cdef size_t f0_in = f0
+    cdef size_t fdot0_in = fdot0
+    cdef size_t fddot0_in = fddot0
+    cdef size_t phi0_in = phi0
+    cdef size_t iota_in = iota
+    cdef size_t psi_in = psi
+    cdef size_t lam_in = lam
+    cdef size_t theta_in = theta
+
+    SharedMemoryChiSquaredComp(
+        <cmplx *> h1_h1_in,
+        <cmplx *> h2_h2_in,
+        <cmplx *> h1_h2_in,
+        <double *> noise_A_in,
+        <double *> noise_E_in,
+        <int*> noise_index_in,
+        <double *>amp_in, 
+        <double *>f0_in, 
+        <double *>fdot0_in, 
+        <double *>fddot0_in, 
+        <double *>phi0_in, 
+        <double *>iota_in,
+        <double *>psi_in, 
+        <double *>lam_in,
+        <double *>theta_in,
         T, 
         dt,
         N,
