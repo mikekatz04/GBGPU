@@ -3503,6 +3503,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     bool accept;
     double sens_val_prior;
     double phase_change;
+    int start_f_friends_ind;
     __shared__ int bin_i_gen;
     __shared__ curandState localState;
     __shared__ double random_val;
@@ -3696,7 +3697,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
             if (!mcmc_info.is_rj)
             {
-                stretch_info.get_proposal(&prop_binary, &factors, localState, curr_binary, periodic_info);
+                start_f_friends_ind = stretch_info.start_f_friends_ind_all[current_binary_start_index];
+                
+                stretch_info.get_proposal(&prop_binary, &factors, localState, curr_binary, periodic_info, start_f_friends_ind);
                 prior_curr = mcmc_info.prior_all_curr[current_binary_start_index];
                 
                 f0_ind = (int)floor((prop_binary.f0_ms / 1e3) * prop_binary.T);
@@ -3712,7 +3715,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 prior_prop = prior_info.get_prior_val(prop_binary, 100, sens_val_prior);
             }
             else
-            { 
+            {
                 factors = stretch_info.factors[band_here.band_start_bin_ind + bin_i_gen];
                 rj_is_there_already = stretch_info.inds[band_here.band_start_bin_ind + bin_i_gen];
                 prop_binary = curr_binary;
@@ -6419,7 +6422,8 @@ StretchProposalPackage::StretchProposalPackage(
     double a_,
     int ndim_,
     bool *inds_,
-    double *factors_
+    double *factors_,
+    int *start_f_friends_ind_all_
 )
 {
     amp_friends = amp_friends_;
@@ -6437,6 +6441,7 @@ StretchProposalPackage::StretchProposalPackage(
     ndim = ndim_;
     inds = inds_;
     factors = factors_;
+    start_f_friends_ind_all = start_f_friends_ind_all_;
 }
 
 void StretchProposalPackage::dealloc()
@@ -6445,42 +6450,48 @@ void StretchProposalPackage::dealloc()
 }
 
 CUDA_DEV
-void StretchProposalPackage::find_friends(SingleGalacticBinary *gb_out, double f_val_in, curandState localState)
+void StretchProposalPackage::find_friends(SingleGalacticBinary *gb_out, double f_val_in, curandState localState, int start_f_friends_ind)
 {
 
-    int ind_friend;
+    int random_ind_change = (((unsigned int)(ceil(curand_uniform_double(&localState) * nfriends))) - 1); 
+
+    int ind_friend = start_f_friends_ind + random_ind_change;
     
+    // int ind_friend;
     // lower than minimum
-    if (f_val_in <= f0_friends[0])
-    {
-        ind_friend = 0;
-    }
-    else if (f_val_in >= f0_friends[num_friends_init - 1])
-    {
-        ind_friend = num_friends_init - 1;
-    }
-    else
-    {
-        ind_friend = binary_search(f0_friends, f_val_in, 0, num_friends_init - 1) - 1;
-    }
+    // if (f_val_in <= f0_friends[0])
+    // {
+    //     ind_friend = 0;
+    // }
+    // else if (f_val_in >= f0_friends[num_friends_init - 1])
+    // {
+    //     ind_friend = num_friends_init - 1;
+    // }
+    // else
+    // {
+    //     ind_friend = binary_search(f0_friends, f_val_in, 0, num_friends_init - 1) - 1;
+    // }
 
-    int random_ind_change = (((unsigned int)(ceil(curand_uniform_double(&localState) * nfriends))) - 1) - int(nfriends / 2);
-
-    if (ind_friend < int(nfriends / 2))
-    {
-        ind_friend = int(nfriends / 2) + random_ind_change;
-    }
-    else if (ind_friend > num_friends_init - 1 - int(nfriends / 2))
-    {
-        ind_friend = num_friends_init - 1 - int(nfriends / 2) + random_ind_change;
-    }
-    else
-    {
-        ind_friend += random_ind_change;
-    }
+    
+    // if (ind_friend < int(nfriends / 2))
+    // {
+    //     ind_friend = int(nfriends / 2) + random_ind_change;
+    // }
+    // else if (ind_friend > num_friends_init - 1 - int(nfriends / 2))
+    // {
+    //     ind_friend = num_friends_init - 1 - int(nfriends / 2) + random_ind_change;
+    // }
+    // else
+    // {
+    //     ind_friend += random_ind_change;
+    // }
     
     // check boundaries
-    if (ind_friend > num_friends_init - 1) ind_friend = num_friends_init - 1;
+    if (ind_friend > num_friends_init - 1) 
+    {
+        // printf("BAD %d")
+        ind_friend = num_friends_init - 1;
+    }
     if (ind_friend < 0) ind_friend = 0;
 
     gb_out->amp = amp_friends[ind_friend];
@@ -6491,10 +6502,15 @@ void StretchProposalPackage::find_friends(SingleGalacticBinary *gb_out, double f
     gb_out->psi = psi_friends[ind_friend];
     gb_out->lam = lam_friends[ind_friend];
     gb_out->sinbeta = sinbeta_friends[ind_friend];
+
+    // if ((blockIdx.x == 0) && (threadIdx.x == 0))
+    // {
+    //     printf("f diff: %.12e %.12e %.12e\n", f_val_in, gb_out->f0_ms, f_val_in - gb_out->f0_ms);
+    // }
 }
 
 CUDA_DEV
-void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double *factors, curandState localState, const SingleGalacticBinary gb_in, const PeriodicPackage periodic_info)
+void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double *factors, curandState localState, const SingleGalacticBinary gb_in, const PeriodicPackage periodic_info, int start_f_friends_ind)
 {
     
     double zz = pow(
@@ -6503,7 +6519,7 @@ void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double 
 
     SingleGalacticBinary gb_friend(gb_in.N, gb_in.T, gb_in.Soms_d, gb_in.Sa_a, gb_in.Amp, gb_in.alpha, gb_in.sl1, gb_in.kn, gb_in.sl2);
     
-    find_friends(&gb_friend, gb_in.f0_ms, localState);
+    find_friends(&gb_friend, gb_in.f0_ms, localState, start_f_friends_ind);
 
     direct_change(&(gb_prop->amp), gb_in.amp, gb_friend.amp, zz);
     direct_change(&(gb_prop->f0_ms), gb_in.f0_ms, gb_friend.f0_ms, zz);
