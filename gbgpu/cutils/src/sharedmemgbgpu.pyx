@@ -309,7 +309,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             double a,
             int ndim,
             bool *inds,
-            double *factors
+            double *factors,
+            int *start_f_friends_ind_all
         );
 
         void dealloc();
@@ -342,7 +343,8 @@ cdef class pyStretchProposalPackage:
             a,
             ndim,
             inds,
-            factors
+            factors,
+            start_f_friends_ind_all
         ), tkwargs = wrapper(*args, **kwargs)
 
         cdef size_t amp_friends_in = amp_friends
@@ -355,6 +357,7 @@ cdef class pyStretchProposalPackage:
         cdef size_t beta_friends_in = beta_friends
         cdef size_t inds_in = inds
         cdef size_t factors_in = factors
+        cdef size_t start_f_friends_ind_all_in = start_f_friends_ind_all
         
         self.g = new StretchProposalPackageWrap(
             <double*> amp_friends_in,
@@ -371,7 +374,8 @@ cdef class pyStretchProposalPackage:
             a,
             ndim,
             <bool *> inds_in,
-            <double *> factors_in
+            <double *> factors_in, 
+            <int *> start_f_friends_ind_all_in
         )
 
     def g_in(self):

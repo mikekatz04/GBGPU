@@ -321,6 +321,7 @@ class StretchProposalPackage{
         CURANDSTATE *curand_states;
         bool *inds;
         double *factors;
+        int *start_f_friends_ind_all;
     
         StretchProposalPackage(
             double* amp_friends,
@@ -337,12 +338,13 @@ class StretchProposalPackage{
             double a,
             int ndim,
             bool *inds,
-            double *factors
+            double *factors,
+            int *start_f_friends_ind_all
         );
          
         void dealloc();
-        void find_friends(SingleGalacticBinary *gb_out, double f_val_in, CURANDSTATE localState);
-        CUDA_DEV void get_proposal(SingleGalacticBinary *gb_prop, double *factors, CURANDSTATE localState, const SingleGalacticBinary gb_in, const PeriodicPackage periodic_info);
+        void find_friends(SingleGalacticBinary *gb_out, double f_val_in, CURANDSTATE localState, int start_f_friends_ind);
+        CUDA_DEV void get_proposal(SingleGalacticBinary *gb_prop, double *factors, CURANDSTATE localState, const SingleGalacticBinary gb_in, const PeriodicPackage periodic_info, int start_f_friends_ind);
         CUDA_HOSTDEV void direct_change(double *x_prop, const double x_curr, const double x_friend, const double fraction);
         CUDA_HOSTDEV void wrap_change(double *x_prop, const double x_curr, const double x_friend, const double fraction, const double period);
 };
