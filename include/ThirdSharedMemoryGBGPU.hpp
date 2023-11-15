@@ -53,7 +53,7 @@ void ThirdSharedMemoryLikeComp(
     int N,
     int num_bin_all,
     int multiply_integral_factor,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize);
@@ -82,7 +82,7 @@ void ThirdSharedMemoryGenerateGlobal(
     int N,
     int num_bin_all,
     int multiply_integral_factor,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize);

@@ -648,7 +648,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int* start_freq_ind_all,
     int data_length)
 {
     using complex_type = cmplx;
@@ -669,7 +669,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     cmplx *d_h_temp = &wave[3 * N];
     cmplx *h_h_temp = &d_h_temp[FFT::block_dim.x];
     cmplx tmp1, tmp2;
-    int data_ind, noise_ind;
+    int data_ind, noise_ind, start_freq_ind;
 
     int jj = 0;
     // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
@@ -681,6 +681,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
 
         data_ind = data_index[bin_i];
         noise_ind = noise_index[bin_i];
+        start_freq_ind = start_freq_ind_all[data_ind];
 
         build_single_waveform<FFT>(
             wave,
@@ -815,7 +816,7 @@ void get_ll_wrap(InputInfo inputs)
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_ind_all,
         inputs.data_length);
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -861,7 +862,7 @@ void SharedMemoryLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int* start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize)
@@ -890,7 +891,7 @@ void SharedMemoryLikeComp(
     inputs.dt = dt;
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_ind_all = start_freq_ind_all;
     inputs.data_length = data_length;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
@@ -974,7 +975,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length)
 {
     using complex_type = cmplx;
@@ -1012,7 +1013,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
     cmplx add_add_temp = 0.0;
     cmplx add_remove_temp = 0.0;
 
-    int data_ind, noise_ind;
+    int data_ind, noise_ind, start_freq_ind;
 
     int lower_start_ind, upper_start_ind, lower_end_ind, upper_end_ind;
     bool is_add_lower;
@@ -1032,6 +1033,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
 
         data_ind = data_index[bin_i];
         noise_ind = noise_index[bin_i];
+        start_freq_ind = start_freq_ind_all[data_ind];
 
         build_single_waveform<FFT>(
             wave_add,
@@ -1400,7 +1402,7 @@ void get_swap_ll_diff_wrap(InputInfo inputs)
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_ind_all,
         inputs.data_length);
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -1458,7 +1460,7 @@ void SharedMemorySwapLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize)
@@ -1499,7 +1501,7 @@ void SharedMemorySwapLikeComp(
     inputs.dt = dt;
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_ind_all = start_freq_ind_all;
     inputs.data_length = data_length;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
@@ -1610,7 +1612,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length)
 {
     using complex_type = cmplx;
@@ -1627,7 +1629,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     cmplx *A = &wave[0];
     cmplx *E = &wave[N];
 
-    int template_ind;
+    int template_ind, start_freq_ind;
     double factor;
 
     int jj = 0;
@@ -1639,6 +1641,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
 
         template_ind = template_index[bin_i];
         factor = factors[bin_i];
+        start_freq_ind = start_freq_ind_all[template_ind];
 
         build_single_waveform<FFT>(
             wave,
@@ -1732,7 +1735,7 @@ void generate_global_template_wrap(InputInfo inputs)
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_ind_all,
         inputs.data_length);
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -1774,7 +1777,7 @@ void SharedMemoryGenerateGlobal(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize)
@@ -1798,7 +1801,7 @@ void SharedMemoryGenerateGlobal(
     inputs.dt = dt;
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_ind_all = start_freq_ind_all;
     inputs.data_length = data_length;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
@@ -1852,7 +1855,7 @@ __global__ void specialty_piece_wise_likelihoods(
     int *lengths,
     double df,
     int num_parts,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length)
 {
     using complex_type = cmplx;
@@ -1867,7 +1870,7 @@ __global__ void specialty_piece_wise_likelihoods(
     __syncthreads();
 
     double tmp1;
-    int data_ind, noise_ind, start_ind, length;
+    int data_ind, noise_ind, start_ind, length, start_freq_ind;
 
     int jj = 0;
     // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
@@ -1882,6 +1885,7 @@ __global__ void specialty_piece_wise_likelihoods(
         noise_ind = noise_index[part_i];
         start_ind = start_inds[part_i];
         length = lengths[part_i];
+        start_freq_ind = start_freq_ind_all[data_ind];
 
         tmp1 = 0.0;
         for (int i = threadIdx.x; i < length; i += blockDim.x)
@@ -1941,7 +1945,7 @@ void specialty_piece_wise_likelihoods_wrap(
     int *lengths,
     double df,
     int num_parts,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     bool do_synchronize)
 {
@@ -1957,7 +1961,7 @@ void specialty_piece_wise_likelihoods_wrap(
         lengths,
         df,
         num_parts,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length);
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());

@@ -46,7 +46,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind, 
+        int *start_freq_ind_all, 
         int data_length,
         int device,
         bool do_synchronize
@@ -86,7 +86,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind,
+        int *start_freq_ind_all,
         int data_length,
         int device,
         bool do_synchronize
@@ -111,7 +111,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind,
+        int *start_freq_ind_all,
         int data_length,
         int device,
         bool do_synchronize
@@ -129,7 +129,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int* lengths,
         double df, 
         int num_parts,
-        int start_freq_ind,
+        int *start_freq_ind_all,
         int data_length,
         bool do_synchronize
     );
@@ -203,7 +203,7 @@ def SharedMemoryLikeComp_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length,
         device,
         do_synchronize
@@ -226,6 +226,7 @@ def SharedMemoryLikeComp_wrap(
     cdef size_t psi_in = psi
     cdef size_t lam_in = lam
     cdef size_t theta_in = theta
+    cdef size_t start_freq_ind_all_in = start_freq_ind_all
 
     SharedMemoryLikeComp(
         <cmplx *> d_h_in,
@@ -249,7 +250,7 @@ def SharedMemoryLikeComp_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*> start_freq_ind_all_in,
         data_length,
         device,
         do_synchronize
@@ -292,7 +293,7 @@ def SharedMemorySwapLikeComp_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length,
         device,
         do_synchronize
@@ -327,6 +328,7 @@ def SharedMemorySwapLikeComp_wrap(
     cdef size_t psi_remove_in = psi_remove
     cdef size_t lam_remove_in = lam_remove
     cdef size_t theta_remove_in = theta_remove
+    cdef size_t start_freq_ind_all_in = start_freq_ind_all
 
     SharedMemorySwapLikeComp(
         <cmplx *> d_h_remove_in,
@@ -362,7 +364,7 @@ def SharedMemorySwapLikeComp_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*> start_freq_ind_all_in,
         data_length,
         device,
         do_synchronize
@@ -388,7 +390,7 @@ def SharedMemoryGenerateGlobal_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length,
         device,
         do_synchronize
@@ -407,6 +409,7 @@ def SharedMemoryGenerateGlobal_wrap(
     cdef size_t lam_in = lam
     cdef size_t theta_in = theta
     cdef size_t factors_in = factors
+    cdef size_t start_freq_ind_all_in = start_freq_ind_all
 
     SharedMemoryGenerateGlobal(
         <cmplx *> data_A_in,
@@ -426,7 +429,7 @@ def SharedMemoryGenerateGlobal_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*> start_freq_ind_all_in,
         data_length,
         device,
         do_synchronize
@@ -445,7 +448,7 @@ def specialty_piece_wise_likelihoods(
         lengths,
         df, 
         num_parts,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length,
         do_synchronize
     ):
@@ -459,6 +462,7 @@ def specialty_piece_wise_likelihoods(
     cdef size_t noise_index_in = noise_index
     cdef size_t start_inds_in = start_inds
     cdef size_t lengths_in = lengths
+    cdef size_t start_freq_ind_all_in = start_freq_ind_all
 
     specialty_piece_wise_likelihoods_wrap(
         <double*> lnL_in,
@@ -472,7 +476,7 @@ def specialty_piece_wise_likelihoods(
         <int*> lengths_in,
         df, 
         num_parts,
-        start_freq_ind,
+        <int*> start_freq_ind_all_in,
         data_length,
         do_synchronize
     )

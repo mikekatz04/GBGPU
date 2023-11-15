@@ -779,6 +779,15 @@ class GBGPU(object):
         except AttributeError:
             pass
 
+        num_data = int(len(data[0]) / data_length)
+        if isinstance(start_freq_ind, int):
+            start_freq_ind = self.xp.full(num_data, start_freq_ind, dtype=self.xp.int32)
+        elif isinstance(start_freq_ind, self.xp.ndarray):
+            assert start_freq_ind.dtype == self.xp.int32
+            assert len(start_freq_ind) == num_data
+        else:
+            raise ValueError("start_freq_ind must be int or int32 array of length num_data.")
+        
         if use_c_implementation and self.gpus is not None:
             # TODO: make more adjustable
             if N is None:
@@ -1065,6 +1074,14 @@ class GBGPU(object):
             templates[:, 1], dtype=self.xp.complex128
         ).flatten()
 
+        if isinstance(start_freq_ind, int):
+            start_freq_ind = self.xp.full(num_groups, start_freq_ind, dtype=self.xp.int32)
+        elif isinstance(start_freq_ind, self.xp.ndarray):
+            assert start_freq_ind.dtype == self.xp.int32
+            assert len(start_freq_ind) == num_groups
+        else:
+            raise ValueError("start_freq_ind must be int or int32 array of length num_data.")
+
         # shift start inds (see above)
         start_inds = (start_inds - start_freq_ind).astype(self.xp.int32)
 
@@ -1172,6 +1189,15 @@ class GBGPU(object):
         assert factors.dtype == self.xp.float64
         
         assert group_index.dtype == self.xp.int32
+
+        num_groups_possible = group_index.max().item() + 1
+        if isinstance(start_freq_ind, int):
+            start_freq_ind = self.xp.full(num_groups_possible, start_freq_ind, dtype=self.xp.int32)
+        elif isinstance(start_freq_ind, self.xp.ndarray):
+            assert start_freq_ind.dtype == self.xp.int32
+            assert len(start_freq_ind) == num_groups_possible
+        else:
+            raise ValueError("start_freq_ind must be int or int32 array of length num_data.")
 
         for nnn, N_here in enumerate(unique_N):
             N_here = N_here.item()
@@ -1492,6 +1518,15 @@ class GBGPU(object):
         add_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
         remove_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
         add_add = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
+
+        num_data = int(len(data[0]) / data_length)
+        if isinstance(start_freq_ind, int):
+            start_freq_ind = self.xp.full(num_data, start_freq_ind, dtype=self.xp.int32)
+        elif isinstance(start_freq_ind, self.xp.ndarray):
+            assert start_freq_ind.dtype == self.xp.int32
+            assert len(start_freq_ind) == num_data
+        else:
+            raise ValueError("start_freq_ind must be int or int32 array of length num_data.")
 
         if use_c_implementation:
             if N is None:

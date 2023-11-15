@@ -58,7 +58,7 @@ cdef extern from "ThirdSharedMemoryGBGPU.hpp":
         int N,
         int num_bin_all,
         int multiply_integral_factor,
-        int start_freq_ind, 
+        int *start_freq_ind_all, 
         int data_length,
         int device,
         bool do_synchronize
@@ -88,7 +88,7 @@ cdef extern from "ThirdSharedMemoryGBGPU.hpp":
         int N,
         int num_bin_all,
         int multiply_integral_factor,
-        int start_freq_ind,
+        int *start_freq_ind_all,
         int data_length,
         int device,
         bool do_synchronize
@@ -186,7 +186,7 @@ def ThirdSharedMemoryLikeComp_wrap(
         N,
         num_bin_all,
         multiply_integral_factor,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length,
         device,
         do_synchronize
@@ -214,6 +214,7 @@ def ThirdSharedMemoryLikeComp_wrap(
     cdef size_t e2_in = e2
     cdef size_t n2_in = n2
     cdef size_t T2_in = T2
+    cdef size_t start_freq_ind_all_in = start_freq_ind_all
 
     ThirdSharedMemoryLikeComp(
         <cmplx *> d_h_in,
@@ -243,7 +244,7 @@ def ThirdSharedMemoryLikeComp_wrap(
         N,
         num_bin_all,
         multiply_integral_factor,
-        start_freq_ind,
+        <int*> start_freq_ind_all_in,
         data_length,
         device,
         do_synchronize
@@ -276,7 +277,7 @@ def ThirdSharedMemoryGenerateGlobal_wrap(
         N,
         num_bin_all,
         multiply_integral_factor,
-        start_freq_ind,
+        start_freq_ind_all,
         data_length,
         device,
         do_synchronize
@@ -300,6 +301,7 @@ def ThirdSharedMemoryGenerateGlobal_wrap(
     cdef size_t n2_in = n2
     cdef size_t T2_in = T2
     cdef size_t factors_in = factors
+    cdef size_t start_freq_ind_all_in = start_freq_ind_all
 
     ThirdSharedMemoryGenerateGlobal(
         <cmplx *> data_A_in,
@@ -325,7 +327,7 @@ def ThirdSharedMemoryGenerateGlobal_wrap(
         N,
         num_bin_all,
         multiply_integral_factor,
-        start_freq_ind,
+        <int*> start_freq_ind_all_in,
         data_length,
         device,
         do_synchronize

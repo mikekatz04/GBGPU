@@ -43,7 +43,7 @@ typedef struct InputInfoTag
     double *noise_E;
     int *data_index;
     int *noise_index;
-    int start_freq_ind;
+    int *start_freq_ind_all;
     int data_length;
     cmplx *d_h_remove;
     cmplx *d_h_add;
@@ -101,7 +101,7 @@ void SharedMemoryLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize);
@@ -140,7 +140,7 @@ void SharedMemorySwapLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize);
@@ -163,7 +163,7 @@ void SharedMemoryGenerateGlobal(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize);
@@ -180,7 +180,7 @@ void specialty_piece_wise_likelihoods_wrap(
     int *lengths,
     double df,
     int num_parts,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     bool do_synchronize);
 

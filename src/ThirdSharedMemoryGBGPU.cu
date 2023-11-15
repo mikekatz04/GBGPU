@@ -929,7 +929,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     int N,
     int num_bin_all,
     int multiply_integral_factor,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length)
 {
     using complex_type = cmplx;
@@ -951,7 +951,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     cmplx *h_h_temp = &d_h_temp[FFT::block_dim.x];
     double *third_phase_addition = (double *)&h_h_temp[FFT::block_dim.x];
     cmplx tmp1, tmp2;
-    int data_ind, noise_ind;
+    int data_ind, noise_ind, start_freq_ind;
 
     int jj = 0;
     // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
@@ -963,6 +963,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
 
         data_ind = data_index[bin_i];
         noise_ind = noise_index[bin_i];
+        start_freq_ind = start_freq_ind_all[data_ind];
 
         build_single_waveform<FFT>(
             wave,
@@ -1113,7 +1114,7 @@ void get_ll_wrap(InputInfo inputs)
         inputs.N,
         inputs.num_bin_all,
         inputs.multiply_integral_factor,
-        inputs.start_freq_ind,
+        inputs.start_freq_ind_all,
         inputs.data_length);
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -1165,7 +1166,7 @@ void ThirdSharedMemoryLikeComp(
     int N,
     int num_bin_all,
     int multiply_integral_factor,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize)
@@ -1199,7 +1200,7 @@ void ThirdSharedMemoryLikeComp(
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
     inputs.multiply_integral_factor = multiply_integral_factor;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_ind_all = start_freq_ind_all;
     inputs.data_length = data_length;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
@@ -1316,7 +1317,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     int N,
     int num_bin_all,
     int multiply_integral_factor,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length)
 {
     using complex_type = cmplx;
@@ -1334,7 +1335,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     cmplx *E = &wave[N];
     double *third_phase_addition = (double *)&wave[2 * N];
 
-    int template_ind;
+    int template_ind, start_freq_ind;
     double factor;
 
     int jj = 0;
@@ -1346,6 +1347,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
 
         template_ind = template_index[bin_i];
         factor = factors[bin_i];
+        start_freq_ind = start_freq_ind_all[template_ind];
 
         build_single_waveform<FFT>(
             wave,
@@ -1452,7 +1454,7 @@ void generate_global_template_wrap(InputInfo inputs)
         inputs.N,
         inputs.num_bin_all,
         inputs.multiply_integral_factor,
-        inputs.start_freq_ind,
+        inputs.start_freq_ind_all,
         inputs.data_length);
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -1500,7 +1502,7 @@ void ThirdSharedMemoryGenerateGlobal(
     int N,
     int num_bin_all,
     int multiply_integral_factor,
-    int start_freq_ind,
+    int *start_freq_ind_all,
     int data_length,
     int device,
     bool do_synchronize)
@@ -1530,7 +1532,7 @@ void ThirdSharedMemoryGenerateGlobal(
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
     inputs.multiply_integral_factor = multiply_integral_factor;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_ind_all = start_freq_ind_all;
     inputs.data_length = data_length;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
