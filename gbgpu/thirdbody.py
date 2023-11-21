@@ -545,6 +545,8 @@ class GBGPUThirdBody(InheritGBGPU):
         data,
         psd,
         phase_marginalize=False,
+        data_index=None,
+        noise_index=None,
         start_freq_ind=0,
         use_c_implementation=True,
         N=None,
@@ -552,6 +554,7 @@ class GBGPUThirdBody(InheritGBGPU):
         dt=10.0,
         oversample=1,
         multiply_integral_factor=None,
+        data_length=None,
         **kwargs,
     ):
     
@@ -568,12 +571,18 @@ class GBGPUThirdBody(InheritGBGPU):
         
         assert isinstance(psd, list) and len(psd) == 2 and isinstance(psd[0], self.xp.ndarray) and psd[0].ndim == 1 and isinstance(psd[1], self.xp.ndarray) and psd[1].ndim == 1 and psd[0].dtype == self.xp.float64 and psd[1].dtype == self.xp.float64
 
-        assert N is not None and isinstance(N, int)
+        assert N is not None and (isinstance(N, int) or (isinstance(N, self.xp.ndarray) and xp.all(N == N[0])))
+
+        if isinstance(N, self.xp.ndarray) and xp.all(N == N[0]):
+            N = N[0].item()
 
         params_in = [self.xp.asarray(tmp) for tmp in params.T]
 
-        data_length = data[0].shape[0]
-
+        if data_length is None:
+            data_length = data[0].shape[0]
+        
+        assert isinstance(data_length, int)
+        
         # adjust beta
         beta = params_in[8]
         theta = np.pi / 2 - beta
@@ -598,8 +607,30 @@ class GBGPUThirdBody(InheritGBGPU):
             multiply_integral_factor = 1
         assert isinstance(multiply_integral_factor, int)
 
-        data_index = self.xp.zeros((num_bin_all,), dtype=self.xp.int32)
-        noise_index = self.xp.zeros((num_bin_all,), dtype=self.xp.int32)
+        if data_index is None:
+            data_index = self.xp.zeros((num_bin_all,), dtype=self.xp.int32)
+        
+        if noise_index is None:
+            noise_index = self.xp.zeros((num_bin_all,), dtype=self.xp.int32)
+
+        assert noise_index.dtype == self.xp.int32
+        assert data_index.dtype == self.xp.int32
+        assert len(data_index) == len(noise_index) == num_bin_all
+
+        if isinstance(start_freq_ind, int):
+            start_freq_ind = self.xp.full((num_bin_all,), start_freq_ind, dtype=self.xp.int32)
+
+        else:
+            if not isinstance(start_freq_ind, self.xp.ndarray):
+                raise ValueError
+        
+        assert  start_freq_ind.dtype == self.xp.int32
+        
+        assert len(data[0]) >= (data_index.max() + 1) * data_length
+
+        d_h = self.xp.zeros((num_bin_all,), dtype=self.xp.complex128)
+        h_h = self.xp.zeros((num_bin_all,), dtype=self.xp.complex128)
+        
         inputs_in = ((d_h,
             h_h,
             data[0],

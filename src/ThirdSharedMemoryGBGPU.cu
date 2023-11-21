@@ -965,6 +965,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
         noise_ind = noise_index[bin_i];
         start_freq_ind = start_freq_ind_all[data_ind];
 
+        // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("%d %e \n", data_ind, f0[bin_i]);
+
+
         build_single_waveform<FFT>(
             wave,
             third_phase_addition,
@@ -1002,6 +1005,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
 
             h_A = A[i];
             h_E = E[i];
+
+            // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf(" %d %d %d %d %e %e %e %e\n", i, jj, start_ind, start_freq_ind, d_A.real(), h_A.real(), n_A, f0[bin_i]);
 
             tmp1 += (gcmplx::conj(d_A) * h_A / n_A + gcmplx::conj(d_E) * h_E / n_E);
 
