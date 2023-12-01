@@ -362,7 +362,8 @@ __device__ void build_single_waveform(
     double delta_t_slow = T / (double)N;
     double t, xi_tmp;
     double delta_t_integrate = delta_t_slow / multiply_integral_factor;
-    int N_integrate = N * multiply_integral_factor;
+    // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("%e %e %e %e %e\n", delta_t_slow, multiply_integral_factor, delta_t_integrate, delta_t_integrate * N, T);
+    int N_integrate = N * multiply_integral_factor + 1;
 
     __syncthreads();
     for (int integrate_i = threadIdx.x; integrate_i < N_integrate; integrate_i += blockDim.x)
@@ -397,7 +398,9 @@ __device__ void build_single_waveform(
         {
             int index = (threadIdx.x + 1) * stride * 2 - 1;
             if (index < 2 * blockDim.x)
+            {
                 third_phase_addition[start_ind_m + index] += third_phase_addition[start_ind_m + index - stride];
+            }
             stride = stride * 2;
 
             __syncthreads();
@@ -418,7 +421,17 @@ __device__ void build_single_waveform(
         __syncthreads();
     }
     __syncthreads();
+    if (threadIdx.x == 0)
+    {
+        third_phase_addition[N_integrate - 1] += third_phase_addition[N_integrate - 2];
+    }
+    __syncthreads();
 
+    // for (int i = threadIdx.x; i < N_integrate; i += 1)
+    // {
+    //     if (blockIdx.x == 0) printf("%d %e\n", i, third_phase_addition[i]);
+    // }
+    // __syncthreads();
     // start at 1
     for (int m_i = 2; m_i < num_segs; m_i += 2)
     {
@@ -531,6 +544,7 @@ __device__ void build_single_waveform(
             else
                 {index_phase_spline = int(xi_tmp / delta_t_integrate);}
 
+            // if (index_phase_spline >= N) printf("BAD 6 . %d %e %e %e\n", index_phase_spline, xi_tmp, delta_t_integrate, multiply_integral_factor * N * delta_t_integrate);
             m = (third_phase_addition[index_phase_spline + 1] - third_phase_addition[index_phase_spline]) / delta_t_integrate;
             b = third_phase_addition[index_phase_spline + 1] - m * (index_phase_spline + 1) * delta_t_integrate;
 
@@ -585,12 +599,20 @@ __device__ void build_single_waveform(
     }
     
     __syncthreads();
+    //if ((blockIdx.x < 10)) printf("check: %d %e %e %e\n", blockIdx.x, X[threadIdx.x].real(), Y[threadIdx.x].real(), Z[threadIdx.x].real());
+
 
     FFT().execute(reinterpret_cast<void *>(X));
+    __syncthreads();
     FFT().execute(reinterpret_cast<void *>(Y));
+    __syncthreads();
     FFT().execute(reinterpret_cast<void *>(Z));
+    __syncthreads();
 
     __syncthreads();
+
+    // if ((blockIdx.x < 10)) printf("after: %d %e %e %e\n", blockIdx.x, X[threadIdx.x].real(), Y[threadIdx.x].real(), Z[threadIdx.x].real());
+
     for (int i = threadIdx.x; i < N; i += blockDim.x)
     {
         X[i] *= amp;
@@ -760,7 +782,7 @@ void simple_block_fft(InputInfo inputs)
     // Shared memory must fit input data and must be big enough to run FFT
     auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
 
-    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) + inputs.multiply_integral_factor * N * sizeof(double);
+    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) + (inputs.multiply_integral_factor * N + 1) * sizeof(double);
     // std::cout << "input [1st FFT]:\n" << shared_memory_size_mine << std::endl;
     // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
     //     std::cout << data[i].x << " " << data[i].y << std::endl;
@@ -948,8 +970,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     cmplx *E = &wave[N];
 
     cmplx *d_h_temp = &wave[3 * N];
-    cmplx *h_h_temp = &d_h_temp[FFT::block_dim.x];
-    double *third_phase_addition = (double *)&h_h_temp[FFT::block_dim.x];
+    cmplx *h_h_temp = &d_h_temp[blockDim.x];
+    double *third_phase_addition = (double *)&h_h_temp[blockDim.x];
     cmplx tmp1, tmp2;
     int data_ind, noise_ind, start_freq_ind;
 
@@ -964,9 +986,6 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
         data_ind = data_index[bin_i];
         noise_ind = noise_index[bin_i];
         start_freq_ind = start_freq_ind_all[data_ind];
-
-        // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("%d %e \n", data_ind, f0[bin_i]);
-
 
         build_single_waveform<FFT>(
             wave,
@@ -993,6 +1012,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
             multiply_integral_factor);
 
         __syncthreads();
+
+        // if ((threadIdx.x < 10) && ((bin_i == 0) || (bin_i == 1) || (bin_i == 215) || (bin_i == 216)))
+        // {
+        //     printf("%d %e %e\n", bin_i, A[0].real(), A[0].imag());
+        // }
+
         tmp1 = 0.0;
         tmp2 = 0.0;
         for (int i = threadIdx.x; i < N; i += blockDim.x)
@@ -1016,7 +1041,6 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
 
         d_h_temp[tid] = tmp1;
         h_h_temp[tid] = tmp2;
-        // if (((bin_i == 10) || (bin_i == 400))) printf("%d %d  %e %e %e %e \n", bin_i, tid, d_h_temp[tid].real(), d_h_temp[tid].imag(), h_h_temp[tid].real(), h_h_temp[tid].imag());
         __syncthreads();
         for (unsigned int s = 1; s < blockDim.x; s *= 2)
         {
@@ -1074,7 +1098,9 @@ void get_ll_wrap(InputInfo inputs)
     auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
 
     // first is waveforms, second is d_h_temp and h_h_temp
-    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) + 2 * FFT::block_dim.x * sizeof(cmplx) + inputs.multiply_integral_factor * N * sizeof(double);
+    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) + 2 * FFT::block_dim.x * sizeof(cmplx) + (inputs.multiply_integral_factor * N + 1) * sizeof(double);
+    // auto shared_memory_size_mine = 72000;  // 3 * N * sizeof(cmplx) + 2 * FFT::block_dim.x * sizeof(cmplx) + inputs.multiply_integral_factor * N * sizeof(double);
+    
     // std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
     // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
     //     std::cout << data[i].x << " " << data[i].y << std::endl;
@@ -1338,7 +1364,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     cmplx *wave = (cmplx *)shared_mem;
     cmplx *A = &wave[0];
     cmplx *E = &wave[N];
-    double *third_phase_addition = (double *)&wave[2 * N];
+    double *third_phase_addition = (double *)&wave[3 * N];
 
     int template_ind, start_freq_ind;
     double factor;
@@ -1421,7 +1447,7 @@ void generate_global_template_wrap(InputInfo inputs)
     auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
 
     // first is waveforms, second is d_h_temp and h_h_temp
-    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) + inputs.multiply_integral_factor * N * sizeof(double);
+    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) + (inputs.multiply_integral_factor * N + 1) * sizeof(double);
     // std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
     // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
     //     std::cout << data[i].x << " " << data[i].y << std::endl;

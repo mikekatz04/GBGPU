@@ -100,6 +100,7 @@ class PriorTransformFn:
 def run_information(gb_third, nbin, data, data_orig, m3_lim, out_fp, directory_out, N_max, data_length, min_chirp_mass, max_chirp_mass, oversample, transform_fn):
     for i in range(nbin):
         index = int(data["index"][i])
+        orig_id = int(data["orig_id"][i])
 
         #if index != 2783:
         #    continue
@@ -112,8 +113,8 @@ def run_information(gb_third, nbin, data, data_orig, m3_lim, out_fp, directory_o
 
         if out_fp in os.listdir(directory_out):
             with h5py.File(directory_out + out_fp, "a") as f:
-                if str(int(index)) in list(f):
-                    print(f"{int(index)} already in file {out_fp} so not running.")
+                if str(int(orig_id)) in list(f):
+                    print(f"{int(orig_id)} already in file {out_fp} so not running.")
                     continue
     
         # extract_snr_base and snr_base were switched
@@ -215,7 +216,7 @@ def run_information(gb_third, nbin, data, data_orig, m3_lim, out_fp, directory_o
         params_inj_in = np.concatenate([params_inner, injection_params[9:]])
         if waveform_kwargs["N"] > N_max:
             if waveform_kwargs["N"] > N_max:  # 16384:
-                print(f"{int(index)} has too high of N value so not running.")
+                print(f"ID {int(orig_id)} (index: {int(index)}) has too high of N value so not running.")
                 continue
             waveform_kwargs["use_c_implementation"] = False
             if isinstance(waveform_kwargs["N"], np.ndarray):
@@ -231,7 +232,9 @@ def run_information(gb_third, nbin, data, data_orig, m3_lim, out_fp, directory_o
 
         AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="sangria", includewd=Tobs / YEAR)
         psd = [AE_psd, AE_psd]
-        yield (index, injection_params, fd, data_channels, psd, start_freq, f_lims, fdot_lims, N_found)
+
+        info_out = {name: value for name, value in zip(data.dtype.names, data[i])}
+        yield (orig_id, index, injection_params, fd, data_channels, psd, start_freq, f_lims, fdot_lims, N_found, info_out)
         
 
 class RunSearchProcedure(BaseTemplateSetup):
@@ -332,7 +335,7 @@ class RunSearchProcedure(BaseTemplateSetup):
         self.N_max = int(self.data_length / 4)
         self.log_like_fn = LogLikeFn(self.gb, data_channels, psds, start_freq, self.df, self.transform_fn, N_vals_in, self.data_length, d_d_all, **waveform_kwargs)
         
-        self.currently_running_index = [None for _ in range(self.ngroups)]
+        self.currently_running_index_orig_id = [None for _ in range(self.ngroups)]
         
         # initialize sampler
         self.sampler = ParaEnsembleSampler(
@@ -374,7 +377,7 @@ class RunSearchProcedure(BaseTemplateSetup):
     def run(self, convergence_iter_count):
 
         for fp in os.listdir(self.directory_in):
-            generate_fp = f"pop_for_search_{self.seed_from_gen}_" + fp
+            generate_fp = f"pop_for_search_new_test_{self.seed_from_gen}_" + fp
             out_fp = f"{self.output_string}_{self.seed_from_gen}_" + fp[:-4] + ".h5"
             data = np.genfromtxt(self.directory_in + fp, dtype=None)
 
@@ -401,7 +404,7 @@ class RunSearchProcedure(BaseTemplateSetup):
 
     def setup_next_source(self, info_iterator):
         try:
-            (index, injection_params, fd, data_channels_tmp, psd_tmp, start_freq, f_lims, fdot_lims, N_val) = next(info_iterator)
+            (orig_id, index, injection_params, fd, data_channels_tmp, psd_tmp, start_freq, f_lims, fdot_lims, N_val, keep_info) = next(info_iterator)
             
             d_d = 4.0 * self.df * np.sum(np.asarray(data_channels_tmp).conj() * np.asarray(data_channels_tmp) / np.asarray(psd_tmp)).item().real
             
@@ -476,9 +479,12 @@ class RunSearchProcedure(BaseTemplateSetup):
             self.sampler.prior_transform_fn.fdot_min[new_group_ind] = fdot_lims[0]
             self.sampler.prior_transform_fn.fdot_max[new_group_ind] = fdot_lims[1]
             self.sampler.log_like_fn.N_vals[new_group_ind] = N_val
-            self.currently_running_index[new_group_ind] = index
+            self.currently_running_index_orig_id[new_group_ind] = orig_id
 
             self.sampler.log_like_fn.d_d_all[new_group_ind] = d_d
+
+            self.output_info_store[new_group_ind] = keep_info
+
             return False
 
         except StopIteration:
@@ -489,6 +495,7 @@ class RunSearchProcedure(BaseTemplateSetup):
         max_log_like = xp.full((self.ngroups,), -np.inf)
         now_max_log_like = xp.full((self.ngroups,), -np.inf)
         iters_at_max = xp.zeros((self.ngroups,), dtype=int)
+        self.output_info_store = [None for _ in range(self.ngroups)]
         
         run = True
         finish_up = False
@@ -536,10 +543,10 @@ class RunSearchProcedure(BaseTemplateSetup):
                     converged[end_i] = False
                     iters_at_max[end_i] = 0
 
-                    index = self.currently_running_index[end_i]
+                    orig_id = self.currently_running_index_orig_id[end_i]
 
                     output_state = State({"gb": self.start_state.branches["gb"].coords[end_i].get()}, log_like=self.start_state.log_like[end_i].get(), log_prior=self.start_state.log_prior[end_i].get(), betas=self.start_state.betas[end_i].get(), random_state=np.random.get_state())
-                    backend_tmp = HDFBackend(out_fp, name=str(int(index)))
+                    backend_tmp = HDFBackend(out_fp, name=str(int(orig_id)))
                     backend_tmp.reset(
                         self.nwalkers,
                         8,
@@ -549,8 +556,15 @@ class RunSearchProcedure(BaseTemplateSetup):
                     backend_tmp.grow(1, None)
                     
                     accepted = np.zeros((self.ntemps, self.nwalkers), dtype=bool)
+                    
                     backend_tmp.save_step(output_state, accepted)
-                    self.currently_running_index[end_i] = None
+                    with h5py.File(backend_tmp.filename, "a") as fp:
+                        group_new = fp[str(int(orig_id))].create_group("keep_info")
+                        for key, value in self.output_info_store[end_i].items():
+                            group_new.attrs[key] = value
+                        group_new.attrs["logl_max_mcmc"] = output_state.log_like.max()
+
+                    self.currently_running_index_orig_id[end_i] = None
                     xp.get_default_memory_pool().free_all_blocks()
 
             if xp.all(~self.start_state.groups_running) and finish_up:
@@ -559,7 +573,7 @@ class RunSearchProcedure(BaseTemplateSetup):
     
 if __name__ == "__main__":
     st = time.perf_counter()
-    gpu = 6
+    gpu = 7
     setDevice(gpu)
     use_gpu = True
 
@@ -575,16 +589,16 @@ if __name__ == "__main__":
     df = 1/Tobs
     convergence_iter_count = 25
 
-    directory_in = "Realization_3/" # "Eccentric 3-body populations for Micheal/"
+    directory_in = "Realization_1/" # "Eccentric 3-body populations for Micheal/"
     directory_in2 = "populations_for_search/"
     seed_from_gen = 1010
     directory_out = "./"
-    output_string = "testing_new_setup"
+    output_string = "testing_new_setup_2"
     waveform_kwargs = dict(N=None, dt=dt, T=Tobs, use_c_implementation=True)
 
     nwalkers = 50
     ntemps = 10
-    ngroups = 50
+    ngroups = 150
     
     data_length = 8192
     runner = RunSearchProcedure(dt, Tobs, directory_in, directory_in2, seed_from_gen, directory_out, output_string, waveform_kwargs, ngroups, ntemps, nwalkers, data_length, snr_lim, m3_lim, ll_diff_lim, use_gpu=use_gpu)
