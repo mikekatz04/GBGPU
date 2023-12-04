@@ -75,6 +75,7 @@ class Guide(ABC):
 
         self.third_info = ThirdBodyTemplateSetup(use_gpu=self.use_gpu)
         self.base_info = BaseTemplateSetup(use_gpu=self.use_gpu)
+        self.df = 1 / self.waveform_kwargs["T"]
 
     @property
     def xp(self):
@@ -88,10 +89,22 @@ class Guide(ABC):
     @property
     def dir_info(self) -> dict:
         return self.settings["dir_info"]
+
+    @property
+    def limits_info(self) -> dict:
+        return self.settings["limits_info"]
+
+    @property
+    def sampler_settings(self) -> dict:
+        return self.settings["sampler_settings"]
     
     @property
     def waveform_kwargs(self) -> dict:
         return self.settings["waveform_kwargs"]
+
+    @classmethod
+    def get_out_fp(self, indicator: str) -> str:
+        raise NotImplementedError
 
     def run_directory_list(self):
         for directory in self.dir_info["population_directory_list"]:
@@ -184,6 +197,78 @@ class Guide(ABC):
 
         return data_new
 
+    def get_sampling_data(self, indicator: str) -> np.ndarray:
+
+        search_input_fp = self.dir_info["triples_setup_directory"] + self.dir_info["base_string"] + f"_pop_for_search_{indicator}.dat"
+        data = np.genfromtxt(
+                search_input_fp,
+                delimiter=",",
+                names=True,
+                dtype=None,
+            )
+
+        # transform to sampling basis
+        data["Amp"] = np.log(data["Amp"])
+        data["f0"] = data["f0"] * 1e3
+        data["iota"] = np.cos(data["iota"])
+        data["beta"] = np.sin(data["beta"])
+        data["A2"] = np.log(data["A2"])
+        data["T2"] = data["T2"] / data["P2"]
+
+        return data
+
+    @classmethod
+    def form_special_file_indicator(self, orig_id: int):
+        raise NotImplementedError
+
+    def check_if_source_has_been_run(self, indicator: str, orig_id: int) -> bool:
+
+        out_fp = self.get_out_fp(indicator)
+
+        if os.path.exists(out_fp):
+            special_string_indicator = self.form_special_file_indicator(orig_id)
+
+            with h5py.File(out_fp, "r") as fp:
+                already_run = special_string_indicator in fp
+        else:
+            already_run = False
+
+        return already_run
+
+    def check_if_parameters_are_within_lims(self, indicator: str, orig_id: int, m3: float, e2: float, ll_diff: float, opt_snr: float) -> bool:
+        good = True
+
+        for key in ["m3", "e2", "opt_snr"]:    
+            if not good:
+                continue
+            if f"{key}_lims" in self.limits_info:
+                limits = self.limits_info[f"{key}_lims"]
+                val = locals()[key]
+                if (val > limits[1] or val < limits[0]):
+                    good = False
+                    if self.verbose:
+                        print(f"Not running id {orig_id} in model {indicator} because {key} is not inside its defined limits: {val} not in {limits}")
+
+        if ll_diff > self.settings["cut_info"]["first_cut_ll_diff_lim"]:
+            # might be some numerical error. 
+            # This is making sure it is less than zero.
+            assert ll_diff < 1e-5  
+            good = False
+            if self.verbose:
+                print(f"Not running id {orig_id} in model {indicator} because ll_diff is > -2: {ll_diff}")
+
+        return good
+
+    def write_indicator_to_bad_file(self, indicator: str, reason: str="None"):
+
+        if not os.path.exists(self.dir_info["bad_file"]):
+            with open(self.dir_info["bad_file"], "w") as fp:
+                pass
+        
+        with open(self.dir_info["bad_file"], "a") as fp:
+            fp.write(f"{indicator}: {reason}\n")
+
+
 class TriplesSetupGuide(Guide):
 
     def __init__(self, *args, N=16384, batch_size=1000, **kwargs):
@@ -260,10 +345,14 @@ class TriplesSetupGuide(Guide):
 
     def build_waveforms(self, gb_gen: Callable, params: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
-        if "N" in self.waveform_kwargs:
-            self.waveform_kwargs.pop("N")
+        waveform_kwargs = self.waveform_kwargs.copy()
+        if "N" in waveform_kwargs:
+            waveform_kwargs.pop("N")
 
-        gb_gen.run_wave(*params.T, N=self.N, **self.waveform_kwargs)
+        if "oversample" in waveform_kwargs:
+            waveform_kwargs.pop("oversample")
+
+        gb_gen.run_wave(*params.T, N=self.N, **waveform_kwargs)
         return gb_gen.A, gb_gen.E, gb_gen.freqs
 
     def get_likelihood_information(self, params: np.ndarray):
@@ -274,11 +363,10 @@ class TriplesSetupGuide(Guide):
 
         freqs_third_in_psd = freqs_third if not self.use_gpu else freqs_third.get()
         psd = self.xp.asarray(get_sensitivity(freqs_third_in_psd.flatten(), sens_fn="noisepsd_AE", model="SciRDv1", includewd=self.waveform_kwargs["T"] / YEAR).reshape(freqs_third.shape))
-        df = 1 / self.waveform_kwargs["T"]
 
-        third_third = 4 * df * self.xp.sum((A_third.conj() * A_third + E_third.conj() * E_third) / psd, axis=-1)
-        third_base = 4 * df * self.xp.sum((A_third.conj() * A_base + E_third.conj() * E_base) / psd, axis=-1)
-        base_base = 4 * df * self.xp.sum((A_base.conj() * A_base + E_base.conj() * E_base) / psd, axis=-1)
+        third_third = 4 * self.df * self.xp.sum((A_third.conj() * A_third + E_third.conj() * E_third) / psd, axis=-1)
+        third_base = 4 * self.df * self.xp.sum((A_third.conj() * A_base + E_third.conj() * E_base) / psd, axis=-1)
+        base_base = 4 * self.df * self.xp.sum((A_base.conj() * A_base + E_base.conj() * E_base) / psd, axis=-1)
         
         phase_change = self.xp.angle(third_base)
         opt_snr = self.xp.sqrt(third_third.real)
@@ -328,11 +416,14 @@ class TriplesSetupGuide(Guide):
         if self.verbose:
             print("End triples setup:", directory, indicator, fp)
 
+    def get_out_fp(self, indicator: str) -> str:
+        return self.dir_info["triples_setup_directory"] + self.dir_info["base_string"] + f"_pop_for_search_{indicator}.dat"
+
     def readout(self, indicator: str, original_id: np.ndarray, params: np.ndarray, ll_info: np.ndarray, opt_snr: np.ndarray, phase_change: np.ndarray):
 
-        out_fp = self.dir_info["triples_setup_directory"] + self.dir_info["base_string"] + f"_pop_for_search_{indicator}.dat"
+        out_fp = self.get_out_fp(indicator)
 
-        inds = np.where(ll_info > self.settings["cut_info"]["first_cut_ll_diff_lim"])[0]
+        inds = np.where(ll_info < self.settings["cut_info"]["first_cut_ll_diff_lim"])[0]
         ll_good = ll_info[inds]
         snr_good = opt_snr[inds]
         phase_change_good = phase_change[inds]
@@ -382,11 +473,412 @@ class TriplesSetupGuide(Guide):
         check = np.genfromtxt(out_fp, names=True, delimiter=',', dtype=None)
 
 
+class SearchRuns(Guide):
+
+    def __init__(self, *args, **kwargs):
+
+        name = "search"
+        super().__init__(name, *args, **kwargs)
+
+        # store sampler settings as attributes
+        for key, val in self.sampler_settings["search"].items():
+            setattr(self, key, val)
+            
+        self.ndim = self.base_info.ndim
+
+        self.initialize_sampler_routine()
+
+    def initialize_sampler_routine(self):
+
+        self.tempering_kwargs = {"ntemps": self.ntemps, "Tmax": np.inf}
+
+        self.prior_transform_fn = PriorTransformFn(self.xp.zeros(self.ngroups), self.xp.ones(self.ngroups), self.xp.zeros(self.ngroups), self.xp.ones(self.ngroups))
+
+        data_channels = [self.xp.zeros(self.data_length * self.ngroups, dtype=complex), self.xp.zeros(self.data_length * self.ngroups, dtype=complex)]
+        psds = [self.xp.ones(self.data_length * self.ngroups, dtype=float), self.xp.ones(self.data_length * self.ngroups, dtype=float)]
+        start_freq = self.xp.full(self.ngroups, int(1e-3 / self.df), dtype=np.int32)
+        N_vals_in = self.xp.zeros(self.ngroups, dtype=int)
+        d_d_all = self.xp.zeros(self.ngroups, dtype=float)
+        self.N_max = int(self.data_length / 4)
+        self.log_like_fn = LogLikeFn(self.base_info.template_gen, data_channels, psds, start_freq, self.df, self.base_info.transform_fn, N_vals_in, self.data_length, d_d_all, **self.waveform_kwargs)
+        
+        self.currently_running_index_orig_id = [None for _ in range(self.ngroups)]
+        
+        # initialize sampler
+        self.sampler = ParaEnsembleSampler(
+            self.base_info.ndim,
+            self.nwalkers,
+            self.ngroups,
+            self.log_like_fn,
+            self.base_info.priors,
+            tempering_kwargs=self.tempering_kwargs,
+            args=[],
+            kwargs={},
+            gpu=gpu,
+            periodic=self.base_info.periodic,
+            backend=None,
+            update_fn=None,
+            update_iterations=-1,
+            stopping_fn=None,
+            stopping_iterations=-1,
+            name="gb",
+            prior_transform_fn=self.prior_transform_fn,
+            provide_supplimental=True,
+        )
+
+        coords = self.xp.zeros((self.ngroups, self.ntemps, self.nwalkers, self.ndim))
+
+        branch_supp_base_shape = (self.ngroups, self.ntemps, self.nwalkers)
+
+        data_inds = self.xp.repeat(self.xp.arange(self.ngroups, dtype=np.int32)[:, None], self.ntemps * self.nwalkers, axis=-1).reshape(self.ngroups, self.ntemps, self.nwalkers) 
+        branch_supps = {"gb": BranchSupplimental(
+            {"data_inds": data_inds}, base_shape=branch_supp_base_shape, copy=True
+        )}
+
+        groups_running = self.xp.zeros(self.ngroups, dtype=bool)
+        self.start_state = ParaState({"gb": coords}, groups_running=groups_running, branch_supplimental=branch_supps)
+        self.start_state.log_prior = self.xp.zeros((self.ngroups, self.ntemps, self.nwalkers))
+        self.start_state.log_like = self.xp.zeros((self.ngroups, self.ntemps, self.nwalkers))
+        self.start_state.betas = self.xp.ones((self.ngroups, self.ntemps))
+
+    def run_single_model(self, directory: str, indicator: str, fp: str):
+        
+        if self.verbose:
+            print("Start triples setup:", directory, indicator, fp)
+
+        data_input = self.get_input_data(directory + fp)
+        data_search = self.get_sampling_data(indicator)
+
+        self.run_mcmc(indicator, data_search, data_input)
+
+    def get_out_fp(self, indicator: str) -> str:
+        return self.dir_info["search_dir"] + self.dir_info["base_string"] + f"_search_info_{indicator}.h5"
+
+    def determine_N(self, injection_params: np.ndarray) -> int:
+
+        amp = np.exp(injection_params[0])
+        f0 = injection_params[1] * 1e-3
+
+        N_found_base = get_N(amp, f0, self.waveform_kwargs["T"], oversample=self.waveform_kwargs["oversample"]).item()
+
+        A2 = injection_params[-5]
+        varpi  = injection_params[-4]
+        e2  = injection_params[-3]
+        P2  = injection_params[-2]
+        T2  = injection_params[-1]
+
+        N_found_third = self.third_info.template_gen.special_get_N(
+            amp, 
+            f0, 
+            self.waveform_kwargs["T"], 
+            A2,
+            varpi,
+            e2,
+            P2,
+            T2, 
+            oversample=self.waveform_kwargs["oversample"]
+        )
+
+        N_found = np.max([N_found_base, N_found_third])
+
+        return N_found
+        
+    def get_lims(self, injection_params: np.ndarray) -> Tuple[List, List]:
+
+        f0 = injection_params[1] * 1e-3
+        fdot0 = injection_params[2]
+
+        chirp_mass_lims = self.limits_info["chirp_mass_lims"]
+        fdot_min = get_fdot(f0, Mc=chirp_mass_lims[0])
+        fdot_max = get_fdot(f0, Mc=chirp_mass_lims[1])
+
+        # adjust for the few that are over 1 solar mass
+        try:
+            assert fdot0 >= fdot_min and fdot0 <= fdot_max
+        except AssertionError:
+            fdot_max = fdot0 * 1.05
+            assert fdot0 >= fdot_min and fdot0 <= fdot_max
+
+        f_min = f0 * 0.999 * 1e3
+        f_max = f0 * 1.001 * 1e3
+        f_lims = [f_min, f_max]
+
+        fdot_lims = [fdot_min, fdot_max]
+
+        return f_lims, fdot_lims
+
+    def get_injection_data(self, injection_params_with_third: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+        params_in = self.third_info.transform_fn["gb"].both_transforms(injection_params_with_third[self.third_info.transform_fn["gb"].fill_dict["test_inds"]])
+        A_inj, E_inj = self.third_info.template_gen.inject_signal(*params_in, **self.waveform_kwargs)
+        return (A_inj, E_inj)
+
+    def information_generator(self, indicator: str, data_search: np.ndarray, data_orig: np.ndarray):
+        nbin = len(data_search)
+        for i in range(nbin):
+            index = int(data_search["index"][i])
+            orig_id = int(data_search["orig_id"][i])
+
+            already_run = self.check_if_source_has_been_run(indicator, orig_id)
+
+            if already_run:
+                if self.verbose:
+                    print(f"{int(orig_id)} already in file {self.get_out_fp(indicator)} so not running.")
+
+                continue
+        
+            # check limits
+            m3 = data_orig["M3"][int(index)]
+            e2 = data_search["e2"][i]
+            ll_diff_setup = data_search["lldiff_base_marg"][i]
+            opt_snr = data_search["snr"][i]
+            phase_shift = data_search["phase_shift_base"][i]
+
+            inside_limits = self.check_if_parameters_are_within_lims(indicator, orig_id, m3, e2, ll_diff_setup, opt_snr)
+            if not inside_limits:
+                continue
+
+            injection_params = np.array([data_search[key][i] for key in data_search.dtype.names[:14]])
+            injection_params[7] = injection_params[7] % (2 * np.pi)
+
+            template_params = injection_params[:9].copy()
+            
+            # maximized phase shift
+            template_params[4] = (template_params[4] + phase_shift) % (2 * np.pi)
+
+            N_found = self.determine_N(injection_params)
+            
+            if N_found > self.N_max:
+                if self.verbose:
+                    print(f"ID {int(orig_id)} (index: {int(index)}) has too high of N value so not running.")
+                self.write_indicator_to_bad_file(indicator, reason="too high of N")
+                continue
+
+            waveform_kwargs = self.waveform_kwargs.copy()
+
+            waveform_kwargs.pop("oversample")
+            waveform_kwargs["N"] = N_found
+
+            f_lims, fdot_lims = self.get_lims(injection_params)
+
+            A_inj, E_inj = self.get_injection_data(injection_params)
+
+            f0 = injection_params[1] / 1e3
+            start_freq = int(int(f0 / self.df) - self.data_length / 2)
+            fd = np.arange(start_freq, start_freq + self.data_length) * self.df
+
+            data_channels = [A_inj[start_freq:start_freq + self.data_length].copy(), E_inj[start_freq:start_freq + self.data_length].copy()]
+
+            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="sangria", includewd=self.waveform_kwargs["T"] / YEAR)
+            psd = [AE_psd, AE_psd]
+
+            info_out = {name: value for name, value in zip(data_search.dtype.names, data_search[i])}
+            yield (orig_id, index, injection_params, fd, data_channels, psd, start_freq, f_lims, fdot_lims, N_found, info_out)
+
+    def get_start_points(self, injection_params: np.ndarray, f_lims: List, fdot_lims: List, data_channels_tmp: List, psd_tmp: List, start_freq_ind: int, N: int) -> np.ndarray:
+
+        factor = 1e-5
+        cov = np.ones(self.ndim) * 1e-3
+        cov[1] = 1e-7
+        max_iter = 2000
+        start_like = np.zeros((self.ntemps, self.nwalkers))
+        while np.std(start_like[0]) < 7.0:
+            logp = np.full_like(start_like, -np.inf).flatten()
+            tmp_fs = np.zeros((self.ntemps * self.nwalkers, self.ndim))
+            fix = np.ones((self.ntemps * self.nwalkers), dtype=bool)
+            jj = 0
+            while jj < max_iter and np.any(fix):
+                # left off here. need to fix 
+                # - transform function for prior needs to transform output points as well
+                tmp_fs[fix] = (injection_params[self.base_info.transform_fn["gb"].fill_dict["test_inds"]] * (1. + factor * cov * np.random.randn(self.nwalkers * self.ntemps, 8)))[fix]
+
+                tmp = tmp_fs.copy()
+                
+                # map points
+                tmp[:, 1] = (tmp[:, 1] - f_lims[0]) / (f_lims[1] - f_lims[0])
+                tmp[:, 2] = (tmp[:, 2] - fdot_lims[0]) / (fdot_lims[1] - fdot_lims[0])
+
+                if np.any(tmp[:, 1] < 0.0):
+                    breakpoint()
+                logp = self.base_info.priors["gb"].logpdf(tmp).get()
+                fix = np.isinf(logp)
+                jj += 1
+
+            if "N" in self.waveform_kwargs:
+                self.waveform_kwargs.pop("N")
+
+            tmp_fs_in = self.base_info.transform_fn["gb"].both_transforms(tmp_fs)
+            start_like = self.base_info.template_gen.get_ll(tmp_fs_in, data_channels_tmp, psd_tmp, start_freq_ind=start_freq_ind, N=N, **self.waveform_kwargs)
+            if np.any(np.isnan(start_like)):
+                breakpoint()
+            tmp_fs = tmp_fs.reshape(self.ntemps, self.nwalkers, 8)
+            start_like = start_like.reshape(self.ntemps, self.nwalkers)
+            logp = logp.reshape(self.ntemps, self.nwalkers)
+            
+            factor *= 1.5
+            # print(np.std(start_like[0]))
+
+        if np.any(np.isnan(self.start_state.log_like)):
+                breakpoint()
+        return tmp_fs
+        
+    def setup_next_source(self, info_iterator: Callable, indicator: str, data_search: np.ndarray, data_orig: np.ndarray):
+        try:
+            (orig_id, index, injection_params, fd, data_channels_tmp, psd_tmp, start_freq_ind, f_lims, fdot_lims, N_val, keep_info) = next(info_iterator)
+            
+            data_channels_tmp = [self.xp.asarray(tmp) for tmp in data_channels_tmp]
+            psd_tmp = [self.xp.asarray(tmp) for tmp in psd_tmp]
+
+            # get injection inner product 
+            d_d = 4.0 * self.df * self.xp.sum(self.xp.asarray(data_channels_tmp).conj() * self.xp.asarray(data_channels_tmp) / self.xp.asarray(psd_tmp)).item().real
+
+            self.base_info.template_gen.d_d = d_d
+            
+            start_points = self.get_start_points(injection_params, f_lims, fdot_lims, data_channels_tmp, psd_tmp, start_freq_ind, N_val)
+            # setup in ParaState
+
+            # get first group not running
+            new_group_ind = self.start_state.groups_running.argmin().item()
+            self.start_state.groups_running[new_group_ind] = True
+
+            self.start_state.branches["gb"].coords[new_group_ind] = self.xp.asarray(start_points)
+            # self.start_state.log_prior[new_group_ind] = xp.asarray(logp)
+            # self.start_state.log_like[new_group_ind] = xp.asarray(start_like)
+            self.start_state.betas[new_group_ind] = self.xp.asarray(self.sampler.base_temperature_control.betas)
+
+            inds_slice = slice((new_group_ind) * self.data_length, (new_group_ind + 1) * self.data_length, 1)
+            self.sampler.log_like_fn.data[0][inds_slice] = data_channels_tmp[0]
+            self.sampler.log_like_fn.data[1][inds_slice] = data_channels_tmp[1]
+            self.sampler.log_like_fn.psd[0][inds_slice] = psd_tmp[0]
+            self.sampler.log_like_fn.psd[1][inds_slice] = psd_tmp[1]
+            self.sampler.log_like_fn.start_freq[new_group_ind] = start_freq_ind
+
+            self.sampler.prior_transform_fn.f_min[new_group_ind] = f_lims[0]
+            self.sampler.prior_transform_fn.f_max[new_group_ind] = f_lims[1]
+            self.sampler.prior_transform_fn.fdot_min[new_group_ind] = fdot_lims[0]
+            self.sampler.prior_transform_fn.fdot_max[new_group_ind] = fdot_lims[1]
+            self.sampler.log_like_fn.N_vals[new_group_ind] = N_val
+            self.currently_running_index_orig_id[new_group_ind] = orig_id
+
+            self.sampler.log_like_fn.d_d_all[new_group_ind] = d_d
+
+            self.output_info_store[new_group_ind] = keep_info
+
+            return False
+
+        except StopIteration:
+            return True
+
+    def readout(self, end_i: int, indicator: str):
+        output_state = State({"gb": self.start_state.branches["gb"].coords[end_i].get()}, log_like=self.start_state.log_like[end_i].get(), log_prior=self.start_state.log_prior[end_i].get(), betas=self.start_state.betas[end_i].get(), random_state=np.random.get_state())
+
+        orig_id = self.currently_running_index_orig_id[end_i]
+                    
+        backend_tmp = HDFBackend(self.get_out_fp(indicator), name=str(int(orig_id)))
+        
+        backend_tmp.reset(
+            self.nwalkers,
+            self.base_info.ndim,
+            ntemps=self.ntemps,
+            branch_names=["gb"],
+        )
+        backend_tmp.grow(1, None)
+        
+        # meaningless array needed for saving input
+        accepted = np.zeros((self.ntemps, self.nwalkers), dtype=bool)
+        backend_tmp.save_step(output_state, accepted)
+
+        # add other information to file
+        with h5py.File(backend_tmp.filename, "a") as fp:
+            group_new = fp[str(int(orig_id))].create_group("keep_info")
+            for key, value in self.output_info_store[end_i].items():
+                group_new.attrs[key] = value
+            group_new.attrs["logl_max_mcmc"] = output_state.log_like.max()
+
+        return
+       
+    def run_mcmc(self, indicator: str, data_search: np.ndarray, data_input: np.ndarray):
+
+        info_iterator = self.information_generator(indicator, data_search, data_input)
+
+        max_log_like = self.xp.full((self.ngroups,), -np.inf)
+        now_max_log_like = self.xp.full((self.ngroups,), -np.inf)
+        iters_at_max = self.xp.zeros((self.ngroups,), dtype=int)
+        self.output_info_store = [None for _ in range(self.ngroups)]
+        
+        convergence_iter_count = self.sampler_settings["search"]["convergence_iter_count"]
+        
+        run = True
+        finish_up = False
+
+        while run:
+            finish_up = self.setup_next_source(info_iterator, indicator, data_search, data_input)
+
+            # end if all are done
+            if finish_up and np.all(~self.start_state.groups_running):
+                run = False
+                return
+
+            started_run = False
+            running_inner = (self.xp.all(self.start_state.groups_running) or finish_up)
+            while running_inner:
+                started_run = True
+
+                self.start_state.log_like = None
+                self.start_state.log_prior = None
+                self.start_state = self.sampler.run_mcmc(self.start_state, self.sampler_settings["search"]["nsteps_per_check"], progress=self.sampler_settings["search"]["progress"], store=False)
+
+                now_max_log_like[self.start_state.groups_running] = self.start_state.log_like.max(axis=(1, 2))[(self.start_state.groups_running)]
+                improved = (now_max_log_like > max_log_like)
+
+                iters_at_max[(improved) & (self.start_state.groups_running)] = 0
+                iters_at_max[(~improved) & (self.start_state.groups_running)] += 1
+                max_log_like[(improved) & (self.start_state.groups_running)] = now_max_log_like[(improved) & (self.start_state.groups_running)]
+
+                converged = iters_at_max > convergence_iter_count
+
+                end = converged | (now_max_log_like > -2.0)
+
+                if np.any(end):
+                    running_inner = False
+
+                self.start_state.groups_running[end] = False
+                # print(iters_at_max, start_state.groups_running.sum().item(), now_max_log_like[:10])
+            
+            if started_run:
+                # which groups ended
+                end = np.where(end.get())[0]
+                for end_i in end:
+
+                    # reset values
+                    max_log_like[end_i] = -np.inf
+                    now_max_log_like[end_i] = -np.inf
+                    converged[end_i] = False
+                    iters_at_max[end_i] = 0
+
+                    # readout the source that finished
+                    self.readout(end_i, indicator)
+
+                    # reset running id
+                    self.currently_running_index_orig_id[end_i] = None
+
+                    self.xp.get_default_memory_pool().free_all_blocks()
+
+            if self.xp.all(~self.start_state.groups_running) and finish_up:
+                run = False
+
+    def form_special_file_indicator(self, orig_id: int, **kwargs):
+        return str(orig_id)
+
+
 
 if __name__ == "__main__":
 
     settings = get_settings()
     gpu = 0
-    runner = TriplesSetupGuide(settings, batch_size=1000, gpu=gpu)
+    # runner = TriplesSetupGuide(settings, batch_size=1000, gpu=gpu)
+    
+    # 
+    runner = SearchRuns(settings, gpu=gpu)
     runner.run_directory_list()
     breakpoint()

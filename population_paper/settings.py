@@ -16,7 +16,8 @@ def get_settings(copy_settings_file=False):
         dt=dt,
         T=Tobs,
         N=None,
-        oversample=oversample
+        oversample=oversample,
+        use_c_implementation=True,
     )
 
     base_string = "run_test_1"
@@ -28,6 +29,7 @@ def get_settings(copy_settings_file=False):
     evidence_dir = main_dir + "evidence_info/"
     pe_dir = main_dir + "pe_info/"
     status_file_base = "status_file"
+    bad_file = main_dir + base_string + "_bad_file.txt"
     
     directory_info = dict(
         base_string=base_string,
@@ -37,7 +39,8 @@ def get_settings(copy_settings_file=False):
         search_dir=search_dir,
         evidence_dir=evidence_dir,
         pe_dir=pe_dir,
-        status_file_base=status_file_base
+        status_file_base=status_file_base,
+        bad_file=bad_file
     )
 
     first_cut_ll_diff_lim = -2.0
@@ -50,11 +53,38 @@ def get_settings(copy_settings_file=False):
 
     verbose = True
 
+    m3_lims = [0.0, 100.0]
+    e2_lims = [0.0, 0.985]
+    opt_snr_lims = [0.0, 1e6]
+
+    limits_info = dict(
+        m3_lims=m3_lims,
+        e2_lims=e2_lims,
+        opt_snr_lims=opt_snr_lims,
+        chirp_mass_lims=[0.001, 1.05],
+    )
+
+    search_settings = dict(
+        nwalkers=50,
+        ntemps=10,
+        ngroups=5,
+        data_length=8192,
+        convergence_iter_count=25,
+        nsteps_per_check=20,
+        progress=True,
+    )
+
+    sampler_settings = dict(
+        search=search_settings
+    )
+
     return dict(
+        limits_info=limits_info,
         dir_info=directory_info,
         waveform_kwargs=waveform_kwargs,
         verbose=verbose,
-        cut_info=cut_info
+        cut_info=cut_info,
+        sampler_settings=sampler_settings
     )
 
 
