@@ -67,15 +67,29 @@ def get_settings(copy_settings_file=False):
     search_settings = dict(
         nwalkers=50,
         ntemps=10,
-        ngroups=5,
+        ngroups=500,
         data_length=8192,
         convergence_iter_count=25,
         nsteps_per_check=20,
         progress=True,
     )
 
+    evidence_settings = dict(
+        nwalkers=40,
+        ntemps=200,
+        ngroups=500,
+        data_length=8192,
+        total_steps_for_evidence=100,
+        number_old_evidences=6,
+        nsteps=10,
+        thin_by=20,
+        progress=True,
+        p_base_to_third=0.5,  # for product space mcmc
+    )
+
     sampler_settings = dict(
-        search=search_settings
+        search=search_settings,
+        evidence=evidence_settings
     )
 
     return dict(

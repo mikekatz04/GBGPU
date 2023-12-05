@@ -177,6 +177,12 @@ class PriorTransformFn:
         fdot_min_here = self.fdot_min[groups_running]
         fdot_max_here = self.fdot_max[groups_running]
         coords[:, :, :, 2] = (coords[:, :, :, 2] - fdot_min_here[:, None, None]) / (fdot_max_here[:, None, None] - fdot_min_here[:, None, None])
+        
+        if self.is_third:
+            P2_min_here = self.P2_min[groups_running]
+            P2_max_here = self.P2_max[groups_running]
+            coords[:, :, :, -2] = (coords[:, :, :, -2] - P2_min_here[:, None, None]) / (P2_max_here[:, None, None] - P2_min_here[:, None, None])
+
         return
 
 
@@ -188,6 +194,8 @@ class ThirdBodyTemplateSetup(TemplateSetup):
 
         use_gpu = use_gpu
         template_gen = GBGPUThirdBody(use_gpu=use_gpu)
+
+        template_gen.get_ll = template_gen.get_ll_special
         
         # build priors
         priors_in = {
