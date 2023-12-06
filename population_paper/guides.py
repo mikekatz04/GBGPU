@@ -415,6 +415,8 @@ class TriplesSetupGuide(Guide):
         self.N = N
         super().__init__(name, *args, **kwargs)
 
+        self.waveform_kwargs["use_c_implementation"] = False
+
     def build_sampling_parameter_set(self, data_input):
         
         m1 = data_input['wd1_mass']
@@ -652,7 +654,7 @@ class SearchRuns(Guide):
             tempering_kwargs=self.tempering_kwargs,
             args=[],
             kwargs={},
-            gpu=gpu,
+            gpu=self.gpu,
             periodic=self.base_info.periodic,
             backend=None,
             update_fn=None,
@@ -998,7 +1000,7 @@ class EvidenceRuns(Guide):
                 tempering_kwargs=self.tempering_kwargs,
                 args=[],
                 kwargs={},
-                gpu=gpu,
+                gpu=self.gpu,
                 periodic=info.periodic,
                 backend=None,
                 update_fn=None,
@@ -1435,7 +1437,7 @@ class PosteriorRuns(Guide):
             tempering_kwargs=self.tempering_kwargs,
             args=[],
             kwargs={},
-            gpu=gpu,
+            gpu=self.gpu,
             periodic=self.third_info.periodic,
             backend=None,
             update_fn=None,
