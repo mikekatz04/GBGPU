@@ -77,7 +77,7 @@ def get_settings(copy_settings_file=False):
     evidence_settings = dict(
         nwalkers=40,
         ntemps=200,
-        ngroups=500,
+        ngroups=10,
         data_length=8192,
         total_steps_for_evidence=100,
         number_old_evidences=6,
@@ -87,9 +87,21 @@ def get_settings(copy_settings_file=False):
         p_base_to_third=0.5,  # for product space mcmc
     )
 
+    pe_settings = dict(
+        nwalkers=100,
+        ntemps=10,
+        ngroups=500,
+        data_length=8192,
+        nsteps=200,
+        burn=100,
+        thin_by=25,
+        progress=True,
+    )
+
     sampler_settings = dict(
         search=search_settings,
-        evidence=evidence_settings
+        evidence=evidence_settings,
+        pe=pe_settings
     )
 
     return dict(

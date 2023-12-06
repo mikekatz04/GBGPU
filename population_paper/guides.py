@@ -1393,6 +1393,304 @@ class EvidenceRuns(Guide):
         return str(orig_id) + template
 
 
+
+class PosteriorRuns(Guide):
+
+    def __init__(self, *args, **kwargs):
+
+        name = "pe"
+        super().__init__(name, *args, **kwargs)
+
+        # store sampler settings as attributes
+        for key, val in self.sampler_settings["pe"].items():
+            setattr(self, key, val)
+            
+        self.ndim = self.third_info.ndim
+
+        self.initialize_sampler_routine()
+
+    def initialize_sampler_routine(self):
+
+        self.tempering_kwargs = {"ntemps": self.ntemps, "Tmax": np.inf}
+
+        self.prior_transform_fn = PriorTransformFn(self.xp.zeros(self.ngroups), self.xp.ones(self.ngroups), self.xp.zeros(self.ngroups), self.xp.ones(self.ngroups), P2_min=self.xp.ones(self.ngroups), P2_max=self.xp.ones(self.ngroups))
+
+        data_channels = [self.xp.zeros(self.data_length * self.ngroups, dtype=complex), self.xp.zeros(self.data_length * self.ngroups, dtype=complex)]
+        psds = [self.xp.ones(self.data_length * self.ngroups, dtype=float), self.xp.ones(self.data_length * self.ngroups, dtype=float)]
+        start_freq = self.xp.full(self.ngroups, int(1e-3 / self.df), dtype=np.int32)
+        N_vals_in = self.xp.zeros(self.ngroups, dtype=int)
+        d_d_all = self.xp.zeros(self.ngroups, dtype=float)
+        self.N_max = int(self.data_length / 4)
+        self.log_like_fn = LogLikeFn(self.third_info.template_gen, data_channels, psds, start_freq, self.df, self.third_info.transform_fn, N_vals_in, self.data_length, d_d_all, **self.waveform_kwargs)
+        
+        self.currently_running_orig_id = [None for _ in range(self.ngroups)]
+        
+        # initialize sampler
+        self.sampler = ParaEnsembleSampler(
+            self.third_info.ndim,
+            self.nwalkers,
+            self.ngroups,
+            self.log_like_fn,
+            self.third_info.priors,
+            tempering_kwargs=self.tempering_kwargs,
+            args=[],
+            kwargs={},
+            gpu=gpu,
+            periodic=self.third_info.periodic,
+            backend=None,
+            update_fn=None,
+            update_iterations=-1,
+            stopping_fn=None,
+            stopping_iterations=-1,
+            name="gb",
+            prior_transform_fn=self.prior_transform_fn,
+            provide_supplimental=True,
+        )
+
+        coords = self.xp.zeros((self.ngroups, self.ntemps, self.nwalkers, self.ndim))
+
+        branch_supp_base_shape = (self.ngroups, self.ntemps, self.nwalkers)
+
+        data_inds = self.xp.repeat(self.xp.arange(self.ngroups, dtype=np.int32)[:, None], self.ntemps * self.nwalkers, axis=-1).reshape(self.ngroups, self.ntemps, self.nwalkers) 
+        branch_supps = {"gb": BranchSupplimental(
+            {"data_inds": data_inds}, base_shape=branch_supp_base_shape, copy=True
+        )}
+
+        groups_running = self.xp.zeros(self.ngroups, dtype=bool)
+        self.start_state = ParaState({"gb": coords}, groups_running=groups_running, branch_supplimental=branch_supps)
+        self.start_state.log_prior = self.xp.zeros((self.ngroups, self.ntemps, self.nwalkers))
+        self.start_state.log_like = self.xp.zeros((self.ngroups, self.ntemps, self.nwalkers))
+        self.start_state.betas = self.xp.ones((self.ngroups, self.ntemps))
+        self.currently_running_output_info = [None for _ in range(self.ngroups)]
+        
+    def get_last_evidence_state(self, indicator: str, orig_id: int) -> State:
+
+        reader_evidence = HDFBackend(self.get_evidence_file(indicator), name=str(int(orig_id)) + "_third")
+        
+        try:
+            last_state = reader_evidence.get_last_sample()
+        except KeyError:
+            last_state = None
+
+        return last_state
+
+    def run_single_model(self, directory: str, indicator: str, fp: str):
+        
+        if self.verbose:
+            print(f"Start {self.name}:", directory, indicator, fp)
+
+        data_input = self.get_input_data(directory + fp)
+        data_search = self.get_sampling_data(indicator)
+
+        self.run_mcmc(indicator, data_search, data_input)
+
+        self.add_to_status_file(indicator)
+
+    def get_out_fp(self, indicator: str) -> str:
+        return self.get_pe_file(indicator)
+
+    def information_generator(self, indicator: str, data_search: np.ndarray, data_orig: np.ndarray):
+        nbin = len(data_search)
+        for i in range(nbin):
+            index = int(data_search["index"][i])
+            orig_id = int(data_search["orig_id"][i])
+
+            already_run = self.check_if_source_has_been_run(indicator, str(orig_id) + "_third_posterior")
+
+            if already_run:
+                if self.verbose:
+                    print(f"{int(orig_id)} already in file {self.get_out_fp(indicator)} so not running.")
+
+                continue
+        
+            injection_params = np.array([data_search[key][i] for key in data_search.dtype.names[:14]])
+            injection_params[7] = injection_params[7] % (2 * np.pi)
+
+            N_found = self.determine_N(injection_params)
+            
+            if N_found > self.N_max:
+                if self.verbose:
+                    print(f"ID {int(orig_id)} (index: {int(index)}) has too high of N value so not running.")
+                self.write_indicator_to_bad_file(indicator, reason="too high of N")
+                continue
+
+            waveform_kwargs = self.waveform_kwargs.copy()
+
+            waveform_kwargs.pop("oversample")
+            waveform_kwargs["N"] = N_found
+
+            f_lims, fdot_lims, P2_lims = self.get_lims(injection_params, return_P2_lims=True)
+
+            A_inj, E_inj = self.get_injection_data(injection_params)
+
+            f0 = injection_params[1] / 1e3
+            start_freq = int(int(f0 / self.df) - self.data_length / 2)
+            fd = np.arange(start_freq, start_freq + self.data_length) * self.df
+
+            data_channels = [A_inj[start_freq:start_freq + self.data_length].copy(), E_inj[start_freq:start_freq + self.data_length].copy()]
+
+            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="sangria", includewd=self.waveform_kwargs["T"] / YEAR)
+            psd = [AE_psd, AE_psd]
+
+            last_state = self.get_last_evidence_state(indicator, orig_id)
+
+            if last_state is None:
+                if self.verbose:
+                    print(f"{int(orig_id)} not in file {self.get_search_file(indicator)} so not running.")
+                continue
+
+            info_out = {name: value for name, value in zip(data_search.dtype.names, data_search[i])}
+            yield (orig_id, index, injection_params, fd, data_channels, psd, start_freq, f_lims, fdot_lims, P2_lims, N_found, last_state, info_out)
+        
+    def setup_next_source(self, info_iterator: Callable, indicator: str, data_search: np.ndarray, data_orig: np.ndarray):
+        try:
+            (orig_id, index, injection_params, fd, data_channels_tmp, psd_tmp, start_freq_ind, f_lims, fdot_lims, P2_lims, N_val, last_state, keep_info) = next(info_iterator)
+            
+            data_channels_tmp = [self.xp.asarray(tmp) for tmp in data_channels_tmp]
+            psd_tmp = [self.xp.asarray(tmp) for tmp in psd_tmp]
+
+            # get injection inner product 
+            d_d = 4.0 * self.df * self.xp.sum(self.xp.asarray(data_channels_tmp).conj() * self.xp.asarray(data_channels_tmp) / self.xp.asarray(psd_tmp)).item().real
+
+            self.third_info.template_gen.d_d = d_d
+            
+            start_points = last_state.branches["gb"].coords.copy()
+            # setup in ParaState
+
+            # get first group not running
+            new_group_ind = self.start_state.groups_running.argmin().item()
+            self.start_state.groups_running[new_group_ind] = True
+            
+            last_evidence_sample_nwalkers = last_state.branches["gb"].shape[1]
+
+            inds_start = np.random.choice(np.arange(last_evidence_sample_nwalkers), size=(self.ntemps, self.nwalkers), replace=True)
+            self.start_state.branches["gb"].coords[new_group_ind] = self.xp.asarray(last_state.branches["gb"].coords[0, inds_start, 0][None, :])
+
+            inds_slice = slice((new_group_ind) * self.data_length, (new_group_ind + 1) * self.data_length, 1)
+            self.sampler.log_like_fn.data[0][inds_slice] = data_channels_tmp[0]
+            self.sampler.log_like_fn.data[1][inds_slice] = data_channels_tmp[1]
+            self.sampler.log_like_fn.psd[0][inds_slice] = psd_tmp[0]
+            self.sampler.log_like_fn.psd[1][inds_slice] = psd_tmp[1]
+            self.sampler.log_like_fn.start_freq[new_group_ind] = start_freq_ind
+
+            self.sampler.prior_transform_fn.f_min[new_group_ind] = f_lims[0]
+            self.sampler.prior_transform_fn.f_max[new_group_ind] = f_lims[1]
+            self.sampler.prior_transform_fn.fdot_min[new_group_ind] = fdot_lims[0]
+            self.sampler.prior_transform_fn.fdot_max[new_group_ind] = fdot_lims[1]
+            self.sampler.prior_transform_fn.P2_min[new_group_ind] = P2_lims[0]
+            self.sampler.prior_transform_fn.P2_max[new_group_ind] = P2_lims[1]
+            
+            self.sampler.log_like_fn.N_vals[new_group_ind] = N_val
+            self.currently_running_orig_id[new_group_ind] = orig_id
+
+            self.sampler.log_like_fn.d_d_all[new_group_ind] = d_d
+
+            self.currently_running_output_info[new_group_ind] = keep_info
+            
+            return False
+
+        except StopIteration:
+            return True
+
+    def readout(self, end_i: int, indicator: str):
+
+        orig_id = self.currently_running_orig_id[end_i]
+                 
+        if orig_id is None:
+            return
+
+        output_state = State({"gb": self.start_state.branches["gb"].coords[end_i].get()}, log_like=self.start_state.log_like[end_i].get(), log_prior=self.start_state.log_prior[end_i].get(), betas=self.start_state.betas[end_i].get(), random_state=np.random.get_state())
+
+        group_name = str(int(orig_id)) + "_" + self.third_info.name + "_posterior"
+        backend_tmp = HDFBackend(self.get_out_fp(indicator), name=group_name)
+        backend_tmp.reset(
+            self.nwalkers,
+            self.third_info.ndim,
+            ntemps=self.ntemps,
+            branch_names=["gb"],
+        )
+        backend_tmp.grow(self.sampler.backend.iteration, None)
+        with h5py.File(backend_tmp.filename, "a") as fp_save:
+            fp_save[group_name].attrs["iteration"] = self.sampler.iteration
+            fp_save[group_name]["chain"]["gb"][:] = self.sampler.get_chain()[:, end_i][:, :, :, None]
+            fp_save[group_name]["log_like"][:] = self.sampler.get_log_like()[:, end_i]
+            fp_save[group_name]["log_prior"][:] = self.sampler.get_log_prior()[:, end_i]
+            group_new = fp_save[group_name].create_group("keep_info")
+            for key, value in self.currently_running_output_info[end_i].items():
+                group_new.attrs[key] = value
+            
+        return
+       
+    def run_mcmc(self, indicator: str, data_search: np.ndarray, data_input: np.ndarray):
+
+        info_iterator = self.information_generator(indicator, data_search, data_input)
+
+        run = True
+        finish_up = False
+
+        burn = self.sampler_settings["pe"]["burn"]
+        thin_by = self.sampler_settings["pe"]["thin_by"]
+        nsteps = self.sampler_settings["pe"]["nsteps"]
+        progress = self.sampler_settings["pe"]["progress"]
+
+        while run:
+            finish_up = self.setup_next_source(info_iterator, indicator, data_search, data_input)
+
+            if not finish_up and np.any(~self.start_state.groups_running):
+                continue
+            # end if all are done
+            if finish_up and np.all(~self.start_state.groups_running):
+                run = False
+                return
+                
+            self.start_state.log_like = None
+            self.start_state.log_prior = None
+            self.start_state.betas = None
+
+            self.sampler.backend.reset(*self.sampler.backend.reset_args, **self.sampler.backend.reset_kwargs)
+            self.start_state = self.sampler.run_mcmc(self.start_state, nsteps, burn=burn, thin_by=thin_by, progress=progress, store=True)
+
+            template = self.third_info
+
+            for end_i in range(self.ngroups):
+                orig_id = self.currently_running_orig_id[end_i]
+                if orig_id is None:
+                    continue
+                group_name = str(int(orig_id)) + "_" + template.name + "_posterior"
+                backend_tmp = HDFBackend(self.get_out_fp(indicator), name=group_name)
+                backend_tmp.reset(
+                    self.nwalkers,
+                    template.ndim,
+                    ntemps=self.ntemps,
+                    branch_names=["gb"],
+                )
+                backend_tmp.grow(self.sampler.backend.iteration, None)
+                with h5py.File(backend_tmp.filename, "a") as fp_save:
+                    fp_save[group_name].attrs["iteration"] = self.sampler.iteration
+                    fp_save[group_name]["chain"]["gb"][:] = self.sampler.get_chain()[:, end_i][:, :, :, None]
+                    fp_save[group_name]["log_like"][:] = self.sampler.get_log_like()[:, end_i]
+                    fp_save[group_name]["log_prior"][:] = self.sampler.get_log_prior()[:, end_i]
+                    group_new = fp_save[group_name].create_group("keep_info")
+                    for key, value in self.currently_running_output_info[end_i].items():
+                        group_new.attrs[key] = value
+                    
+
+                self.currently_running_output_info[end_i] = None
+                    
+                self.start_state.groups_running[end_i] = False
+                
+                self.currently_running_orig_id[end_i] = None
+                
+                if self.use_gpu:
+                    self.xp.get_default_memory_pool().free_all_blocks()
+
+            if self.xp.all(~self.start_state.groups_running) and finish_up:
+                run = False
+
+    def form_special_file_indicator(self, orig_id: int, **kwargs):
+        return str(orig_id)
+
+
 if __name__ == "__main__":
 
     settings = get_settings()
@@ -1401,6 +1699,8 @@ if __name__ == "__main__":
     
     # runner = SearchRuns(settings, gpu=gpu)
     
-    runner = EvidenceRuns(settings, gpu=gpu) 
+    # runner = EvidenceRuns(settings, gpu=gpu) 
+    
+    runner = PosteriorRuns(settings, gpu=gpu) 
     runner.run_directory_list()
     breakpoint()
