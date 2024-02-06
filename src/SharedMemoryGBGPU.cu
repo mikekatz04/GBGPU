@@ -4810,7 +4810,7 @@ void make_new_move_wrap(InputInfo inputs)
     // std::cout << shared_memory_size << std::endl;
      std::cout << "Success" <<  std::endl;
 
-    CUDA_CHECK_AND_EXIT(cudaFreeAsync(params_curr_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(params_curr_d));
     CUDA_CHECK_AND_EXIT(cudaFree(data_d));
     CUDA_CHECK_AND_EXIT(cudaFree(band_info_d));
     CUDA_CHECK_AND_EXIT(cudaFree(mcmc_info_d));
