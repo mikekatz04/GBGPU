@@ -1,22 +1,24 @@
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GBGPU Tutorial &mdash; gbgpu  documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-      <link rel="stylesheet" href="_static/nbsphinx-code-cells.css" type="text/css" />
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+      <link rel="stylesheet" type="text/css" href="_static/nbsphinx-code-cells.css?v=720011df" />
+
+  
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script src="_static/jquery.js"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/doctools.js"></script>
-        <script src="_static/sphinx_highlight.js"></script>
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=5929fcd5"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
         <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
         <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -98,7 +100,7 @@
            <div itemprop="articleBody">
              
   <section id="GBGPU-Tutorial">
-<h1>GBGPU Tutorial<a class="headerlink" href="#GBGPU-Tutorial" title="Permalink to this heading"></a></h1>
+<h1>GBGPU Tutorial<a class="headerlink" href="#GBGPU-Tutorial" title="Link to this heading"></a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> is a GPU-accelerated version of the <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> waveform which has been developed by Neil Cornish, Tyson Littenberg, Travis Robson, and Stas Babak. It computes gravitational waveforms for Galactic binary systems observable by LISA using a fast/slow-type decomposition. For more details on the original construction of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> see <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>.</p>
 <p>The current version of the code is very closely related to the implementation of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> in the LISA Data Challenges’ Python code package. The waveform code is entirely Python-based. It is about 1/2 the speed of the full C version, but much simpler in Python for right now. There are also many additional functions including fast likelihood computations for individual Galactic binaries, as well as fast C-based methods to combine waveforms into global fitting templates.</p>
 <p>The code is CPU/GPU agnostic. CUDA and NVIDIA GPUs are required to run these codes for GPUs.</p>
@@ -123,7 +125,7 @@
 </div>
 </section>
 <section id="Generating-Galactic-binary-waveforms">
-<h1>Generating Galactic binary waveforms<a class="headerlink" href="#Generating-Galactic-binary-waveforms" title="Permalink to this heading"></a></h1>
+<h1>Generating Galactic binary waveforms<a class="headerlink" href="#Generating-Galactic-binary-waveforms" title="Link to this heading"></a></h1>
 <p>Initialize the waveform class.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
@@ -223,7 +225,7 @@ signal length: (512,)
 </div>
 </section>
 <section id="Adding-additional-GB-astrophysics">
-<h1>Adding additional GB astrophysics<a class="headerlink" href="#Adding-additional-GB-astrophysics" title="Permalink to this heading"></a></h1>
+<h1>Adding additional GB astrophysics<a class="headerlink" href="#Adding-additional-GB-astrophysics" title="Link to this heading"></a></h1>
 <p>It is possible in <code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> to inherit a special class <cite>(``gbgpu.gbgpu.InheritGBGPU`</cite>) &lt;<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU">https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.gbgpu.InheritGBGPU</a>&gt;`__ that allows users to add other types of astrophysics to the FastGB waveform. This requires that the astrophysical effects vary slowly.</p>
 <p>The methods that need to be written when adding astrophysics are <code class="docutils literal notranslate"><span class="pre">prepare_additional_args</span></code>, <code class="docutils literal notranslate"><span class="pre">special_get_N</span></code>, <code class="docutils literal notranslate"><span class="pre">shift_frequency</span></code>, and <code class="docutils literal notranslate"><span class="pre">add_to_argS</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">prepare_additional_args</span></code>: Prepares all arguments beyond the base GB parameters.</p>
@@ -232,7 +234,7 @@ signal length: (512,)
 <p><code class="docutils literal notranslate"><span class="pre">add_to_argS</span></code>: Adjusts the phasing in the transfer function of the slow waveform.</p>
 <p>See <code class="docutils literal notranslate"><span class="pre">`gbgpu.thirdbody.GBGPUThirdBody</span></code> &lt;<a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody">https://mikekatz04.github.io/GBGPU/html/user/derivedwaves.html#gbgpu.thirdbody.ThirdBody</a>&gt;`__ for an example and more information.</p>
 <section id="Example:-Third-body-in-orbit-around-the-inner-binary">
-<h2>Example: Third-body in orbit around the inner binary<a class="headerlink" href="#Example:-Third-body-in-orbit-around-the-inner-binary" title="Permalink to this heading"></a></h2>
+<h2>Example: Third-body in orbit around the inner binary<a class="headerlink" href="#Example:-Third-body-in-orbit-around-the-inner-binary" title="Link to this heading"></a></h2>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
@@ -304,7 +306,7 @@ Third-body signal length: (512,)
 </section>
 </section>
 <section id="Calculating-the-Information-Matrix">
-<h1>Calculating the Information Matrix<a class="headerlink" href="#Calculating-the-Information-Matrix" title="Permalink to this heading"></a></h1>
+<h1>Calculating the Information Matrix<a class="headerlink" href="#Calculating-the-Information-Matrix" title="Link to this heading"></a></h1>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
@@ -456,10 +458,10 @@ array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
 </div>
 </section>
 <section id="Utility-functions">
-<h1>Utility functions<a class="headerlink" href="#Utility-functions" title="Permalink to this heading"></a></h1>
+<h1>Utility functions<a class="headerlink" href="#Utility-functions" title="Link to this heading"></a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> provides many utility functions. Below are some examples of <code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> utility functions. This may not include all utility functions. See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/user/utils.html#gbgpu-utility-functions">utility documentation</a> for all included utility functions.</p>
 <section id="Get-the-instantaneous-gravitational-wave-frequency">
-<h2>Get the instantaneous gravitational wave frequency<a class="headerlink" href="#Get-the-instantaneous-gravitational-wave-frequency" title="Permalink to this heading"></a></h2>
+<h2>Get the instantaneous gravitational wave frequency<a class="headerlink" href="#Get-the-instantaneous-gravitational-wave-frequency" title="Link to this heading"></a></h2>
 <p>Given <span class="math notranslate nohighlight">\(f_0\)</span>, <span class="math notranslate nohighlight">\(\dot{f}_0\)</span>, and <span class="math notranslate nohighlight">\(\ddot{f}_0\)</span> calculate the instantaneous frequency of the gravitational waves approximating the frequency evolution to quadratic order:</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
@@ -501,7 +503,7 @@ Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
 </div>
 </section>
 <section id="Get-amplitude-(for-slowly-evolving-source)">
-<h2>Get amplitude (for slowly evolving source)<a class="headerlink" href="#Get-amplitude-(for-slowly-evolving-source)" title="Permalink to this heading"></a></h2>
+<h2>Get amplitude (for slowly evolving source)<a class="headerlink" href="#Get-amplitude-(for-slowly-evolving-source)" title="Link to this heading"></a></h2>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
@@ -529,7 +531,7 @@ Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
 </div>
 </section>
 <section id="Get-\dot{f}">
-<h2>Get <span class="math notranslate nohighlight">\(\dot{f}\)</span><a class="headerlink" href="#Get-\dot{f}" title="Permalink to this heading"></a></h2>
+<h2>Get <span class="math notranslate nohighlight">\(\dot{f}\)</span><a class="headerlink" href="#Get-\dot{f}" title="Link to this heading"></a></h2>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
@@ -557,7 +559,7 @@ Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
 </div>
 </section>
 <section id="Determine-necessary-sampling-rate-in-the-time-domin">
-<h2>Determine necessary sampling rate in the time-domin<a class="headerlink" href="#Determine-necessary-sampling-rate-in-the-time-domin" title="Permalink to this heading"></a></h2>
+<h2>Determine necessary sampling rate in the time-domin<a class="headerlink" href="#Determine-necessary-sampling-rate-in-the-time-domin" title="Link to this heading"></a></h2>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
@@ -578,7 +580,7 @@ array([256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256,
 </div>
 </section>
 <section id="Adjust-OMP-usage-in-C-functions">
-<h2>Adjust OMP usage in C functions<a class="headerlink" href="#Adjust-OMP-usage-in-C-functions" title="Permalink to this heading"></a></h2>
+<h2>Adjust OMP usage in C functions<a class="headerlink" href="#Adjust-OMP-usage-in-C-functions" title="Link to this heading"></a></h2>
 <p>When using openMP, it defaults to using all threads. To limit this, use <code class="docutils literal notranslate"><span class="pre">gbgpu.utils.utility.omp_set_num_threads</span></code>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
@@ -591,7 +593,7 @@ array([256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256,
 </section>
 </section>
 <section id="Citations">
-<h1>Citations<a class="headerlink" href="#Citations" title="Permalink to this heading"></a></h1>
+<h1>Citations<a class="headerlink" href="#Citations" title="Link to this heading"></a></h1>
 <p>You can access the necessary citations for the specific waveforms with the <code class="docutils literal notranslate"><span class="pre">citation</span></code> property.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:

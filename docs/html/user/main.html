@@ -1,21 +1,23 @@
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html class="writer-html5" lang="en" data-content_root="../">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fast GB Waveforms and Likelihoods &mdash; gbgpu  documentation</title>
-      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=19f00094" />
+
+  
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script src="../_static/jquery.js"></script>
-        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-        <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+        <script src="../_static/doctools.js?v=888ff710"></script>
+        <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
         <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
         <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -119,10 +121,10 @@
            <div itemprop="articleBody">
              
   <section id="fast-gb-waveforms-and-likelihoods">
-<h1>Fast GB Waveforms and Likelihoods<a class="headerlink" href="#fast-gb-waveforms-and-likelihoods" title="Permalink to this heading"></a></h1>
+<h1>Fast GB Waveforms and Likelihoods<a class="headerlink" href="#fast-gb-waveforms-and-likelihoods" title="Link to this heading"></a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Generate Galactic Binary Waveforms</p>
 <p>This class generates galactic binary waveforms in the frequency domain,
@@ -147,7 +149,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 </dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.xp">
-<span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.xp" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.xp" title="Link to this definition"></a></dt>
 <dd><p>NumPy if on CPU. CuPy if on GPU.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -158,7 +160,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.use_gpu">
-<span class="sig-name descname"><span class="pre">use_gpu</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.use_gpu" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">use_gpu</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.use_gpu" title="Link to this definition"></a></dt>
 <dd><p>Use GPU if True.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -169,7 +171,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.get_basis_tensors">
-<span class="sig-name descname"><span class="pre">get_basis_tensors</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_basis_tensors" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_basis_tensors</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_basis_tensors" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -180,7 +182,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.GenWave">
-<span class="sig-name descname"><span class="pre">GenWave</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.GenWave" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">GenWave</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.GenWave" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -191,7 +193,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.GenWaveThird">
-<span class="sig-name descname"><span class="pre">GenWaveThird</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.GenWaveThird" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">GenWaveThird</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.GenWaveThird" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -202,7 +204,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.unpack_data_1">
-<span class="sig-name descname"><span class="pre">unpack_data_1</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.unpack_data_1" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">unpack_data_1</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.unpack_data_1" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -213,7 +215,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.XYZ">
-<span class="sig-name descname"><span class="pre">XYZ</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.XYZ" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">XYZ</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.XYZ" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -224,7 +226,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.get_ll_func">
-<span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll_func" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll_func" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -235,7 +237,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.num_bin">
-<span class="sig-name descname"><span class="pre">num_bin</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.num_bin" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">num_bin</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.num_bin" title="Link to this definition"></a></dt>
 <dd><p>Number of binaries in the current calculation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -246,7 +248,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.N_max">
-<span class="sig-name descname"><span class="pre">N_max</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N_max" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">N_max</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N_max" title="Link to this definition"></a></dt>
 <dd><p>Maximum points in a waveform based on maximum harmonic mode considered.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -257,7 +259,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.start_inds">
-<span class="sig-name descname"><span class="pre">start_inds</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.start_inds" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">start_inds</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.start_inds" title="Link to this definition"></a></dt>
 <dd><p>Start indices into data stream array. q - N/2.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -268,7 +270,7 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.df">
-<span class="sig-name descname"><span class="pre">df</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.df" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">df</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.df" title="Link to this definition"></a></dt>
 <dd><p>Fourier bin spacing.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -293,7 +295,7 @@ accessed in python with the properties <code class="docutils literal notranslate
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.N">
-<span class="sig-name descname"><span class="pre">N</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">N</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.N" title="Link to this definition"></a></dt>
 <dd><p>Last N value used.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -304,7 +306,7 @@ accessed in python with the properties <code class="docutils literal notranslate
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.d_d">
-<span class="sig-name descname"><span class="pre">d_d</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.d_d" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">d_d</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.d_d" title="Link to this definition"></a></dt>
 <dd><p>&lt;d|d&gt; term in the likelihood.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -315,13 +317,13 @@ accessed in python with the properties <code class="docutils literal notranslate
 
 <dl class="py property">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.citation">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">citation</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.citation" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">citation</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.citation" title="Link to this definition"></a></dt>
 <dd><p>Get citations for this class</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.run_wave">
-<span class="sig-name descname"><span class="pre">run_wave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tdi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.run_wave" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">run_wave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fdot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fddot</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iota</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tdi2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.run_wave" title="Link to this definition"></a></dt>
 <dd><p>Create waveforms in batches.</p>
 <p>This call creates the TDI templates in batches.</p>
 <p>The parameters and code below are based on an implementation of Fast GB
@@ -374,31 +376,31 @@ only those with an “equal-arm length” condition. Default is <code class="doc
 
 <dl class="py property">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.X">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">X</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.X" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">X</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.X" title="Link to this definition"></a></dt>
 <dd><p>return X channel reshaped based on number of binaries</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.A">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">A</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.A" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">A</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.A" title="Link to this definition"></a></dt>
 <dd><p>return A channel reshaped based on number of binaries</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.E">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">E</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.E" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">E</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.E" title="Link to this definition"></a></dt>
 <dd><p>return E channel reshaped based on number of binaries</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.freqs">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">freqs</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.freqs" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">freqs</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.freqs" title="Link to this definition"></a></dt>
 <dd><p>Return frequencies associated with each signal</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.get_ll">
-<span class="sig-name descname"><span class="pre">get_ll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase_marginalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_ll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase_marginalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll" title="Link to this definition"></a></dt>
 <dd><p>Get batched log likelihood</p>
 <p>Generate the individual log likelihood for a batched set of Galactic binaries.
 This is also GPU/CPU agnostic.</p>
@@ -457,7 +459,7 @@ PSD given. Default is <code class="docutils literal notranslate"><span class="pr
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.fill_global_template">
-<span class="sig-name descname"><span class="pre">fill_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_inds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">fill_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_inds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="Link to this definition"></a></dt>
 <dd><p>Fill many global templates with waveforms</p>
 <p>This method takes already generated waveforms (<code class="docutils literal notranslate"><span class="pre">A,</span> <span class="pre">E,</span> <span class="pre">start_inds</span></code>)
 and their associated grouping index (<code class="docutils literal notranslate"><span class="pre">group_index</span></code>) and fills
@@ -500,7 +502,7 @@ is presented for the computation.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.generate_global_template">
-<span class="sig-name descname"><span class="pre">generate_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.generate_global_template" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">generate_global_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">templates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_freq_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.generate_global_template" title="Link to this definition"></a></dt>
 <dd><p>Generate global templates from binary parameters</p>
 <p>Generate waveforms in batches and then combine them into
 global fit templates. This method wraps <a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_template" title="gbgpu.gbgpu.GBGPU.fill_global_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">fill_global_template()</span></code></a>
@@ -525,7 +527,7 @@ is presented for the computation.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.inject_signal">
-<span class="sig-name descname"><span class="pre">inject_signal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.inject_signal" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">inject_signal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125829120.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.inject_signal" title="Link to this definition"></a></dt>
 <dd><p>Inject a single signal</p>
 <p>Provides the injection of a single signal into a data stream with frequencies
 spanning from 0.0 to fmax with 1/T spacing (from Fourier transform).</p>
@@ -558,7 +560,7 @@ on GPU.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.information_matrix">
-<span class="sig-name descname"><span class="pre">information_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-09</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_transforms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_func</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">easy_central_difference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.information_matrix" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">information_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-09</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_transforms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1024</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_func</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">easy_central_difference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.information_matrix" title="Link to this definition"></a></dt>
 <dd><p>Get the information matrix for a batch.</p>
 <p>This function computes the Information matrix for a batch of Galactic binaries.
 It uses a 2nd order calculation for the derivative if <code class="docutils literal notranslate"><span class="pre">easy_central_difference</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>:</p>
