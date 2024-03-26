@@ -65,11 +65,24 @@
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.df"><code class="docutils literal notranslate"><span class="pre">GBGPU.df</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.N"><code class="docutils literal notranslate"><span class="pre">GBGPU.N</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.d_d"><code class="docutils literal notranslate"><span class="pre">GBGPU.d_d</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">GBGPU.xp</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll_func</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.fill_global_func</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.global_get_ll_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.global_get_ll_func</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.citation"><code class="docutils literal notranslate"><span class="pre">GBGPU.citation</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave"><code class="docutils literal notranslate"><span class="pre">GBGPU.run_wave()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.X"><code class="docutils literal notranslate"><span class="pre">GBGPU.X</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.X_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.X_out</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.Y_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.Y_out</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.Z_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.Z_out</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.A_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.A_out</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.E_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.E_out</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.T_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.T_out</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.A"><code class="docutils literal notranslate"><span class="pre">GBGPU.A</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.E"><code class="docutils literal notranslate"><span class="pre">GBGPU.E</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.T"><code class="docutils literal notranslate"><span class="pre">GBGPU.T</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.X"><code class="docutils literal notranslate"><span class="pre">GBGPU.X</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.Y"><code class="docutils literal notranslate"><span class="pre">GBGPU.Y</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.Z"><code class="docutils literal notranslate"><span class="pre">GBGPU.Z</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.freqs"><code class="docutils literal notranslate"><span class="pre">GBGPU.freqs</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_ll"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_template"><code class="docutils literal notranslate"><span class="pre">GBGPU.fill_global_template()</span></code></a></li>
@@ -316,6 +329,30 @@ accessed in python with the properties <code class="docutils literal notranslate
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="id0">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
+<dd><p>CuPy or NumPy</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="id1">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
+<dd><p>get_ll c func.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.fill_global_func">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fill_global_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.fill_global_func" title="Link to this definition"></a></dt>
+<dd><p>fill_global c func.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.global_get_ll_func">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">global_get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.global_get_ll_func" title="Link to this definition"></a></dt>
+<dd><p>global_get_ll_func c func.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.citation">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">citation</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.citation" title="Link to this definition"></a></dt>
 <dd><p>Get citations for this class</p>
@@ -330,7 +367,6 @@ accessed in python with the properties <code class="docutils literal notranslate
 in the LISA Data Challenges’ <code class="docutils literal notranslate"><span class="pre">ldc</span></code> package.</p>
 <p>This class can be inherited to build fast waveforms for systems
 with additional astrophysical effects.</p>
-<p># TODO: add citation property</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -375,9 +411,39 @@ only those with an “equal-arm length” condition. Default is <code class="doc
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.X">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">X</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.X" title="Link to this definition"></a></dt>
-<dd><p>return X channel reshaped based on number of binaries</p>
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.X_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">X_out</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.X_out" title="Link to this definition"></a></dt>
+<dd><p>X channel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.Y_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Y_out</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.Y_out" title="Link to this definition"></a></dt>
+<dd><p>Y channel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.Z_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Z_out</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.Z_out" title="Link to this definition"></a></dt>
+<dd><p>Z channel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.A_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">A_out</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.A_out" title="Link to this definition"></a></dt>
+<dd><p>A channel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.E_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">E_out</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.E_out" title="Link to this definition"></a></dt>
+<dd><p>E channel.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.T_out">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">T_out</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.T_out" title="Link to this definition"></a></dt>
+<dd><p>T channel.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -390,6 +456,30 @@ only those with an “equal-arm length” condition. Default is <code class="doc
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.E">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">E</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.E" title="Link to this definition"></a></dt>
 <dd><p>return E channel reshaped based on number of binaries</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.T">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">T</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.T" title="Link to this definition"></a></dt>
+<dd><p>return T channel reshaped based on number of binaries</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.X">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">X</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.X" title="Link to this definition"></a></dt>
+<dd><p>return X channel reshaped based on number of binaries</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.Y">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Y</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.Y" title="Link to this definition"></a></dt>
+<dd><p>return Y channel reshaped based on number of binaries</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.Z">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Z</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.Z" title="Link to this definition"></a></dt>
+<dd><p>return Z channel reshaped based on number of binaries</p>
 </dd></dl>
 
 <dl class="py property">

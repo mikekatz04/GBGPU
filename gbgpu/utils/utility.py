@@ -16,7 +16,7 @@ except (ModuleNotFoundError, ImportError) as e:
 
 try:
     from cupy.cuda.runtime import setDevice
-    
+
 
 except ModuleNotFoundError:
     setDevice = None
@@ -46,20 +46,20 @@ def get_fGW(f0, fdot, fddot, t, xp=None):
     This assumes the initial time is 0.
 
     Args:
-        f0 (1D xp.ndarray): Initial frequency of source in Hz. Shape is ``(num_bin_all,)``. 
-        fdot (1D xp.ndarray): Initial frequency derivative of source in Hz/s. Shape is ``(num_bin_all,)``. 
-        fddot (1D xp.ndarray): Initial second derivative of the frequency of source in Hz/s^2. Shape is ``(num_bin_all,)``. 
+        f0 (1D xp.ndarray): Initial frequency of source in Hz. Shape is ``(num_bin_all,)``.
+        fdot (1D xp.ndarray): Initial frequency derivative of source in Hz/s. Shape is ``(num_bin_all,)``.
+        fddot (1D xp.ndarray): Initial second derivative of the frequency of source in Hz/s^2. Shape is ``(num_bin_all,)``.
         t (xp.ndarray): Time values at which to evaluate the frequencies.
-            If ``t.ndim > 1``, it will cast the frequency information properly. 
-            In this case, ``t.shape[0]`` must be equal to ``num_bin_all``.   
-        
+            If ``t.ndim > 1``, it will cast the frequency information properly.
+            In this case, ``t.shape[0]`` must be equal to ``num_bin_all``.
+
     Returns:
         xp.ndarray: All frequencies evaluated at the given times.
 
     Raises:
-        AssertionError: ``t.shape[0] != num_bin_all and t.shape[0] != 1``. 
+        AssertionError: ``t.shape[0] != num_bin_all and t.shape[0] != 1``.
 
-    
+
     """
     if xp is None:
         xp = np
@@ -78,15 +78,13 @@ def get_fGW(f0, fdot, fddot, t, xp=None):
         fddot = xp.expand_dims(fddot, dims_to_expand)
 
     # calculate
-    f = (
-        f0 + fdot * t + 0.5 * fddot * t * t
-    )
+    f = f0 + fdot * t + 0.5 * fddot * t * t
     return f
 
 
 def get_chirp_mass(m1, m2):
     """Get chirp mass
-    
+
     Args:
         m1 (xp.ndarray): Mass 1.
         m2 (xp.ndarray): Mass 2.
@@ -94,38 +92,38 @@ def get_chirp_mass(m1, m2):
     Returns:
         xp.ndarray: Chirp mass.
 
-    
+
     """
     return (m1 * m2) ** (3 / 5) / (m1 + m2) ** (1 / 5)
 
 
 def get_eta(m1, m2):
     """Get symmetric mass ratio
-    
+
     Args:
         m1 (xp.ndarray): Mass 1.
         m2 (xp.ndarray): Mass 2.
 
     Returns:
         xp.ndarray: Symetric mass ratio.
-        
-    
+
+
     """
     return (m1 * m2) / (m1 + m2) ** 2
 
 
 def get_amplitude(m1, m2, f, d):
     """Get amplitude of GW
-    
+
     Args:
         m1 (xp.ndarray): Mass 1 in solar masses.
         m2 (xp.ndarray): Mass 2 in solar masses.
         f (xp.ndarray): Frequency of gravitational wave in Hz.
-        d (xp.ndarray): Luminosity distance in kpc. 
+        d (xp.ndarray): Luminosity distance in kpc.
 
     Returns:
         xp.ndarray: Amplitude.
-    
+
     """
     Mc = get_chirp_mass(m1, m2) * MSUN
     d = d * 1e3 * PC  # kpc to meters
@@ -137,7 +135,7 @@ def get_fdot(f, m1=None, m2=None, Mc=None):
     """Get fdot of GW
 
     Must provide either ``m1`` and ``m2`` or ``Mc``.
-    
+
     Args:
         f (xp.ndarray): Frequency of gravitational wave in Hz.
         m1 (xp.ndarray, optional): Mass 1 in solar masses.
@@ -148,9 +146,9 @@ def get_fdot(f, m1=None, m2=None, Mc=None):
         xp.ndarray: fdot.
 
     Raises:
-        ValueError: Inputs are incorrect. 
-        AssertionError: Inputs are incorrect. 
-    
+        ValueError: Inputs are incorrect.
+        AssertionError: Inputs are incorrect.
+
     """
 
     # prepare inputs and convert to chirp mass if needed
@@ -174,17 +172,17 @@ def get_fdot(f, m1=None, m2=None, Mc=None):
 
 def get_chirp_mass_from_f_fdot(f, fdot):
     """Get chirp mass from f and fdot of GW
-    
+
     Args:
         f (xp.ndarray): Frequency of gravitational wave in Hz.
         fdot (xp.ndarray): Frequency derivative of gravitational wave in Hz/s.
 
     Returns:
         xp.ndarray: chirp mass.
-    
+
     """
 
-    # backout 
+    # backout
     Mc_SI = (
         5.0
         / 96.0
@@ -199,18 +197,18 @@ def get_chirp_mass_from_f_fdot(f, fdot):
 
 def get_N(amp, f0, Tobs, oversample=1):
     """Determine sampling rate for slow part of FastGB waveform.
-    
+
     Args:
         amp (xp.ndarray): Amplitude of gravitational wave.
         f0 (xp.ndarray): Frequency of gravitational wave in Hz.
         Tobs (double): Observation time in seconds.
         oversample (int, optional): Oversampling factor. This function will return
-            ``oversample * N``, if N is the determined sample number. 
-            (Default: ``1``). 
+            ``oversample * N``, if N is the determined sample number.
+            (Default: ``1``).
 
     Returns:
         int xp.ndarray: N values for each binary entered.
-    
+
     """
 
     # make sure they are arrays
@@ -249,7 +247,7 @@ def get_N(amp, f0, Tobs, oversample=1):
     if tdi_available:
         fonfs = f0 / fstar
 
-        SnX = np.sqrt(tdi.noisepsd_X(f0))
+        SnX = np.sqrt(tdi.X1TDISens.get_Sn(f0))
 
         #  calculate michelson noise
         Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
@@ -274,28 +272,6 @@ def get_N(amp, f0, Tobs, oversample=1):
     N_out = (N * oversample).astype(int)
 
     return N_out
-
-
-def omp_set_num_threads(num_threads=1):
-    """Globally sets OMP_NUM_THREADS
-
-    Args:
-        num_threads (int, optional): Number of parallel threads to use in OpenMP.
-            Default is 1.
-
-    """
-    set_threads_wrap(num_threads)
-
-
-def omp_get_num_threads():
-    """Get global variable OMP_NUM_THREADS
-
-    Returns:
-        int: Number of OMP threads.
-
-    """
-    num_threads = get_threads_wrap()
-    return num_threads
 
 
 def cuda_set_device(dev):

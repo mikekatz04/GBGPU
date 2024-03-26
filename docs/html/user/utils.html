@@ -64,8 +64,6 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#other-utilities">Other utilities</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.omp_set_num_threads"><code class="docutils literal notranslate"><span class="pre">omp_set_num_threads()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.omp_get_num_threads"><code class="docutils literal notranslate"><span class="pre">omp_get_num_threads()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.utils.utility.cuda_set_device"><code class="docutils literal notranslate"><span class="pre">cuda_set_device()</span></code></a></li>
 </ul>
 </li>
@@ -301,32 +299,6 @@ In this case, <code class="docutils literal notranslate"><span class="pre">t.sha
 </section>
 <section id="other-utilities">
 <h2>Other utilities<a class="headerlink" href="#other-utilities" title="Link to this heading"></a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="gbgpu.utils.utility.omp_set_num_threads">
-<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">omp_set_num_threads</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.omp_set_num_threads" title="Link to this definition"></a></dt>
-<dd><p>Globally sets OMP_NUM_THREADS</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>num_threads</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of parallel threads to use in OpenMP.
-Default is 1.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="gbgpu.utils.utility.omp_get_num_threads">
-<span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">omp_get_num_threads</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.omp_get_num_threads" title="Link to this definition"></a></dt>
-<dd><p>Get global variable OMP_NUM_THREADS</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Number of OMP threads.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py function">
 <dt class="sig sig-object py" id="gbgpu.utils.utility.cuda_set_device">
 <span class="sig-prename descclassname"><span class="pre">gbgpu.utils.utility.</span></span><span class="sig-name descname"><span class="pre">cuda_set_device</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dev</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.utils.utility.cuda_set_device" title="Link to this definition"></a></dt>

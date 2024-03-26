@@ -15,7 +15,7 @@ from gbgpu_utils_cpu import fill_global as fill_global_cpu
 from gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 try:
-    from lisatools import sensitivity as tdi
+    from lisatools.sensitivity import A1TDISens
 
     tdi_available = True
 
@@ -25,13 +25,13 @@ except (ModuleNotFoundError, ImportError) as e:
 
 # import for GPU if available
 try:
-    import cupy as xp
+    import cupy as cp
     from gbgpu_utils import get_ll as get_ll_gpu
     from gbgpu_utils import fill_global as fill_global_gpu
     from gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
 
 except (ModuleNotFoundError, ImportError):
-    import numpy as xp
+    import numpy as cp
 
 from gbgpu.utils.utility import *
 
@@ -82,21 +82,28 @@ class GBGPU(object):
     def __init__(self, use_gpu=False):
 
         self.use_gpu = use_gpu
-
-        # setup Cython/C++/CUDA calls based on if using GPU
-        if self.use_gpu:
-            self.xp = xp
-            self.get_ll_func = get_ll_gpu
-            self.fill_global_func = fill_global_gpu
-            self.global_get_ll_func = direct_like_wrap_gpu
-
-        else:
-            self.xp = np
-            self.get_ll_func = get_ll_cpu
-            self.fill_global_func = fill_global_cpu
-            self.global_get_ll_func = direct_like_wrap_cpu
-
         self.d_d = None
+
+    @property
+    def xp(self):
+        """CuPy or NumPy"""
+        xp = np if not self.use_gpu else cp
+        return xp
+
+    @property
+    def get_ll_func(self):
+        """get_ll c func."""
+        return get_ll_cpu if not self.use_gpu else get_ll_gpu
+
+    @property
+    def fill_global_func(self):
+        """fill_global c func."""
+        return fill_global_cpu if not self.use_gpu else fill_global_gpu
+
+    @property
+    def global_get_ll_func(self):
+        """global_get_ll_func c func."""
+        return direct_like_wrap_cpu if not self.use_gpu else direct_like_wrap_gpu
 
     @property
     def citation(self):
@@ -130,8 +137,6 @@ class GBGPU(object):
 
         This class can be inherited to build fast waveforms for systems
         with additional astrophysical effects.
-
-        # TODO: add citation property
 
         Args:
             amp (double or 1D double np.ndarray): Amplitude parameter.
@@ -238,7 +243,7 @@ class GBGPU(object):
 
         # figure out start inds
         q_check = (f0 * T).astype(np.int32)
-        #self.start_inds = (q_check - N / 2).astype(xp.int32)
+        # self.start_inds = (q_check - N / 2).astype(xp.int32)
 
         cosiota = self.xp.cos(iota)
 
@@ -296,7 +301,7 @@ class GBGPU(object):
         # transform to TDI observables
         XYZf, f_min = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
-        self.start_inds = self.kmin = self.xp.round(f_min/df).astype(int)
+        self.start_inds = self.kmin = self.xp.round(f_min / df).astype(int)
         fctr = 0.5 * T / N
 
         # adjust for TDI2 if needed
@@ -307,17 +312,45 @@ class GBGPU(object):
 
         if isinstance(fctr, float):
             fctr = self.xp.array([fctr])
-            
+
         XYZf *= fctr[:, None, None]
 
         # we do not care about T right now
-        Af, Ef, Tf = AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])
-
+        self.AETf = self.xp.asarray(AET(XYZf[:, 0], XYZf[:, 1], XYZf[:, 2])).transpose(
+            1, 0, 2
+        )
         # setup waveforms for efficient GPU likelihood or global template building
-        self.A_out = Af.T.flatten()
-        self.E_out = Ef.T.flatten()
+        self.XYZf = XYZf
 
-        self.X_out = XYZf[:, 0].T.flatten()
+    @property
+    def X_out(self):
+        """X channel."""
+        return self.XYZf[:, 0].T.flatten()
+
+    @property
+    def Y_out(self):
+        """Y channel."""
+        return self.XYZf[:, 1].T.flatten()
+
+    @property
+    def Z_out(self):
+        """Z channel."""
+        return self.XYZf[:, 2].T.flatten()
+
+    @property
+    def A_out(self):
+        """A channel."""
+        return self.AETf[:, 0].T.flatten()
+
+    @property
+    def E_out(self):
+        """E channel."""
+        return self.AETf[:, 1].T.flatten()
+
+    @property
+    def T_out(self):
+        """T channel."""
+        return self.AETf[:, 2].T.flatten()
 
     def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
         """Compute TDI X, Y, Z from y_sr"""
@@ -550,11 +583,6 @@ class GBGPU(object):
         return Gs, q
 
     @property
-    def X(self):
-        """return X channel reshaped based on number of binaries"""
-        return self.X_out.reshape(self.N, self.num_bin).T
-
-    @property
     def A(self):
         """return A channel reshaped based on number of binaries"""
         return self.A_out.reshape(self.N, self.num_bin).T
@@ -563,6 +591,26 @@ class GBGPU(object):
     def E(self):
         """return E channel reshaped based on number of binaries"""
         return self.E_out.reshape(self.N, self.num_bin).T
+
+    @property
+    def T(self):
+        """return T channel reshaped based on number of binaries"""
+        return self.T_out.reshape(self.N, self.num_bin).T
+
+    @property
+    def X(self):
+        """return X channel reshaped based on number of binaries"""
+        return self.X_out.reshape(self.N, self.num_bin).T
+
+    @property
+    def Y(self):
+        """return Y channel reshaped based on number of binaries"""
+        return self.Y_out.reshape(self.N, self.num_bin).T
+
+    @property
+    def Z(self):
+        """return Z channel reshaped based on number of binaries"""
+        return self.Z_out.reshape(self.N, self.num_bin).T
 
     @property
     def freqs(self):
@@ -1013,9 +1061,9 @@ class GBGPU(object):
             # check if sensitivity information is available
             if not tdi_available:
                 raise ModuleNotFoundError(
-                    "Sensitivity curve information through LISA Analysis Tools is not available. Stock option for Information matrix will not work. Please install LISA Analysis Tools (lisatools)."
+                    "Sensitivity curve information through LISA Analysis Tools is not available. Stock option for Information matrix will not work. Please install LISA Analysis Tools (pip install lisaanalysistools)."
                 )
-            psd_func = tdi.noisepsd_AE
+            psd_func = tdi.A1TDISens.get_Sn
 
         if N is None:
             raise ValueError("N must be provided up front for Infromation Matrix.")

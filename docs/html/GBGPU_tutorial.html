@@ -7,7 +7,7 @@
   <title>GBGPU Tutorial &mdash; gbgpu  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
-      <link rel="stylesheet" type="text/css" href="_static/nbsphinx-code-cells.css?v=720011df" />
+      <link rel="stylesheet" type="text/css" href="_static/nbsphinx-code-cells.css?v=2aa19091" />
 
   
   <!--[if lt IE 9]>
@@ -67,7 +67,6 @@
 <li class="toctree-l2"><a class="reference internal" href="#Get-amplitude-(for-slowly-evolving-source)">Get amplitude (for slowly evolving source)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#Get-\dot{f}">Get <span class="math notranslate nohighlight">\(\dot{f}\)</span></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#Determine-necessary-sampling-rate-in-the-time-domin">Determine necessary sampling rate in the time-domin</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#Adjust-OMP-usage-in-C-functions">Adjust OMP usage in C functions</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="#Citations">Citations</a></li>
@@ -104,7 +103,7 @@
 <p><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code> is a GPU-accelerated version of the <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> waveform which has been developed by Neil Cornish, Tyson Littenberg, Travis Robson, and Stas Babak. It computes gravitational waveforms for Galactic binary systems observable by LISA using a fast/slow-type decomposition. For more details on the original construction of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> see <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>.</p>
 <p>The current version of the code is very closely related to the implementation of <code class="docutils literal notranslate"><span class="pre">FastGB</span></code> in the LISA Data Challenges’ Python code package. The waveform code is entirely Python-based. It is about 1/2 the speed of the full C version, but much simpler in Python for right now. There are also many additional functions including fast likelihood computations for individual Galactic binaries, as well as fast C-based methods to combine waveforms into global fitting templates.</p>
 <p>The code is CPU/GPU agnostic. CUDA and NVIDIA GPUs are required to run these codes for GPUs.</p>
-<p>See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/index.html">documentation</a> for more details. This code was designed for (# TODO: add new arxiv number). If you use any part of this code, please cite (# TODO: add new arxiv number), its <a class="reference external" href="https://zenodo.org/record/6500434#.YmpofxNBzlw">Zenodo page</a>, <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and <a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
+<p>See the <a class="reference external" href="https://mikekatz04.github.io/GBGPU/html/index.html">documentation</a> for more details. This code was designed for <a class="reference external" href="https://arxiv.org/abs/2205.03461">arXiv:2205.03461</a>. If you use any part of this code, please cite <a class="reference external" href="https://arxiv.org/abs/2205.03461">arXiv:2205.03461</a>, its <a class="reference external" href="https://zenodo.org/record/6500434#.YmpofxNBzlw">Zenodo page</a>, <a class="reference external" href="https://arxiv.org/abs/0704.1808">arXiv:0704.1808</a>, and <a class="reference external" href="https://arxiv.org/abs/1806.00500">arXiv:1806.00500</a>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
@@ -357,30 +356,30 @@ Third-body signal length: (512,)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([[ 2.59077356e-03, -1.73881105e-11,  5.79303854e-06,
-        -9.34813784e-06, -1.04002859e-04, -5.60750479e-05,
-         1.67605334e-05,  9.25171196e-05],
-       [-1.73881104e-11,  1.22082662e-14,  1.64237500e-09,
-        -2.54833541e-09,  1.37966733e-13, -1.52900681e-08,
-         5.16215869e-10, -3.66331834e-10],
-       [ 5.79303858e-06,  1.64237500e-09,  3.24595981e-04,
-        -5.03938709e-04, -3.47043395e-07, -3.02364387e-03,
-         1.81105534e-05,  1.29976949e-04],
-       [-9.34813786e-06, -2.54833541e-09, -5.03938709e-04,
-         7.82376988e-04,  5.53048679e-07,  4.69427999e-03,
-        -2.96655655e-05, -2.05333283e-04],
-       [-1.04002859e-04,  1.37967094e-13, -3.47043323e-07,
-         5.53048569e-07,  4.17508525e-06,  3.31774245e-06,
-        -6.68420959e-07, -3.78390944e-06],
-       [-5.60750482e-05, -1.52900681e-08, -3.02364387e-03,
-         4.69427999e-03,  3.31774311e-06,  2.81657883e-02,
-        -1.78010037e-04, -1.23202090e-03],
-       [ 1.67605334e-05,  5.16215870e-10,  1.81105534e-05,
-        -2.96655655e-05, -6.68420965e-07, -1.78010037e-04,
-         1.55073927e-03,  4.16053556e-04],
-       [ 9.25171196e-05, -3.66331834e-10,  1.29976949e-04,
-        -2.05333283e-04, -3.78390947e-06, -1.23202090e-03,
-         4.16053556e-04,  2.04009063e-03]])
+array([[ 2.59077367e-03, -1.73878706e-11,  5.79304501e-06,
+        -9.34816276e-06, -1.04002918e-04, -5.60755007e-05,
+         1.67605365e-05,  9.25171278e-05],
+       [-1.73878746e-11,  1.22082657e-14,  1.64237604e-09,
+        -2.54833471e-09,  1.39473209e-13, -1.52900673e-08,
+         5.16215847e-10, -3.66331893e-10],
+       [ 5.79304458e-06,  1.64237604e-09,  3.24596413e-04,
+        -5.03938920e-04, -3.46742708e-07, -3.02364579e-03,
+         1.81105758e-05,  1.29977040e-04],
+       [-9.34816197e-06, -2.54833471e-09, -5.03938920e-04,
+         7.82376600e-04,  5.52582244e-07,  4.69427869e-03,
+        -2.96655680e-05, -2.05333228e-04],
+       [-1.04002918e-04,  1.39473623e-13, -3.46742612e-07,
+         5.52582099e-07,  4.17508959e-06,  3.31495602e-06,
+        -6.68385372e-07, -3.78376397e-06],
+       [-5.60754959e-05, -1.52900673e-08, -3.02364579e-03,
+         4.69427869e-03,  3.31495689e-06,  2.81657867e-02,
+        -1.78010026e-04, -1.23202079e-03],
+       [ 1.67605364e-05,  5.16215847e-10,  1.81105758e-05,
+        -2.96655680e-05, -6.68385375e-07, -1.78010026e-04,
+         1.55073927e-03,  4.16053565e-04],
+       [ 9.25171277e-05, -3.66331893e-10,  1.29977040e-04,
+        -2.05333228e-04, -3.78376402e-06, -1.23202079e-03,
+         4.16053565e-04,  2.04009063e-03]])
 </pre></div></div>
 </div>
 <p>Standard deviation on the marginalized parameters:</p>
@@ -398,8 +397,8 @@ array([[ 2.59077356e-03, -1.73881105e-11,  5.79303854e-06,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
-       4.08660507e-04, 5.03479985e-02, 1.57517708e-02, 2.25836812e-02])
+array([1.01799286e-24, 2.20982042e-10, 1.35814788e-19, 2.79709957e-03,
+       4.08660719e-04, 5.03479970e-02, 1.57517708e-02, 2.25836812e-02])
 </pre></div></div>
 </div>
 <p>Plot the Information Matrix ellipse for the intial frequency and frequency derivative:</p>
@@ -446,7 +445,7 @@ array([1.01799284e-24, 2.20982046e-10, 1.35814698e-19, 2.79710026e-03,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x7fc8d2892310&gt;]
+[&lt;matplotlib.lines.Line2D at 0x14a680650&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -579,24 +578,12 @@ array([256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256,
 </pre></div></div>
 </div>
 </section>
-<section id="Adjust-OMP-usage-in-C-functions">
-<h2>Adjust OMP usage in C functions<a class="headerlink" href="#Adjust-OMP-usage-in-C-functions" title="Link to this heading"></a></h2>
-<p>When using openMP, it defaults to using all threads. To limit this, use <code class="docutils literal notranslate"><span class="pre">gbgpu.utils.utility.omp_set_num_threads</span></code>.</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">omp_set_num_threads</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-</section>
 </section>
 <section id="Citations">
 <h1>Citations<a class="headerlink" href="#Citations" title="Link to this heading"></a></h1>
 <p>You can access the necessary citations for the specific waveforms with the <code class="docutils literal notranslate"><span class="pre">citation</span></code> property.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">gb</span><span class="o">.</span><span class="n">citation</span><span class="p">)</span>

@@ -136,21 +136,17 @@ if run_cuda_install:
         extra_compile_args={
             "gcc": ["-std=c99"],  # '-g'],
             "nvcc": [
-                "-arch=sm_70",
-                "-gencode=arch=compute_35,code=sm_35",
+                "-arch=sm_80",
                 "-gencode=arch=compute_50,code=sm_50",
                 "-gencode=arch=compute_52,code=sm_52",
                 "-gencode=arch=compute_60,code=sm_60",
                 "-gencode=arch=compute_61,code=sm_61",
                 "-gencode=arch=compute_70,code=sm_70",
+                "-gencode=arch=compute_80,code=sm_80",
                 "--default-stream=per-thread",
                 "--ptxas-options=-v",
                 "-c",
                 "--compiler-options",
-                "'-fPIC'",
-                "-lineinfo",
-                "-Xcompiler",
-                "-fopenmp",
             ],  # ,"-G", "-g"] # for debugging
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
@@ -160,10 +156,10 @@ if run_cuda_install:
 ext_cpu_dict = dict(
     sources=["src/gbgpu_utils.cpp", "src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
-    libraries=["gsl", "gslcblas", "gomp"],
+    libraries=["gsl", "gslcblas"],
     language="c++",
     extra_compile_args={
-        "gcc": ["-std=c++11", "-fopenmp", "-fPIC"],
+        "gcc": ["-std=c++11"],
     },  # '-g'],
     include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
@@ -179,7 +175,7 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="1.0.7",
+    version="1.0.8",
     packages=["gbgpu", "gbgpu.utils"],
     py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,

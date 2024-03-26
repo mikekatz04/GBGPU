@@ -24,8 +24,4 @@ Gravitational-wave utilities
 Other utilities
 ------------------------------
 
-.. autofunction:: gbgpu.utils.utility.omp_set_num_threads
-
-.. autofunction:: gbgpu.utils.utility.omp_get_num_threads
-
 .. autofunction:: gbgpu.utils.utility.cuda_set_device
