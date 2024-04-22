@@ -5791,7 +5791,7 @@ __global__ void psd_likelihood(double *like_contrib, double *f_arr, cmplx *A_dat
             Sn_E = noisepsd_AE(f, E_Soms_d_val, E_Sa_a_val, Amp, alpha, sl1, kn, sl2);
 
             inner_product = (4.0 * ((gcmplx::conj(d_A) * d_A / Sn_A) + (gcmplx::conj(d_E) * d_E / Sn_E)).real() * df);
-            like_vals[tid] += -1.0 / 2.0 * inner_product - log(Sn_A) - log(Sn_E);
+            like_vals[tid] += -1.0 / 2.0 * inner_product - (log(Sn_A) + log(Sn_E));
             // if ((psd_i == 0) && (i > 10) && (i < 20)) printf("%d %.12e %.12e %.12e %.12e %.12e %.12e %.12e \n", i, inner_product, Sn_A, Sn_E, d_A.real(), d_A.imag(), d_E.real(), d_E.imag());
         }
         __syncthreads();
