@@ -20,7 +20,7 @@ def get_settings(copy_settings_file=False):
         use_c_implementation=True,
     )
 
-    base_string = "run_test_1"
+    base_string = "run_test_1_new_CHECK"
     main_dir = "./"
     population_directory_list = [main_dir + f"Realization_{i}/" for i in range(1, 4)]
 
@@ -53,7 +53,7 @@ def get_settings(copy_settings_file=False):
 
     verbose = True
 
-    m3_lims = [0.0, 100.0]
+    m3_lims = [0.0, 16.0]
     e2_lims = [0.0, 0.985]
     opt_snr_lims = [0.0, 1e6]
 

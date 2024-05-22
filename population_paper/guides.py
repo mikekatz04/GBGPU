@@ -752,7 +752,7 @@ class SearchRuns(Guide):
 
             data_channels = [A_inj[start_freq:start_freq + self.data_length].copy(), E_inj[start_freq:start_freq + self.data_length].copy()]
 
-            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="sangria", includewd=self.waveform_kwargs["T"] / YEAR)
+            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="SciRDv1", includewd=self.waveform_kwargs["T"] / YEAR)
             psd = [AE_psd, AE_psd]
 
             info_out = {name: value for name, value in zip(data_search.dtype.names, data_search[i])}
@@ -1113,7 +1113,7 @@ class EvidenceRuns(Guide):
 
             data_channels = [A_inj[start_freq:start_freq + self.data_length].copy(), E_inj[start_freq:start_freq + self.data_length].copy()]
 
-            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="sangria", includewd=self.waveform_kwargs["T"] / YEAR)
+            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="SciRDv1", includewd=self.waveform_kwargs["T"] / YEAR)
             psd = [AE_psd, AE_psd]
 
             info_out = self.get_output_info(indicator, orig_id)
@@ -1531,7 +1531,7 @@ class PosteriorRuns(Guide):
 
             data_channels = [A_inj[start_freq:start_freq + self.data_length].copy(), E_inj[start_freq:start_freq + self.data_length].copy()]
 
-            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="sangria", includewd=self.waveform_kwargs["T"] / YEAR)
+            AE_psd = get_sensitivity(fd, sens_fn="noisepsd_AE", model="SciRDv1", includewd=self.waveform_kwargs["T"] / YEAR)
             psd = [AE_psd, AE_psd]
 
             last_state = self.get_last_evidence_state(indicator, orig_id)
