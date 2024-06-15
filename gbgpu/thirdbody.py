@@ -10,10 +10,10 @@ from gbgpu.utils.citation import *
 
 # import for GPU if available
 try:
-    import cupy as xp
+    import cupy as cp
 
 except (ModuleNotFoundError, ImportError):
-    import numpy as xp
+    import numpy as cp
 
 from gbgpu.gbgpu import InheritGBGPU
 from gbgpu.utils.utility import *
@@ -386,7 +386,7 @@ class GBGPUThirdBody(InheritGBGPU):
         Takes a step in the integration of the orbit. In this setup,
         the calculations can all be done in parallel because we are just
         inverted Kepler's equation rather than integrating an ODE where
-        a serial operation is required. TODO: Check this.
+        a serial operation is required. TODO: Check this again. Was checked in past.
 
         Args:
             f0 (1D double np.ndarray): Initial frequency of gravitational

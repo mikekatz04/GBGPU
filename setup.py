@@ -136,42 +136,30 @@ if run_cuda_install:
         extra_compile_args={
             "gcc": ["-std=c99"],  # '-g'],
             "nvcc": [
-                "-arch=sm_70",
-                "-gencode=arch=compute_35,code=sm_35",
+                "-arch=sm_80",
                 "-gencode=arch=compute_50,code=sm_50",
                 "-gencode=arch=compute_52,code=sm_52",
                 "-gencode=arch=compute_60,code=sm_60",
                 "-gencode=arch=compute_61,code=sm_61",
                 "-gencode=arch=compute_70,code=sm_70",
+                "-gencode=arch=compute_80,code=sm_80",
                 "--default-stream=per-thread",
                 "--ptxas-options=-v",
                 "-c",
                 "--compiler-options",
-                "'-fPIC'",
-                "-lineinfo",
-                "-Xcompiler",
-                "-fopenmp",
             ],  # ,"-G", "-g"] # for debugging
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
     )
     ext_gpu = Extension("gbgpu_utils", **ext_gpu_dict)
 
-cu_files = ["gbgpu_utils"]
-pyx_files = ["GBGPU"]
-for fp in cu_files:
-    shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
-
-for fp in pyx_files:
-    shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
-
 ext_cpu_dict = dict(
     sources=["src/gbgpu_utils.cpp", "src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
-    libraries=["gsl", "gslcblas", "gomp"],
+    libraries=["gsl", "gslcblas"],
     language="c++",
     extra_compile_args={
-        "gcc": ["-std=c++11", "-fopenmp", "-fPIC"],
+        "gcc": ["-std=c++11"],
     },  # '-g'],
     include_dirs=[numpy_include, include_gsl_dir, "include"],
 )
@@ -183,30 +171,11 @@ if run_cuda_install:
 else:
     extensions = [ext_cpu]
 
-fp_out_name = "gbgpu/utils/constants.py"
-fp_in_name = "include/Constants.h"
-
-# develop few.utils.constants.py
-with open(fp_out_name, "w") as fp_out:
-    with open(fp_in_name, "r") as fp_in:
-        lines = fp_in.readlines()
-        for line in lines:
-            if len(line.split()) == 3:
-                if line.split()[0] == "#define":
-                    try:
-                        _ = float(line.split()[2])
-                        string_out = line.split()[1] + " = " + line.split()[2] + "\n"
-                        fp_out.write(string_out)
-
-                    except (ValueError) as e:
-                        continue
-
-
 setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="0.1",
+    version="1.0.8",
     packages=["gbgpu", "gbgpu.utils"],
     py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,
@@ -215,9 +184,3 @@ setup(
     # Since the package has c code, the egg cannot be zipped
     zip_safe=False,
 )
-
-for fp in cu_files:
-    os.remove("src/" + fp + ".cpp")
-
-for fp in pyx_files:
-    os.remove("src/" + fp + "_cpu.pyx")
