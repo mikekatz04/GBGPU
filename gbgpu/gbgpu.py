@@ -82,6 +82,7 @@ class GBGPU(object):
 
         self.use_gpu = use_gpu
         self.d_d = None
+        self.orbits = orbits
 
     @property
     def xp(self):
@@ -265,7 +266,7 @@ class GBGPU(object):
         cosiota = self.xp.cos(iota)
 
         # transfer frequency
-        fstar = Clight / (Larm * 2 * np.pi)
+        fstar = Clight / (self.orbits.armlength * 2 * np.pi)
 
         cosps, sinps = self.xp.cos(2.0 * psi), self.xp.sin(2.0 * psi)
 
@@ -299,7 +300,7 @@ class GBGPU(object):
         # time domain information
         Gs, q = self._construct_slow_part(
             T,
-            Larm,
+            self.orbits.armlength,
             Ps,
             tm,
             f0,
@@ -324,7 +325,7 @@ class GBGPU(object):
 
         # adjust for TDI2 if needed
         if tdi2:
-            omegaL = 2 * np.pi * f0 * (Larm / Clight)
+            omegaL = 2 * np.pi * f0 * (self.orbits.armlength / Clight)
             tdi2_factor = 2.0j * self.xp.sin(2 * omegaL) * self.xp.exp(-2j * omegaL)
             fctr *= tdi2_factor
 
