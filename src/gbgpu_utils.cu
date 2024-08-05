@@ -7,7 +7,6 @@
 #include "global.h"
 #include "LISA.h"
 #include "cuda_complex.hpp"
-#include "omp.h"
 
 #ifdef __CUDACC__
 #include "cuComplex.h"

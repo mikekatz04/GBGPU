@@ -122,11 +122,10 @@ lib_gsl_dir = "/opt/local/lib"
 include_gsl_dir = "/opt/local/include"
 
 if run_cuda_install:
-
     ext_gpu_dict = dict(
         sources=["src/gbgpu_utils.cu", "src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
-        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
+        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas"],
         language="c++",
         runtime_library_dirs=[CUDA["lib64"]],
         # This syntax is specific to this build system
@@ -175,7 +174,7 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="1.0.8",
+    version="1.0.10",
     packages=["gbgpu", "gbgpu.utils"],
     py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,

@@ -25,7 +25,7 @@ from gbgpu.gbgpu import GBGPU
 
 ### Prerequisites
 
-To install this software for CPU usage, you need [gsl >2.0](https://www.gnu.org/software/gsl/), Python >3.4, and NumPy. We generally recommend installing everything, including gcc and g++ compilers, in the conda environment as is shown in the examples here. This generally helps avoid compilation and linking issues. If you use your own chosen compiler, you may need to add information to the `setup.py` file.
+To install this software for CPU usage, you need Python >3.4, and NumPy. We generally recommend installing everything, including gcc and g++ compilers, in the conda environment as is shown in the examples here. This generally helps avoid compilation and linking issues. If you use your own chosen compiler, you may need to add information to the `setup.py` file.
 
 To install this software for use with NVIDIA GPUs (compute capability >5.0), you need the [CUDA toolkit](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html) and [CuPy](https://cupy.chainer.org/). The CUDA toolkit must have cuda version >8.0. Be sure to properly install CuPy within the correct CUDA toolkit version. Make sure the nvcc binary is on `$PATH` or set it as the `CUDAHOME` environment variable.
 
@@ -83,7 +83,7 @@ python -m unittest discover
 
 We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/tags).
 
-Current Version: 1.0.8
+Current Version: 1.0.10
 
 ## Authors
 

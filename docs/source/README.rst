@@ -48,9 +48,8 @@ Getting Started
 Prerequisites
 ~~~~~~~~~~~~~
 
-To install this software for CPU usage, you need `gsl
->2.0 <https://www.gnu.org/software/gsl/>`__, Python >3.4, and NumPy. We
-generally recommend installing everything, including gcc and g++
+To install this software for CPU usage, you need Python >3.4, and NumPy.
+We generally recommend installing everything, including gcc and g++
 compilers, in the conda environment as is shown in the examples here.
 This generally helps avoid compilation and linking issues. If you use
 your own chosen compiler, you may need to add information to the
@@ -135,7 +134,7 @@ We use `SemVer <http://semver.org/>`__ for versioning. For the versions
 available, see the `tags on this
 repository <https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/tags>`__.
 
-Current Version: 1.0.8
+Current Version: 1.0.10
 
 Authors
 -------
