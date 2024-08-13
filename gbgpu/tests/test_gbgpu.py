@@ -5,6 +5,7 @@ import unittest
 
 try:
     import cupy as xp
+
     xp.cuda.runtime.setDevice(2)
     gpu_available = True
 
@@ -21,6 +22,7 @@ import sys
 
 sys.path.append(np.__file__[:-17])
 
+
 class WaveformTest(unittest.TestCase):
     def test_circ(self):
 
@@ -28,7 +30,7 @@ class WaveformTest(unittest.TestCase):
 
         dt = 15.0
         N = None
-        Tobs = 4.0 * YEAR
+        Tobs = 0.95 * YEAR
         num_bin = 10
         amp = 1e-22  # amplitude
         f0 = 2e-3  # f0
@@ -77,7 +79,7 @@ class WaveformTest(unittest.TestCase):
     def test_likelihood(self):
 
         dt = 15.0
-        Tobs = 4.0 * YEAR
+        Tobs = 0.95 * YEAR
         gb = GBGPU(use_gpu=gpu_available)
         gb.d_d = 0.0
 
@@ -133,8 +135,6 @@ class WaveformTest(unittest.TestCase):
             T=Tobs,
         )
 
-        
-
         params = np.array(
             [
                 amp_in,
@@ -149,14 +149,21 @@ class WaveformTest(unittest.TestCase):
             ]
         )
 
-        like = gb.get_ll(params, data, noise_factor, N=N, dt=dt, T=Tobs,)
+        like = gb.get_ll(
+            params,
+            data,
+            noise_factor,
+            N=N,
+            dt=dt,
+            T=Tobs,
+        )
 
         self.assertFalse(np.any(np.isnan(like)))
 
     def test_information_matrix(self):
 
         dt = 15.0
-        Tobs = 4.0 * YEAR
+        Tobs = 0.95 * YEAR
         gb = GBGPU(use_gpu=gpu_available)
         gb.d_d = 0.0
 
@@ -188,7 +195,17 @@ class WaveformTest(unittest.TestCase):
         data_stream_length = len(freqs)
 
         params = np.array(
-            [amp_in, f0_in, fdot_in, fddot_in, phi0_in, iota_in, psi_in, lam_in, beta_sky_in,]
+            [
+                amp_in,
+                f0_in,
+                fdot_in,
+                fddot_in,
+                phi0_in,
+                iota_in,
+                psi_in,
+                lam_in,
+                beta_sky_in,
+            ]
         )
 
         inds = np.array([0, 1, 2, 4, 5, 6, 7, 8])
@@ -205,5 +222,3 @@ class WaveformTest(unittest.TestCase):
 
         cov = np.linalg.pinv(info_matrix)
         self.assertFalse(np.any(np.isnan(cov)))
-
-

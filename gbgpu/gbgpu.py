@@ -35,6 +35,8 @@ except (ModuleNotFoundError, ImportError):
 
 from gbgpu.utils.utility import *
 
+from lisatools.detector import EqualArmlengthOrbits, Orbits
+
 
 class GBGPU(object):
     """Generate Galactic Binary Waveforms
@@ -49,10 +51,7 @@ class GBGPU(object):
     This class can generate waveforms for two different types of GB sources:
 
         * Circular Galactic binaries
-        * Circular Galactic binaries with an eccentric third body
-
-    The class determines which waveform is desired based on the number of argmuments
-    input by the user (see the ``*args`` description below).
+        * Circular Galactic binaries with an eccentric third body (inherited)
 
     Args:
         use_gpu (bool, optional): If True, run on GPUs. Default is ``False``.
@@ -79,10 +78,11 @@ class GBGPU(object):
 
     """
 
-    def __init__(self, use_gpu=False):
+    def __init__(self, orbits: Orbits = None, use_gpu=False):
 
         self.use_gpu = use_gpu
         self.d_d = None
+        self.orbits = orbits
 
     @property
     def xp(self):
@@ -104,6 +104,23 @@ class GBGPU(object):
     def global_get_ll_func(self):
         """global_get_ll_func c func."""
         return direct_like_wrap_cpu if not self.use_gpu else direct_like_wrap_gpu
+
+    @property
+    def orbits(self) -> Orbits:
+        """Orbits class."""
+        return self._orbits
+
+    @orbits.setter
+    def orbits(self, orbits: Orbits) -> None:
+        if orbits is None:
+            self._orbits = EqualArmlengthOrbits()
+        elif not isinstance(orbits, Orbits):
+            raise ValueError(
+                "Input orbits must be of type Orbits (from LISA Analysis Tools)"
+            )
+        else:
+            self._orbits = orbits
+        self.orbits.configure(linear_interp_setup=True)
 
     @property
     def citation(self):
@@ -244,11 +261,12 @@ class GBGPU(object):
         # figure out start inds
         q_check = (f0 * T).astype(np.int32)
         # self.start_inds = (q_check - N / 2).astype(xp.int32)
+        # self.start_inds = (q_check - N / 2).astype(xp.int32)
 
         cosiota = self.xp.cos(iota)
 
         # transfer frequency
-        fstar = Clight / (Larm * 2 * np.pi)
+        fstar = Clight / (self.orbits.armlength * 2 * np.pi)
 
         cosps, sinps = self.xp.cos(2.0 * psi), self.xp.sin(2.0 * psi)
 
@@ -282,7 +300,7 @@ class GBGPU(object):
         # time domain information
         Gs, q = self._construct_slow_part(
             T,
-            Larm,
+            self.orbits.armlength,
             Ps,
             tm,
             f0,
@@ -302,11 +320,12 @@ class GBGPU(object):
         XYZf, f_min = self._computeXYZ(T, Gs, f0, fdot, fddot, fstar, amp, q, tm)
 
         self.start_inds = self.kmin = self.xp.round(f_min / df).astype(int)
+        self.start_inds = self.kmin = self.xp.round(f_min / df).astype(int)
         fctr = 0.5 * T / N
 
         # adjust for TDI2 if needed
         if tdi2:
-            omegaL = 2 * np.pi * f0 * (Larm / Clight)
+            omegaL = 2 * np.pi * f0 * (self.orbits.armlength / Clight)
             tdi2_factor = 2.0j * self.xp.sin(2 * omegaL) * self.xp.exp(-2j * omegaL)
             fctr *= tdi2_factor
 
@@ -396,45 +415,11 @@ class GBGPU(object):
 
     def _spacecraft(self, t):
         """Compute space craft positions as a function of time"""
-        # kappa and lambda are constants determined in the Constants.h file
-
-        # angular quantities defining orbit
-        alpha = 2.0 * np.pi * fm * t + kappa
-
-        beta1 = 0.0 + lambda0
-        beta2 = 2.0 * np.pi / 3.0 + lambda0
-        beta3 = 4.0 * np.pi / 3.0 + lambda0
-
-        sa = self.xp.sin(alpha)
-        ca = self.xp.cos(alpha)
 
         # output arrays
-        P1 = self.xp.zeros((len(t), 3))
-        P2 = self.xp.zeros((len(t), 3))
-        P3 = self.xp.zeros((len(t), 3))
-
-        # spacecraft 1
-        sb = self.xp.sin(beta1)
-        cb = self.xp.cos(beta1)
-
-        P1[:, 0] = AU * ca + AU * ec * (sa * ca * sb - (1.0 + sa * sa) * cb)
-        P1[:, 1] = AU * sa + AU * ec * (sa * ca * cb - (1.0 + ca * ca) * sb)
-        P1[:, 2] = -SQ3 * AU * ec * (ca * cb + sa * sb)
-
-        # spacecraft 2
-        sb = self.xp.sin(beta2)
-        cb = self.xp.cos(beta2)
-        P2[:, 0] = AU * ca + AU * ec * (sa * ca * sb - (1.0 + sa * sa) * cb)
-        P2[:, 1] = AU * sa + AU * ec * (sa * ca * cb - (1.0 + ca * ca) * sb)
-        P2[:, 2] = -SQ3 * AU * ec * (ca * cb + sa * sb)
-
-        # spacecraft 3
-        sb = self.xp.sin(beta3)
-        cb = self.xp.cos(beta3)
-        P3[:, 0] = AU * ca + AU * ec * (sa * ca * sb - (1.0 + sa * sa) * cb)
-        P3[:, 1] = AU * sa + AU * ec * (sa * ca * cb - (1.0 + ca * ca) * sb)
-        P3[:, 2] = -SQ3 * AU * ec * (ca * cb + sa * sb)
-
+        P1 = self.orbits.get_pos(t, 1)
+        P2 = self.orbits.get_pos(t, 2)
+        P3 = self.orbits.get_pos(t, 3)
         return [P1, P2, P3]
 
     def _construct_slow_part(
