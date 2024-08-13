@@ -4,9 +4,9 @@ import time
 import unittest
 
 try:
-    import cupy as xp
+    import cupy as cp
 
-    xp.cuda.runtime.setDevice(2)
+    cp.cuda.runtime.setDevice(2)
     gpu_available = True
 
 except (ImportError, ModuleNotFoundError) as e:
@@ -15,18 +15,20 @@ except (ImportError, ModuleNotFoundError) as e:
     gpu_available = False
 
 from gbgpu.gbgpu import GBGPU
-
 from gbgpu.utils.constants import *
 
 import sys
 
 sys.path.append(np.__file__[:-17])
-
+from lisatools.detector import EqualArmlengthOrbits
 
 class WaveformTest(unittest.TestCase):
     def test_circ(self):
+        xp = cp if gpu_available else np
+        orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
+        orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(use_gpu=gpu_available)
+        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
 
         dt = 15.0
         N = None
@@ -77,10 +79,13 @@ class WaveformTest(unittest.TestCase):
             self.assertFalse(xp.any(xp.isinf(gb.E[i])))
 
     def test_likelihood(self):
-
+        xp = cp if gpu_available else np
         dt = 15.0
         Tobs = 0.95 * YEAR
-        gb = GBGPU(use_gpu=gpu_available)
+        orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
+        orbits.configure(linear_interp_setup=True)
+
+        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
         gb.d_d = 0.0
 
         N = int(256)
@@ -161,10 +166,13 @@ class WaveformTest(unittest.TestCase):
         self.assertFalse(np.any(np.isnan(like)))
 
     def test_information_matrix(self):
-
+        xp = cp if gpu_available else np
         dt = 15.0
         Tobs = 0.95 * YEAR
-        gb = GBGPU(use_gpu=gpu_available)
+        orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
+        orbits.configure(linear_interp_setup=True)
+
+        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
         gb.d_d = 0.0
 
         N = int(256)

@@ -31,7 +31,7 @@ try:
     from gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
 
 except (ModuleNotFoundError, ImportError):
-    import numpy as cp
+    pass
 
 from gbgpu.utils.utility import *
 
@@ -417,9 +417,9 @@ class GBGPU(object):
         """Compute space craft positions as a function of time"""
 
         # output arrays
-        P1 = self.orbits.get_pos(t, 1)
-        P2 = self.orbits.get_pos(t, 2)
-        P3 = self.orbits.get_pos(t, 3)
+        P1 = self.orbits.get_pos(t, self.xp.full_like(t, 1).astype(self.xp.int32))
+        P2 = self.orbits.get_pos(t, self.xp.full_like(t, 2).astype(self.xp.int32))
+        P3 = self.orbits.get_pos(t, self.xp.full_like(t, 3).astype(self.xp.int32))
         return [P1, P2, P3]
 
     def _construct_slow_part(

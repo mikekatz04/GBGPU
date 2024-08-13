@@ -4,7 +4,7 @@ import time
 import unittest
 
 try:
-    import cupy as xp
+    import cupy as cp
 
     gpu_available = True
 
@@ -16,14 +16,16 @@ except (ImportError, ModuleNotFoundError) as e:
 from gbgpu.thirdbody import GBGPUThirdBody
 
 from gbgpu.utils.constants import *
-
+from lisatools.detector import EqualArmlengthOrbits
 
 class WaveformTest(unittest.TestCase):
     def test_ecc_third_body(self):
-
+        xp = cp if gpu_available else np
         dt = 15.0
         Tobs = 4.0 * YEAR
-        gb = GBGPUThirdBody(use_gpu=gpu_available)
+        orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
+        orbits.configure(linear_interp_setup=True)
+        gb = GBGPUThirdBody(orbits=orbits, use_gpu=gpu_available)
 
         N = int(256)
         num_bin = 10
