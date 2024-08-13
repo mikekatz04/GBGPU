@@ -1,6 +1,6 @@
 
 [build-system]
-requires = ["setuptools", "wheel", "Cython",  "numpy"]
+requires = ["setuptools", "wheel", "Cython",  "numpy", "lisaanalysistools"]
 build-backend = 'setuptools.build_meta'
 
 [tool.poetry]
@@ -9,7 +9,7 @@ version = "1.0.10"
 description = "GPU/CPU Galactic Binary Waveforms"
 license = "GPL"
 classifiers = ["Programming Language :: Python :: 3", "Operating System :: OS Independent"]
-homepage = "https://github.com/mikekatz04/LISAanalysistools"
+homepage = "https://github.com/mikekatz04/GBGPU"
 authors = ["Michael L. Katz"]
 readme = "README.md"
 
