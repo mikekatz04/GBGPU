@@ -178,7 +178,7 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="1.0.10",
+    version="1.1.0",
     packages=["gbgpu", "gbgpu.utils"],
     py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,

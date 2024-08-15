@@ -140,7 +140,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">dt</span> <span class="o">=</span> <span class="mf">10.0</span>
-<span class="n">Tobs</span> <span class="o">=</span> <span class="mf">4.0</span> <span class="o">*</span> <span class="n">YEAR</span>
+<span class="n">Tobs</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">YEAR</span>
 
 
 <span class="c1"># number of points in waveform</span>
@@ -203,7 +203,7 @@
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-signal length: (512,)
+signal length: (128,)
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -283,7 +283,7 @@ signal length: (512,)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-Third-body signal length: (512,)
+Third-body signal length: (128,)
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -356,30 +356,30 @@ Third-body signal length: (512,)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([[ 2.59077367e-03, -1.73878706e-11,  5.79304501e-06,
-        -9.34816276e-06, -1.04002918e-04, -5.60755007e-05,
-         1.67605365e-05,  9.25171278e-05],
-       [-1.73878746e-11,  1.22082657e-14,  1.64237604e-09,
-        -2.54833471e-09,  1.39473209e-13, -1.52900673e-08,
-         5.16215847e-10, -3.66331893e-10],
-       [ 5.79304458e-06,  1.64237604e-09,  3.24596413e-04,
-        -5.03938920e-04, -3.46742708e-07, -3.02364579e-03,
-         1.81105758e-05,  1.29977040e-04],
-       [-9.34816197e-06, -2.54833471e-09, -5.03938920e-04,
-         7.82376600e-04,  5.52582244e-07,  4.69427869e-03,
-        -2.96655680e-05, -2.05333228e-04],
-       [-1.04002918e-04,  1.39473623e-13, -3.46742612e-07,
-         5.52582099e-07,  4.17508959e-06,  3.31495602e-06,
-        -6.68385372e-07, -3.78376397e-06],
-       [-5.60754959e-05, -1.52900673e-08, -3.02364579e-03,
-         4.69427869e-03,  3.31495689e-06,  2.81657867e-02,
-        -1.78010026e-04, -1.23202079e-03],
-       [ 1.67605364e-05,  5.16215847e-10,  1.81105758e-05,
-        -2.96655680e-05, -6.68385375e-07, -1.78010026e-04,
-         1.55073927e-03,  4.16053565e-04],
-       [ 9.25171277e-05, -3.66331893e-10,  1.29977040e-04,
-        -2.05333228e-04, -3.78376402e-06, -1.23202079e-03,
-         4.16053565e-04,  2.04009063e-03]])
+array([[ 1.03670758e-02, -3.03751670e-09, -4.34853085e-06,
+         9.30287319e-05, -4.16250330e-04,  5.58219344e-04,
+        -5.55445555e-05,  4.37703212e-04],
+       [-3.03751670e-09,  2.75957296e-12,  4.60004509e-09,
+        -1.30903471e-07,  2.27487105e-10, -7.85411493e-07,
+         1.13683606e-07, -6.31724576e-08],
+       [-4.34853085e-06,  4.60004509e-09,  8.78628478e-06,
+        -2.50761137e-04,  3.73944799e-07, -1.50454902e-03,
+         1.72593472e-04, -7.75682309e-05],
+       [ 9.30287318e-05, -1.30903471e-07, -2.50761137e-04,
+         7.17103859e-03, -9.43217244e-06,  4.30257258e-02,
+        -5.08042272e-03,  1.88810467e-03],
+       [-4.16250330e-04,  2.27487092e-10,  3.73944776e-07,
+        -9.43217177e-06,  1.67174837e-05, -5.65945132e-05,
+         6.51025824e-06, -1.93069353e-05],
+       [ 5.58219343e-04, -7.85411493e-07, -1.50454902e-03,
+         4.30257258e-02, -5.65945172e-05,  2.58151320e-01,
+        -3.04822260e-02,  1.13284197e-02],
+       [-5.55445553e-05,  1.13683606e-07,  1.72593472e-04,
+        -5.08042272e-03,  6.51025872e-06, -3.04822260e-02,
+         1.08018147e-02, -8.85702255e-04],
+       [ 4.37703212e-04, -6.31724576e-08, -7.75682309e-05,
+         1.88810467e-03, -1.93069355e-05,  1.13284197e-02,
+        -8.85702255e-04,  9.57210495e-03]])
 </pre></div></div>
 </div>
 <p>Standard deviation on the marginalized parameters:</p>
@@ -397,8 +397,8 @@ array([[ 2.59077367e-03, -1.73878706e-11,  5.79304501e-06,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([1.01799286e-24, 2.20982042e-10, 1.35814788e-19, 2.79709957e-03,
-       4.08660719e-04, 5.03479970e-02, 1.57517708e-02, 2.25836812e-02])
+array([2.03637676e-24, 3.32239249e-09, 2.23448704e-20, 8.46819850e-03,
+       8.17740391e-04, 1.52425781e-01, 4.15727117e-02, 4.89185674e-02])
 </pre></div></div>
 </div>
 <p>Plot the Information Matrix ellipse for the intial frequency and frequency derivative:</p>
@@ -445,7 +445,7 @@ array([1.01799286e-24, 2.20982042e-10, 1.35814788e-19, 2.79709957e-03,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x14a680650&gt;]
+[&lt;matplotlib.lines.Line2D at 0x154fa1220&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -573,8 +573,7 @@ Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256,
-       256, 256])
+array([64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64])
 </pre></div></div>
 </div>
 </section>

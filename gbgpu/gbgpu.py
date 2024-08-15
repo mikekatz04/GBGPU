@@ -57,14 +57,12 @@ class GBGPU(object):
         use_gpu (bool, optional): If True, run on GPUs. Default is ``False``.
 
     Attributes:
-        xp (obj): NumPy if on CPU. CuPy if on GPU.
         use_gpu (bool): Use GPU if True.
         get_basis_tensors (obj): Cython function.
         GenWave (obj): Cython function.
         GenWaveThird (obj): Cython function.
         unpack_data_1 (obj): Cython function.
         XYZ (obj): Cython function.
-        get_ll_func (obj): Cython function.
         num_bin (int): Number of binaries in the current calculation.
         N_max (int): Maximum points in a waveform based on maximum harmonic mode considered.
         start_inds (list of 1D int xp.ndarray): Start indices into data stream array. q - N/2.
@@ -199,6 +197,11 @@ class GBGPU(object):
         # get number of observation points and adjust T accordingly
         N_obs = int(T / dt)
         T = N_obs * dt
+
+        if T > self.orbits.t_base.max():
+            raise ValueError(
+                f"Observation time ({T}) is larger than length of time in orbital information ({self.orbits.t_base.max()})"
+            )
 
         # if given scalar parameters, make sure at least 1D
         amp = np.atleast_1d(amp)
@@ -932,6 +935,11 @@ class GBGPU(object):
         if fmax is None:
             fmax = 1 / (2 * dt)
 
+        if T > self.orbits.t_base.max():
+            raise ValueError(
+                f"Observation time ({T}) is larger than length of time in orbital information ({self.orbits.t_base.max()})"
+            )
+
         # adjust inputs for run wave
         N_obs = int(T / dt)
         T = N_obs * dt
@@ -995,7 +1003,7 @@ class GBGPU(object):
         This function computes the Information matrix for a batch of Galactic binaries.
         It uses a 2nd order calculation for the derivative if ``easy_central_difference`` is ``False``:
 
-        ..math:: \\frac{dh}{d\\lambda_i} = \\frac{-h(\\lambda_i + 2\\epsilon) + h(\\lambda_i - 2\\epsilon) + 8(h(\\lambda_i + \epsilon) - h(\\lambda_i - \\epsilon))}{12\\epsilson}
+        ..math:: \\frac{dh}{d\\lambda_i} = \\frac{-h(\\lambda_i + 2\\epsilon) + h(\\lambda_i - 2\\epsilon) + 8(h(\\lambda_i + \\epsilon) - h(\\lambda_i - \\epsilon))}{12\\epsilson}
 
         Otherwise, it will just calculate the derivate with a first-order central difference.
 

@@ -51,24 +51,23 @@
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Fast GB Waveforms and Likelihoods</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU"><code class="docutils literal notranslate"><span class="pre">GBGPU</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.xp"><code class="docutils literal notranslate"><span class="pre">GBGPU.xp</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.use_gpu"><code class="docutils literal notranslate"><span class="pre">GBGPU.use_gpu</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_basis_tensors"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_basis_tensors</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.GenWave"><code class="docutils literal notranslate"><span class="pre">GBGPU.GenWave</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.GenWaveThird"><code class="docutils literal notranslate"><span class="pre">GBGPU.GenWaveThird</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.unpack_data_1"><code class="docutils literal notranslate"><span class="pre">GBGPU.unpack_data_1</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.XYZ"><code class="docutils literal notranslate"><span class="pre">GBGPU.XYZ</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_ll_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll_func</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.num_bin"><code class="docutils literal notranslate"><span class="pre">GBGPU.num_bin</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.N_max"><code class="docutils literal notranslate"><span class="pre">GBGPU.N_max</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.start_inds"><code class="docutils literal notranslate"><span class="pre">GBGPU.start_inds</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.df"><code class="docutils literal notranslate"><span class="pre">GBGPU.df</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.N"><code class="docutils literal notranslate"><span class="pre">GBGPU.N</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.d_d"><code class="docutils literal notranslate"><span class="pre">GBGPU.d_d</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">GBGPU.xp</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll_func</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.xp"><code class="docutils literal notranslate"><span class="pre">GBGPU.xp</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.get_ll_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.get_ll_func</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.fill_global_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.fill_global_func</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.global_get_ll_func"><code class="docutils literal notranslate"><span class="pre">GBGPU.global_get_ll_func</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.orbits"><code class="docutils literal notranslate"><span class="pre">GBGPU.orbits</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.citation"><code class="docutils literal notranslate"><span class="pre">GBGPU.citation</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.run_wave"><code class="docutils literal notranslate"><span class="pre">GBGPU.run_wave()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#gbgpu.gbgpu.GBGPU.X_out"><code class="docutils literal notranslate"><span class="pre">GBGPU.X_out</span></code></a></li>
@@ -137,7 +136,7 @@
 <h1>Fast GB Waveforms and Likelihoods<a class="headerlink" href="#fast-gb-waveforms-and-likelihoods" title="Link to this heading"></a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gbgpu.gbgpu.</span></span><span class="sig-name descname"><span class="pre">GBGPU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Orbits</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Generate Galactic Binary Waveforms</p>
 <p>This class generates galactic binary waveforms in the frequency domain,
@@ -150,27 +149,14 @@ environmental variable or <code class="xref py py-func docutils literal notransl
 <blockquote>
 <div><ul class="simple">
 <li><p>Circular Galactic binaries</p></li>
-<li><p>Circular Galactic binaries with an eccentric third body</p></li>
+<li><p>Circular Galactic binaries with an eccentric third body (inherited)</p></li>
 </ul>
 </div></blockquote>
-<p>The class determines which waveform is desired based on the number of argmuments
-input by the user (see the <code class="docutils literal notranslate"><span class="pre">*args</span></code> description below).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>use_gpu</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, run on GPUs. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.xp">
-<span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.xp" title="Link to this definition"></a></dt>
-<dd><p>NumPy if on CPU. CuPy if on GPU.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>obj</p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.use_gpu">
 <span class="sig-name descname"><span class="pre">use_gpu</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.use_gpu" title="Link to this definition"></a></dt>
@@ -229,17 +215,6 @@ input by the user (see the <code class="docutils literal notranslate"><span clas
 <dl class="py attribute">
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.XYZ">
 <span class="sig-name descname"><span class="pre">XYZ</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.XYZ" title="Link to this definition"></a></dt>
-<dd><p>Cython function.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>obj</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.get_ll_func">
-<span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll_func" title="Link to this definition"></a></dt>
 <dd><p>Cython function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -329,14 +304,14 @@ accessed in python with the properties <code class="docutils literal notranslate
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="id0">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.xp">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xp</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.xp" title="Link to this definition"></a></dt>
 <dd><p>CuPy or NumPy</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="id1">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.get_ll_func">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.get_ll_func" title="Link to this definition"></a></dt>
 <dd><p>get_ll c func.</p>
 </dd></dl>
 
@@ -350,6 +325,12 @@ accessed in python with the properties <code class="docutils literal notranslate
 <dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.global_get_ll_func">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">global_get_ll_func</span></span><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.global_get_ll_func" title="Link to this definition"></a></dt>
 <dd><p>global_get_ll_func c func.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gbgpu.gbgpu.GBGPU.orbits">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">orbits</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Orbits</span></em><a class="headerlink" href="#gbgpu.gbgpu.GBGPU.orbits" title="Link to this definition"></a></dt>
+<dd><p>Orbits class.</p>
 </dd></dl>
 
 <dl class="py property">

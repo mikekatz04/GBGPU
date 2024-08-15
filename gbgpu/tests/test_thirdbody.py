@@ -18,11 +18,12 @@ from gbgpu.thirdbody import GBGPUThirdBody
 from gbgpu.utils.constants import *
 from lisatools.detector import EqualArmlengthOrbits
 
+
 class WaveformTest(unittest.TestCase):
     def test_ecc_third_body(self):
         xp = cp if gpu_available else np
         dt = 15.0
-        Tobs = 4.0 * YEAR
+        Tobs = 1.0 * YEAR
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
         gb = GBGPUThirdBody(orbits=orbits, use_gpu=gpu_available)
