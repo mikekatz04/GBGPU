@@ -482,7 +482,7 @@ void calc_kdotr(double* k, double *kdotr, double *r12, double *r21, double *r13,
 		kdotr[(0*3 + 2)] += k[i]*r13[i];
 		kdotr[(1*3 + 2)] += k[i]*r23[i];
 	}
-
+    
 	//Making use of antisymmetry
 	kdotr[(1*3 + 0)] = -kdotr[(0*3 + 1)];
 	kdotr[(2*3 + 0)] = -kdotr[(0*3 + 2)];
@@ -618,7 +618,7 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
 			if(i!=j)
 			{
 				//Argument of transfer function
-				double arg1 = 0.5*fonfs[i]*(1. - kdotr[(i*3 + j)]);
+				double arg1 = 0.5*fonfs[i]*(1. + kdotr[(i*3 + j)]);
 
 				//Argument of complex exponentials
 				double arg2 = (PI2*f0*xi[i] + phi0 + M_PI*dfdt_0*xi[i]*xi[i] + M_PI*d2fdt2_0*xi[i]*xi[i]*xi[i]/3.0) * (double)mode_j/2. - df*t ;
@@ -628,26 +628,27 @@ void get_transfer_ET(int q, double f0, double dfdt, double d2fdt2, double phi0,
                 if (xi[i] > 0.0) arg2 += sum[i];
                 #endif
 
+                arg2 *= -1.0;
+
                 //Transfer function
 				double sinc = 0.25*sin(arg1)/arg1;
 
 				//Evolution of amplitude
-				aevol = 1.0 + 0.66666666666666666666*dfdt_0/f0*xi[i];
+				aevol = 1.0; //  + 0.66666666666666666666*dfdt_0/f0*xi[i];
 
 				///Real and imaginary pieces of time series (no complex exponential)
                 // -dplus due to difference with original fastGB
 
-				tran1r = aevol*(-dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
-				tran1i = aevol*(-dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
+				tran1r = aevol*(dplus[(i*3 + j)]*DPr + dcross[(i*3 + j)]*DCr);
+				tran1i = aevol*(dplus[(i*3 + j)]*DPi + dcross[(i*3 + j)]*DCi);
 
 				//Real and imaginry components of complex exponential
 				tran2r = cos(arg1 + arg2);
-				tran2i = sin(arg1 + arg2);
+				tran2i = -sin(arg1 + arg2);
 
 				//Real & Imaginary part of the slowly evolving signal
 				TR[(i*3 + j)] = sinc*(tran1r*tran2r - tran1i*tran2i);
 				TI[(i*3 + j)] = sinc*(tran1r*tran2i + tran1i*tran2r);
-
             }
             // fill with zeros in diagonal terms
             else

@@ -232,7 +232,7 @@ if run_cuda_install:
 else:
     extensions = [ext_cpu, ext_third_cpu]
 
-fp_out_name = "gbgpu/utils/constants.py"
+fp_out_name = "old_gbgpu/utils/constants.py"
 fp_in_name = "include/Constants.h"
 
 # develop few.utils.constants.py
@@ -252,12 +252,12 @@ with open(fp_out_name, "w") as fp_out:
 
 
 setup(
-    name="gbgpu",
+    name="old_gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
     version="0.1",
-    packages=["gbgpu", "gbgpu.utils"],
-    py_modules=["gbgpu.gbgpu", "gbgpu.utils.pointeradjust", "gbgpu.utils.constants",],
+    packages=["old_gbgpu", "old_gbgpu.utils"],
+    py_modules=["old_gbgpu.old_gbgpu", "old_gbgpu.utils.pointeradjust", "old_gbgpu.utils.constants",],
     ext_modules=extensions,
     # Inject our custom trigger
     cmdclass={"build_ext": custom_build_ext},

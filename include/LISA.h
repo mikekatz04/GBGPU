@@ -21,7 +21,7 @@
 #define lambda 0.000000
 
  /* LISA modulation frequency */
-#define fm 3.168753575e-8
+#define fm 3.168753578738106e-08
 
 /* transfer frequency (Hz) */
 #define fstar 0.01908538063694777
