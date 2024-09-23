@@ -4407,13 +4407,29 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             __syncthreads();
         }
         __syncthreads();
-
+        // if ((mcmc_info.accepted_out[band_i] > 0) && (threadIdx.x == 0))
+        // {
+        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+        //     {
+                
+        //         j = band_here.band_start_data_ind + i;
+        //         if ((j < data.data_length) && (j >= 0) && (j % 10 == 0))
+        //         {
+        //             printf("before: %d %d %d %e %e %e\n", mcmc_info.accepted_out[band_i], band_here.update_data_index, j, data.data_A[band_here.update_data_index * data.data_length + j].real(), data.data_A[band_here.update_data_index * data.data_length + j].imag(), this_band_inv_temp);
+        //         }
+        //         // else
+        //         // {
+        //         //     printf("BAD 8888888 %d %d %d\n", band_here.band_start_data_ind, i, band_here.band_data_lengths);
+        //         // }
+        //     }
+        // }
+        // __syncthreads();
         if ((this_band_inv_temp == 1.0) && (!mcmc_info.is_rj))
         {
             // update the cold chain information
             // need to be careful not to overlap with other bands running simultaneous (every 3 or 4 or something)
             for (int bin_i = 0; bin_i < band_here.band_num_bins; bin_i += 1)
-            {
+            {    
                 current_binary_start_index = band_here.band_start_bin_ind + bin_i;
                 // get the parameters to add and remove
                 
@@ -4453,6 +4469,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 prop_binary.lam = band_here.gb_params.lam[bin_i];
                 prop_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
                 //}
+                // if ((mcmc_info.accepted_out[band_i] > 0) && (threadIdx.x == 0))
+                //     printf("YT2 %e\n", mcmc_info.L_contribution[band_i].real());
+                // if ((abs(curr_binary.f0_ms - prop_binary.f0_ms) > 0.0) && (threadIdx.x == 0))
+                //     printf("YT3\n");
+                // __syncthreads();
 
                 // if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM25: %d %d %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms);
 
@@ -4505,6 +4526,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 {
                     
                     j = start_ind_add + i;
+                    // if (mcmc_info.accepted_out[band_i] > 0) printf("JJJJ: %d\n", j);
                     if ((j < data.data_length) && (j >= 0))
                     {
                         data.data_A[band_here.update_data_index * data.data_length + j] -= A_add[i];
@@ -4521,6 +4543,23 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             // add new residual from shared (or global memory)
         }
         __syncthreads();
+        // if ((mcmc_info.accepted_out[band_i] > 0) && (threadIdx.x == 0))
+        // {
+        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+        //     {
+                
+        //         j = band_here.band_start_data_ind + i;
+        //         if ((j < data.data_length) && (j >= 0) && (j % 10 == 0))
+        //         {
+        //             printf("after: %d %d %e %e\n", band_here.update_data_index, j, data.data_A[band_here.update_data_index * data.data_length + j].real(), data.data_A[band_here.update_data_index * data.data_length + j].imag());
+        //         }
+        //         // else
+        //         // {
+        //         //     printf("BAD 8888888 ");
+        //         // }
+        //     }
+        // }
+        // __syncthreads();
         // double like_share_after = 0.0;
         // double like_all_check = 0.0;
         // if ((threadIdx.x == 0) && (this_band_inv_temp == 1.0))
