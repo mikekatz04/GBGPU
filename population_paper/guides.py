@@ -1322,7 +1322,7 @@ class EvidenceRuns(Guide):
                     #     breakpoint()
 
                     print(template, self.start_state[template].groups_running.sum())
-                    self.start_state[template] = self.sampler[template].run_mcmc(self.start_state[template], nsteps, burn=1000, thin_by=thin_by, progress=True, store=True)
+                    self.start_state[template] = self.sampler[template].run_mcmc(self.start_state[template], nsteps, burn=0, thin_by=thin_by, progress=True, store=True)
                     # np.save(f"sample_check_{template}", self.sampler[template].get_chain())
                     
                     logP[template] = self.start_state[template].log_like * self.start_state[template].betas[:, :, None] + self.start_state[template].log_prior
