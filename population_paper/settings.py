@@ -20,16 +20,16 @@ def get_settings(copy_settings_file=False):
         use_c_implementation=True,
     )
  
-    base_string = "run_test_1_CHECK_NEW"
+    base_string = "auditing_1"
     main_dir = "./"
-    population_directory_list = [f"/expanse/lustre/projects/umn131/vgupta1/GBGPU/population_paper/Eccentric_populations_Michael/Eccentric_populations_Michael/Realization_{i}/" for i in range(1, 4)]
+    population_directory_list = [main_dir + f"Realization_{i}/" for i in range(1, 4)]
 
-    triples_setup_directory = main_dir + "populations_for_search_bd_prelim/"
-    search_dir = main_dir + "search_info_bd_prelim/"
-    evidence_dir = main_dir + "evidence_info_bd_prelim" 
-    pe_dir = main_dir + "pe_info_bd_prelim/"
-    status_file_base = "status_file_bd_prelim_"
-    bad_file = main_dir + base_string + "_bd_prelim_bad_file.txt"
+    triples_setup_directory = main_dir + "populations_for_search/"
+    search_dir = main_dir + "search_info/"
+    evidence_dir = main_dir + "evidence_info/"
+    pe_dir = main_dir + "pe_info/"
+    status_file_base = "status_file"
+    bad_file = main_dir + base_string + "_bad_file.txt"
     
     directory_info = dict(
         base_string=base_string,
@@ -53,7 +53,7 @@ def get_settings(copy_settings_file=False):
 
     verbose = True
 
-    m3_lims = [16.0, 100.0]
+    m3_lims = [0.0, 16.0]
     e2_lims = [0.0, 0.985]
     opt_snr_lims = [0.0, 1e6]
 
@@ -67,7 +67,7 @@ def get_settings(copy_settings_file=False):
     search_settings = dict(
         nwalkers=50,
         ntemps=10,
-        ngroups=500,
+        ngroups=50,
         data_length=8192,
         convergence_iter_count=25,
         nsteps_per_check=20,

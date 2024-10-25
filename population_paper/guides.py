@@ -394,6 +394,7 @@ class Guide(ABC):
 
             tmp_fs_in = gb_info.transform_fn["gb"].both_transforms(tmp_fs)
 
+            N = int(N)
             start_like = gb_info.template_gen.get_ll(tmp_fs_in, data_channels_tmp, psd_tmp, start_freq_ind=start_freq_ind, N=N, **self.waveform_kwargs)
             if np.any(np.isnan(start_like)):
                 breakpoint()
