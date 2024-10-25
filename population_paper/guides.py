@@ -306,7 +306,7 @@ class Guide(ABC):
             oversample=self.waveform_kwargs["oversample"]
         )
 
-        N_found = np.max([N_found_base, N_found_third])
+        N_found = np.max([N_found_base, N_found_third.item()])
 
         return N_found
         
@@ -520,7 +520,6 @@ class TriplesSetupGuide(Guide):
 
         except AttributeError:
             pass
-
         return (ll_diff, opt_snr, phase_change)
 
     def run_single_model(self, directory: str, indicator: str, fp: str):
@@ -1195,33 +1194,33 @@ class EvidenceRuns(Guide):
         except StopIteration:
             return True
 
-    def readout(self, end_i: int, indicator: str):
-        output_state = State({"gb": self.start_state.branches["gb"].coords[end_i].get()}, log_like=self.start_state.log_like[end_i].get(), log_prior=self.start_state.log_prior[end_i].get(), betas=self.start_state.betas[end_i].get(), random_state=np.random.get_state())
+    # def readout(self, end_i: int, indicator: str):
+    #     output_state = State({"gb": self.start_state.branches["gb"].coords[end_i].get()}, log_like=self.start_state.log_like[end_i].get(), log_prior=self.start_state.log_prior[end_i].get(), betas=self.start_state.betas[end_i].get(), random_state=np.random.get_state())
 
-        orig_id = self.currently_running_index_orig_id[end_i]
+    #     orig_id = self.currently_running_index_orig_id[end_i]
                     
-        backend_tmp = HDFBackend(self.get_out_fp(indicator), name=str(int(orig_id)))
+    #     backend_tmp = HDFBackend(self.get_out_fp(indicator), name=str(int(orig_id)))
         
-        backend_tmp.reset(
-            self.nwalkers,
-            self.base_info.ndim,
-            ntemps=self.ntemps,
-            branch_names=["gb"],
-        )
-        backend_tmp.grow(1, None)
+    #     backend_tmp.reset(
+    #         self.nwalkers,
+    #         self.base_info.ndim,
+    #         ntemps=self.ntemps,
+    #         branch_names=["gb"],
+    #     )
+    #     backend_tmp.grow(1, None)
         
-        # meaningless array needed for saving input
-        accepted = np.zeros((self.ntemps, self.nwalkers), dtype=bool)
-        backend_tmp.save_step(output_state, accepted)
+    #     # meaningless array needed for saving input
+    #     accepted = np.zeros((self.ntemps, self.nwalkers), dtype=bool)
+    #     backend_tmp.save_step(output_state, accepted)
 
-        # add other information to file
-        with h5py.File(backend_tmp.filename, "a") as fp:
-            group_new = fp[str(int(orig_id))].create_group("keep_info")
-            for key, value in self.output_info_store[end_i].items():
-                group_new.attrs[key] = value
-            group_new.attrs["logl_max_mcmc"] = output_state.log_like.max()
+    #     # add other information to file
+    #     with h5py.File(backend_tmp.filename, "a") as fp:
+    #         group_new = fp[str(int(orig_id))].create_group("keep_info")
+    #         for key, value in self.output_info_store[end_i].items():
+    #             group_new.attrs[key] = value
+    #         group_new.attrs["logl_max_mcmc"] = output_state.log_like.max()
 
-        return
+    #     return
 
     def readout(self, end_i: int, indicator: str, current_evidence_estimate: dict):
 
@@ -1300,6 +1299,7 @@ class EvidenceRuns(Guide):
             running_inner = (self.xp.all(self.start_state["third"].groups_running) or finish_up)
 
             while running_inner:
+                # breakpoint()
                 nsteps = self.sampler_settings["evidence"]["nsteps"]
                 started_run = True
                 assert nsteps <= total_steps_for_evidence
@@ -1314,14 +1314,14 @@ class EvidenceRuns(Guide):
                     self.sampler[template].backend.reset(*self.sampler[template].backend.reset_args, **self.sampler[template].backend.reset_kwargs)
                     # if template == "third":
                     #     breakpoint()
-                    #     coords_in = {"gb": self.start_state[template].branches["gb"].coords[-1:]}
+                    #     coords_in = {"gb": self.start_state[templat5980353e].branches["gb"].coords[-1:]}
                     #     check = self.sampler[template].compute_log_prior(coords_in, groups_running=self.xp.arange(self.ngroups)[np.array([15])])
                     #     coords_in2 = {"gb": self.start_state[template].branches["gb"].coords}
                     #     check = self.sampler[template].compute_log_prior(coords_in, groups_running=self.xp.arange(self.ngroups)[:])
                     #     breakpoint()
 
                     print(template, self.start_state[template].groups_running.sum())
-                    self.start_state[template] = self.sampler[template].run_mcmc(self.start_state[template], nsteps, burn=0, thin_by=thin_by, progress=True, store=True)
+                    self.start_state[template] = self.sampler[template].run_mcmc(self.start_state[template], nsteps, burn=1000, thin_by=thin_by, progress=True, store=True)
                     # np.save(f"sample_check_{template}", self.sampler[template].get_chain())
                     
                     logP[template] = self.start_state[template].log_like * self.start_state[template].betas[:, :, None] + self.start_state[template].log_prior
@@ -1329,6 +1329,14 @@ class EvidenceRuns(Guide):
                     evidence_log_like[template][:, current_inds_fill_evidence] = self.sampler[template].get_log_like(discard=self.sampler[template].backend.iteration - nsteps).mean(axis=-1).transpose(1, 0, 2)  # self.start_state[template].log_like.mean(axis=-1)[:, None, :]
 
                     # evidence_log_like[template] = 
+                # np.save(file='log_like_third_backend_sampler_new.npy', arr=self.sampler['third'].backend.get_log_like())
+                # np.save(file='log_like_base_backend_sampler_new.npy', arr=self.sampler['base'].backend.get_log_like())
+                # np.save(file='betas_third_backend_sampler_new.npy', arr=self.sampler['third'].backend.get_betas())
+                # np.save(file='betas_base_backend_sampler_new.npy', arr=self.sampler['base'].backend.get_betas())
+                # breakpoint()
+                #access likelihood points in self.sampler[template] - call self.sampler[template].get_log_like for both templates aand call get
+                # temperature. store likelihood and temperature for each step walker. 
+                # exit()
                 self.product_space_operation(logP)
                 
                 current_evidence_ind += nsteps
@@ -1356,17 +1364,16 @@ class EvidenceRuns(Guide):
                     current_old_bf_ind[adjust.get()] = (current_old_bf_ind[adjust.get()] + 1) % old_bf.shape[1]
                     current_old_bf_count[adjust.get()] += 1
                     
-                check_convergence = current_old_bf_count >= number_old_evidences
+                check_convergence = (current_old_bf_count >= number_old_evidences) & (np.asarray(self.currently_running_orig_id) != None)
                 end = np.full(self.ngroups, False)
                 end[check_convergence] = np.all(np.abs(old_bf[check_convergence] - np.mean(old_bf[check_convergence], axis=-1)[:, None]) < 0.03, axis=-1) & (np.abs(np.sign(np.diff(old_bf[check_convergence], axis=-1)).sum(axis=-1)) < number_old_evidences - 1)
-                
                 print(end, current_evidence_diff)
                 if np.any(end) > 0:
                     running_inner = False
                 # print(iters_at_max, start_state.groups_running.sum().item(), now_max_log_like[:10])
             
             if started_run:
-
+                
                 # which groups ended
                 end = np.where(end)[0]
                 for end_i in end:
