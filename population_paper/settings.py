@@ -20,7 +20,7 @@ def get_settings(copy_settings_file=False):
         use_c_implementation=True,
     )
  
-    base_string = "auditing_1"
+    base_string = "auditing_2"
     main_dir = "./"
     population_directory_list = [main_dir + f"Realization_{i}/" for i in range(1, 4)]
 
@@ -68,7 +68,7 @@ def get_settings(copy_settings_file=False):
         nwalkers=50,
         ntemps=10,
         ngroups=50,
-        data_length=8192,
+        data_length=int(8192),
         convergence_iter_count=25,
         nsteps_per_check=20,
         progress=True,

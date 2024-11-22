@@ -21,7 +21,7 @@ try:
 except ModuleNotFoundError:
     gpu_available = False
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 from lisatools.sensitivity import get_sensitivity
 from lisatools.sampling.likelihood import Likelihood
@@ -368,6 +368,8 @@ class Guide(ABC):
         max_iter = 2000
         start_like = np.zeros((self.ntemps, self.nwalkers))
         while np.std(start_like[0]) < 7.0:
+            # TECHNICALLY THIS PRIOR COMPUTATION IS NOT CORRECT FOR LOGPDF
+            # DOES NOT MATTER, IT IS START POINTS
             logp = np.full_like(start_like, -np.inf).flatten()
             tmp_fs = np.zeros((self.ntemps * self.nwalkers, gb_info.ndim))
             fix = np.ones((self.ntemps * self.nwalkers), dtype=bool)
@@ -395,7 +397,11 @@ class Guide(ABC):
             tmp_fs_in = gb_info.transform_fn["gb"].both_transforms(tmp_fs)
 
             N = int(N)
+            ##########
+            ### NEED TO START BY COMPARING THE LIKELIHOODS AT THE SAME VALUES OF THE BASE TEMPLATE AND THE THIRD TEMPLATE
+            ###########
             start_like = gb_info.template_gen.get_ll(tmp_fs_in, data_channels_tmp, psd_tmp, start_freq_ind=start_freq_ind, N=N, **self.waveform_kwargs)
+            
             if np.any(np.isnan(start_like)):
                 breakpoint()
             tmp_fs = tmp_fs.reshape(self.ntemps, self.nwalkers, gb_info.ndim)
@@ -1269,7 +1275,7 @@ class EvidenceRuns(Guide):
         self.current_model_index_product_space[accept] = (self.current_model_index_product_space[accept] + 1) % 2
              
     def run_mcmc(self, indicator: str, data_search: np.ndarray, data_input: np.ndarray):
-
+        test_burn = True
         info_iterator = self.information_generator(indicator, data_search, data_input)
 
         run = True
@@ -1286,7 +1292,9 @@ class EvidenceRuns(Guide):
         current_evidence_ind = 0
         current_evidence_estimate = {name: self.xp.full((self.ngroups,), np.nan) for name in ["base", "third"]}
         current_evidence_diff = self.xp.full((self.ngroups,), np.nan)
-        evidence_log_like = {name: self.xp.full((self.ngroups, total_steps_for_evidence, self.ntemps), self.xp.nan) for name in ["base", "third"]}
+        nsteps = self.sampler_settings["evidence"]["nsteps"]
+                
+        evidence_log_like = {name: self.xp.full((self.ngroups, total_steps_for_evidence, self.ntemps, self.nwalkers * nsteps), self.xp.nan) for name in ["base", "third"]}
 
         while run:
             finish_up = self.setup_next_source(info_iterator, indicator, data_search, data_input)
@@ -1301,14 +1309,14 @@ class EvidenceRuns(Guide):
 
             while running_inner:
                 # breakpoint()
-                nsteps = self.sampler_settings["evidence"]["nsteps"]
                 started_run = True
                 assert nsteps <= total_steps_for_evidence
 
                 current_inds_fill_evidence = (self.xp.arange(nsteps) + current_evidence_ind) % total_steps_for_evidence
 
                 logP = {}
-                for template in ["base", "third"]:
+                for template in ["third", "base"]:
+                    tmp = self.sampler[template].compute_log_prior(self.start_state[template].branches_coords)
                     self.start_state[template].log_like = None
                     self.start_state[template].log_prior = None
                     self.start_state[template].betas = None
@@ -1322,13 +1330,19 @@ class EvidenceRuns(Guide):
                     #     breakpoint()
 
                     print(template, self.start_state[template].groups_running.sum())
-                    self.start_state[template] = self.sampler[template].run_mcmc(self.start_state[template], nsteps, burn=0, thin_by=thin_by, progress=True, store=True)
+                    
+                    burn = 0
+                    if test_burn:
+                        burn = 0
+                        if template == "base":
+                            test_burn = False
+                        
+                    self.start_state[template] = self.sampler[template].run_mcmc(self.start_state[template], nsteps, burn=burn, thin_by=thin_by, progress=True, store=True)
                     # np.save(f"sample_check_{template}", self.sampler[template].get_chain())
                     
                     logP[template] = self.start_state[template].log_like * self.start_state[template].betas[:, :, None] + self.start_state[template].log_prior
-
-                    evidence_log_like[template][:, current_inds_fill_evidence] = self.sampler[template].get_log_like(discard=self.sampler[template].backend.iteration - nsteps).mean(axis=-1).transpose(1, 0, 2)  # self.start_state[template].log_like.mean(axis=-1)[:, None, :]
-
+                    
+                    evidence_log_like[template][:, current_inds_fill_evidence] = self.sampler[template].get_log_like(discard=self.sampler[template].backend.iteration - nsteps).transpose(1, 2, 3, 0).reshape(self.ngroups, self.ntemps, self.nwalkers * nsteps)  # self.start_state[template].log_like.mean(axis=-1)[:, None, :]
                     # evidence_log_like[template] = 
                 # np.save(file='log_like_third_backend_sampler_new.npy', arr=self.sampler['third'].backend.get_log_like())
                 # np.save(file='log_like_base_backend_sampler_new.npy', arr=self.sampler['base'].backend.get_log_like())
@@ -1338,14 +1352,13 @@ class EvidenceRuns(Guide):
                 #access likelihood points in self.sampler[template] - call self.sampler[template].get_log_like for both templates aand call get
                 # temperature. store likelihood and temperature for each step walker. 
                 # exit()
-                self.product_space_operation(logP)
+                # self.product_space_operation(logP)
                 
                 current_evidence_ind += nsteps
                 current_evidence_ind %= total_steps_for_evidence
 
                 # adjust
-                adjust = self.xp.all(~self.xp.isnan(evidence_log_like["third"]), axis=(1, 2))
-                
+                adjust = self.xp.all(~self.xp.isnan(evidence_log_like["third"]), axis=(1, 2, 3))
                 if self.xp.any(adjust):
                     for template in ["third", "base"]:
                         
@@ -1353,8 +1366,7 @@ class EvidenceRuns(Guide):
                         for grp in range(self.ngroups):
                             if adjust[grp]:
                                 betas = self.start_state["third"].betas[grp]
-                                logls = evidence_log_like[template][grp].mean(axis=0)
-                                
+                                logls = evidence_log_like[template][grp].mean(axis=(0, 2))
                                 logZ, dlogZ = thermodynamic_integration_log_evidence(betas.get(), logls.get())  # , block_len=50, repeats=100)
                                 current_evidence_estimate[template][grp] = logZ.item()
 
@@ -1374,7 +1386,6 @@ class EvidenceRuns(Guide):
                 # print(iters_at_max, start_state.groups_running.sum().item(), now_max_log_like[:10])
             
             if started_run:
-                
                 # which groups ended
                 end = np.where(end)[0]
                 for end_i in end:
