@@ -18,7 +18,7 @@ try:
     from cupy.cuda.runtime import setDevice
 
 
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
     setDevice = None
 
 
