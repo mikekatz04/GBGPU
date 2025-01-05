@@ -126,7 +126,7 @@ include_gsl_dir = "/opt/local/include"
 
 if run_cuda_install:
     ext_gpu_dict = dict(
-        sources=["src/gbgpu_utils.cu", "src/GBGPU.pyx"],
+        sources=["gbgpu/cutils/src/gbgpu_utils.cu", "gbgpu/cutils/src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
         libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas"],
         language="c++",
@@ -152,21 +152,26 @@ if run_cuda_install:
                 "'-fPIC'",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include"],
+        include_dirs=[
+            numpy_include,
+            include_gsl_dir,
+            CUDA["include"],
+            "./gbgpu/cutils/include",
+        ],
     )
-    ext_gpu = Extension("gbgpu_utils", **ext_gpu_dict)
+    ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
 
 ext_cpu_dict = dict(
-    sources=["src/gbgpu_utils.cpp", "src/GBGPU_cpu.pyx"],
+    sources=["gbgpu/cutils/src/gbgpu_utils.cpp", "gbgpu/cutils/src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
     libraries=["gsl", "gslcblas"],
     language="c++",
     extra_compile_args={
         "gcc": ["-std=c++11"],
     },  # '-g'],
-    include_dirs=[numpy_include, include_gsl_dir, "include"],
+    include_dirs=[numpy_include, include_gsl_dir, "./gbgpu/cutils/include", "include"],
 )
-ext_cpu = Extension("gbgpu_utils_cpu", **ext_cpu_dict)
+ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
     extensions = [ext_gpu, ext_cpu]
@@ -178,7 +183,7 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="1.1.0",
+    version="1.1.1",
     packages=["gbgpu", "gbgpu.utils"],
     py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,
@@ -186,4 +191,15 @@ setup(
     cmdclass={"build_ext": custom_build_ext},
     # Since the package has c code, the egg cannot be zipped
     zip_safe=False,
+    package_data={
+        "gbgpu.cutils.src": ["gbgpu_utils.cu", "gbgpu_utils.cpp", "GBGPU.pyx"],
+        "gbgpu.cutils.include": [
+            "gbgpu_utils.hh",
+            "cuda_complex.hpp",
+            "LISA.h",
+            "global.h",
+            "Constants.h",
+        ],
+    },
+    python_requires=">=3.6",
 )

@@ -3,7 +3,7 @@ import numpy as np
 import warnings
 
 from gbgpu.utils.constants import *
-from gbgpu_utils_cpu import *
+from gbgpu.cutils.gbgpu_utils_cpu import *
 
 try:
     from lisatools import sensitivity as tdi
