@@ -136,7 +136,7 @@ if run_cuda_install:
         # and not with gcc the implementation of this trick is in
         # customize_compiler()
         extra_compile_args={
-            "gcc": ["-std=c99"],  # '-g'],
+            "gcc": [],  # '-g'],
             "nvcc": [
                 "-arch=sm_80",
                 "-gencode=arch=compute_50,code=sm_50",
@@ -156,7 +156,7 @@ if run_cuda_install:
             numpy_include,
             include_gsl_dir,
             CUDA["include"],
-            "./gbgpu/cutils/include",
+            "gbgpu/cutils/include",
         ],
     )
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
@@ -167,9 +167,9 @@ ext_cpu_dict = dict(
     libraries=["gsl", "gslcblas"],
     language="c++",
     extra_compile_args={
-        "gcc": ["-std=c++11"],
+        "gcc": [],  # "-std=c++11"
     },  # '-g'],
-    include_dirs=[numpy_include, include_gsl_dir, "./gbgpu/cutils/include", "include"],
+    include_dirs=[numpy_include, include_gsl_dir, "gbgpu/cutils/include"],
 )
 ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
@@ -183,8 +183,14 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="1.1.1",
-    packages=["gbgpu", "gbgpu.utils"],
+    version="1.1.2",
+    packages=[
+        "gbgpu",
+        "gbgpu.utils",
+        "gbgpu.cutils",
+        "gbgpu.cutils.src",
+        "gbgpu.cutils.include",
+    ],
     py_modules=["gbgpu.gbgpu", "gbgpu.thirdbody"],
     ext_modules=extensions,
     # Inject our custom trigger
