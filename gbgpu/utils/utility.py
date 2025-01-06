@@ -2,8 +2,8 @@ from ast import Mod
 import numpy as np
 import warnings
 
-from gbgpu.utils.constants import *
-from gbgpu.cutils.gbgpu_utils_cpu import *
+from .constants import *
+from ..cutils.gbgpu_utils_cpu import *
 
 try:
     from lisatools import sensitivity as tdi

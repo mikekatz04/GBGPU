@@ -183,7 +183,7 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    version="1.1.2",
+    version="1.1.3",
     packages=[
         "gbgpu",
         "gbgpu.utils",

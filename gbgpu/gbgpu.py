@@ -6,13 +6,13 @@ from abc import ABC
 import numpy as np
 
 # import constants
-from gbgpu.utils.constants import *
-from gbgpu.utils.citation import *
+from .utils.constants import *
+from .utils.citation import *
 
 # import Cython classes
-from gbgpu.cutils.gbgpu_utils_cpu import get_ll as get_ll_cpu
-from gbgpu.cutils.gbgpu_utils_cpu import fill_global as fill_global_cpu
-from gbgpu.cutils.gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
+from .cutils.gbgpu_utils_cpu import get_ll as get_ll_cpu
+from .cutils.gbgpu_utils_cpu import fill_global as fill_global_cpu
+from .cutils.gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 try:
     from lisatools.sensitivity import A1TDISens
@@ -26,14 +26,14 @@ except (ModuleNotFoundError, ImportError) as e:
 # import for GPU if available
 try:
     import cupy as cp
-    from gbgpu.cutils.gbgpu_utils import get_ll as get_ll_gpu
-    from gbgpu.cutils.gbgpu_utils import fill_global as fill_global_gpu
-    from gbgpu.cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
+    from .cutils.gbgpu_utils import get_ll as get_ll_gpu
+    from .cutils.gbgpu_utils import fill_global as fill_global_gpu
+    from .cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
 
 except (ModuleNotFoundError, ImportError):
     pass
 
-from gbgpu.utils.utility import *
+from .utils.utility import *
 
 from lisatools.detector import EqualArmlengthOrbits, Orbits
 
