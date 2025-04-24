@@ -31,3 +31,11 @@ dependencies = [
   "h5py",
   "lisaanalysistools",
 ]
+
+[project.optional-dependencies]
+cuda11 = [
+  "cupy-cuda11x"
+]
+cuda12 = [
+  "cupy-cuda12x"
+]
