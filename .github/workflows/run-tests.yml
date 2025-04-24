@@ -29,8 +29,9 @@ jobs:
         with:
           python-version: '${{ matrix.python-version }}'
       - name: Install prerequisites
-        run: |
-          sudo apt-get install libgsl0-dev
+        uses: ConorMacBride/install-package@v1
+        with:
+          apt: libgsl0-dev
       - name: Install package
         run: |
           which python
