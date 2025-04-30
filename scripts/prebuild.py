@@ -1,8 +1,8 @@
 import shutil
 
 
-fp_out_name = "gbgpu/utils/constants.py"
-fp_in_name = "gbgpu/cutils/include/Constants.h"
+fp_out_name = "src/gbgpu/utils/constants.py"
+fp_in_name = "src/gbgpu/cutils/include/Constants.h"
 
 # develop few.utils.constants.py
 with open(fp_out_name, "w") as fp_out:
@@ -23,11 +23,11 @@ with open(fp_out_name, "w") as fp_out:
 cu_files = ["gbgpu_utils"]
 pyx_files = ["GBGPU"]
 for fp in cu_files:
-    shutil.copy("gbgpu/cutils/src/" + fp + ".cu", "gbgpu/cutils/src/" + fp + ".cpp")
+    shutil.copy("src/gbgpu/cutils/src/" + fp + ".cu", "src/gbgpu/cutils/src/" + fp + ".cpp")
 
 for fp in pyx_files:
     shutil.copy(
-        "gbgpu/cutils/src/" + fp + ".pyx", "gbgpu/cutils/src/" + fp + "_cpu.pyx"
+        "src/gbgpu/cutils/src/" + fp + ".pyx", "src/gbgpu/cutils/src/" + fp + "_cpu.pyx"
     )
 
 
