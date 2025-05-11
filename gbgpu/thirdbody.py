@@ -180,17 +180,17 @@ class GBGPUThirdBody(InheritGBGPU):
         fi *= 1 + self.get_vLOS(xi, A2, varpi, e2, n2, T2) / Clight
         return fi
 
-    def add_to_argS(self, argS, f0, fdot, fddot, xi, A2, varpi, e2, n2, T2):
-        """Update ``argS`` in FastGB formalism for third-body effect
+    def add_to_phasing(self, arg_phasing, f0, fdot, fddot, xi, A2, varpi, e2, n2, T2):
+        """Update phasing in transfer function in FastGB formalism for third-body effect
 
-        ``argS`` is an effective phase that goes into ``kdotP`` in the construction
-        of the slow part of the waveform. ``kdotP`` is then included directly
+        Adding an effective phase that goes into ``arg2`` in the construction
+        of the slow part of the waveform. ``arg2`` is then included directly
         in the transfer function. See :meth:`gbgpu.gbgpu.GBGPU._construct_slow_part`
         for the use of argS in the larger code.
 
         Args:
-            argS (3D double xp.ndarray): Special phase evaluation that goes into ``kdotP``.
-                Shape is ``(num binaries, 3 spacecraft, N)``.
+            arg_phasing (3D double xp.ndarray): Input phasing information from 
+                FastGB base waveform. Shape is ``(num binaries, 3 spacecraft, N)``.
             f0 (1D double np.ndarray): Initial frequency of gravitational
                 wave in Hz.
             fdot (1D double np.ndarray): Initial time derivative of the
@@ -223,8 +223,9 @@ class GBGPUThirdBody(InheritGBGPU):
         third_body_term[:, :, 1:] = self.xp.cumsum(
             self.parab_step_ET(*input_tuple), axis=-1
         )
-        argS += third_body_term
-        return argS
+
+        arg_phasing += third_body_term
+        return arg_phasing
 
     def get_u(self, l, e):
         """Invert Kepler's Equation to get eccentric anomaly

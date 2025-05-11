@@ -32,6 +32,7 @@ try:
     from .cutils.gbgpu_utils import get_ll as get_ll_gpu
     from .cutils.gbgpu_utils import fill_global as fill_global_gpu
     from .cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
+    from .cutils.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods
 
 except (ModuleNotFoundError, ImportError):
     pass
@@ -95,6 +96,7 @@ class GBGPU(object):
             self.global_get_ll_func = direct_like_wrap_gpu
             self.swap_ll_diff_func = swap_ll_diff_gpu
             self.gpus = gpus
+            self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
 
         else:
             self.xp = np
@@ -102,7 +104,7 @@ class GBGPU(object):
             self.fill_global_func = fill_global_cpu
             self.global_get_ll_func = direct_like_wrap_cpu
             self.swap_ll_diff_func = swap_ll_diff_cpu
-
+            
         self.d_d = None
         self.orbits = orbits
 
@@ -568,11 +570,13 @@ class GBGPU(object):
             + 1 / 3 * np.pi * fddot[:, None, None] * (xi**3)
         )
 
-        if hasattr(self, "add_to_argS"):
-            # performed in place to save memory
-            argS[:] = self.add_to_argS(argS, f0, fdot, fddot, xi, *add_args)
+        # called kdotP in LDC code
+        arg_phasing = om[:, None, None] * kdotP - argS
 
-        kdotP = om[:, None, None] * kdotP - argS
+        if hasattr(self, "add_to_phasing"):
+            # performed in place to save memory
+            arg_phasing[:] = self.add_to_phasing(arg_phasing, f0, fdot, fddot, xi, *add_args)
+
 
         # get Gs transfer functions
         Gs = dict()
@@ -585,12 +589,13 @@ class GBGPU(object):
             ("13", "31", 0),
         ]:
 
+            # TODO: evolution of the amplitude
             arg_ij = 0.5 * fonfs[:, s, :] * (1 + kdotr[ij])
             Gs[ij] = (
                 0.25
                 * self.xp.sin(arg_ij)
                 / arg_ij
-                * self.xp.exp(-1.0j * (arg_ij + kdotP[:, s]))
+                * self.xp.exp(-1.0j * (arg_ij + arg_phasing[:, s]))
                 * A[ij_sym]
             )
         ### Lines blow are extractions from another python code and from C-code in LDC
@@ -988,7 +993,7 @@ class GBGPU(object):
                         amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N_here, num_bin, start_freq_ind, data_length, gpu, do_synchronize
                     )
 
-                else:  
+                else:
                     # add kwargs
                     kwargs["T"] = T
                     kwargs["dt"] = dt
@@ -1013,7 +1018,7 @@ class GBGPU(object):
                         df,
                         start_inds_temp,
                         N_here,
-                        self.num_bin,
+                        num_here,
                         data_index_N,
                         noise_index_N,
                         data_length,
@@ -2129,16 +2134,16 @@ class InheritGBGPU(GBGPU, ABC):
         """
         raise NotImplementedError
 
-    def add_to_argS(self, argS, f0, fdot, fddot, xi, *args):
-        """Update ``argS`` in FastGB formalism for third-body effect
+    def add_to_phasing(self, arg_phasing, f0, fdot, fddot, xi, *args):
+        """Update phasing in transfer function in FastGB formalism for third-body effect
 
-        ``argS`` is an effective phase that goes into ``kdotP`` in the construction
-        of the slow part of the waveform. ``kdotP`` is then included directly
+        Adding an effective phase that goes into ``arg2`` in the construction
+        of the slow part of the waveform. ``arg2`` is then included directly
         in the transfer function. See :meth:`gbgpu.gbgpu.GBGPU._construct_slow_part`
         for the use of argS in the larger code.
 
         Args:
-            argS (3D double xp.ndarray): Special phase evaluation that goes into ``kdotP``.
+            arg_phasing (3D double xp.ndarray): Special phase evaluation that goes into ``kdotP``.
                 Shape is ``(num binaries, 3 spacecraft, N)``.
             f0 (1D double np.ndarray): Initial frequency of gravitational
                 wave in Hz.

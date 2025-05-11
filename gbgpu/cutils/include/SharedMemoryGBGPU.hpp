@@ -167,4 +167,21 @@ void SharedMemoryGenerateGlobal(
     bool do_synchronize
 );
 
+void specialty_piece_wise_likelihoods_wrap(
+    double* lnL,
+    cmplx* data_A,
+    cmplx* data_E,
+    double* noise_A,
+    double* noise_E,
+    int* data_index,
+    int* noise_index,
+    int* start_inds,
+    int* lengths,
+    double df, 
+    int num_parts,
+    int start_freq_ind,
+    int data_length,
+    bool do_synchronize
+);
+
 #endif // __SHAREDMEMORY_GBGPU_HPP__
