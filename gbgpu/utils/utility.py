@@ -5,14 +5,7 @@ import warnings
 from .constants import *
 from ..cutils.gbgpu_utils_cpu import *
 
-try:
-    from lisatools import sensitivity as tdi
-
-    tdi_available = True
-
-except (ModuleNotFoundError, ImportError) as e:
-    tdi_available = False
-    warnings.warn("tdi module not found. No sensitivity information will be included.")
+from lisatools.sensitivity import get_sensitivity
 
 try:
     from cupy.cuda.runtime import setDevice
@@ -244,25 +237,19 @@ def get_N(amp, f0, Tobs, oversample=1):
 
     # if a sensitivity curve is available, verify the SNR is not too high
     # if it is, needs more points
-    if tdi_available:
-        fonfs = f0 / fstar
+    fonfs = f0 / fstar
 
-        SnX = np.sqrt(tdi.X1TDISens.get_Sn(f0))
+    SnX = np.sqrt(get_sensitivity(f0, sens_fn="X1TDISens"))
 
-        #  calculate michelson noise
-        Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
+    #  calculate michelson noise
+    Sm = SnX / (4.0 * np.sin(fonfs) * np.sin(fonfs))
 
-        Acut = amp * np.sqrt(Tobs / Sm)
+    Acut = amp * np.sqrt(Tobs / Sm)
 
-        M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
+    M = (2.0 ** (np.log(Acut) / np.log(2.0) + 1.0)).astype(int)
 
-        M = M * (M > N) + N * (M < N)
-        N = M * (M > N) + N * (M < N)
-    else:
-        warnings.warn(
-            "Sensitivity information not available. The number of points in the waveform will not be determined byt the signal strength without the availability of the Sensitivity."
-        )
-        M = N
+    M = M * (M > N) + N * (M < N)
+    N = M * (M > N) + N * (M < N)
 
     M[M > 8192] = 8192
 
