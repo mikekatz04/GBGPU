@@ -151,6 +151,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         GalacticBinaryParamsWrap *params_curr,
         GalacticBinaryParamsWrap *params_prop,
         MCMCInfoWrap *mcmc_info,
+        PriorPackageWrap *prior_info,
         int device,
         bool do_synchronize
     ) except +
@@ -208,7 +209,6 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             cmplx *L_contribution,
             cmplx *p_contribution,
             double *prior_all_curr,
-            double *prior_all_prop,
             double *factors_all,
             double *random_val_all,
             bool *accepted_out,
@@ -216,6 +216,115 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             bool is_rj,
             double snr_lim
         )
+    cdef cppclass PriorPackageWrap "PriorPackage":
+        PriorPackageWrap(double f0_min, double f0_max, double fdot_min, double fdot_max, double phi0_min, double phi0_max, double cosinc_min, double cosinc_max, double psi_min, double psi_max, double lam_min, double lam_max, double sinbeta_min, double sinbeta_max);
+
+    cdef cppclass PeriodicPackageWrap "PeriodicPackage":
+        PeriodicPackageWrap(double phi0_period, double psi_period, double lam_period);
+
+    cdef cppclass StretchProposalPackageWrap "StretchProposalPackage":
+        StretchProposalPackageWrap(
+            double* amp_friends,
+            double* f0_friends, 
+            double* fdot0_friends, 
+            double* phi0_friends, 
+            double* iota_friends,
+            double* psi_friends, 
+            double* lam_friends,
+            double* beta_friends,
+            double* z,
+            double* factors
+        );
+
+
+cdef class pyStretchProposalPackage:
+    cdef StretchProposalPackageWrap *g
+
+    def __cinit__(self, 
+        *args, 
+        **kwargs
+    ):
+        (
+            amp_friends,
+            f0_friends, 
+            fdot0_friends,
+            phi0_friends, 
+            iota_friends,
+            psi_friends, 
+            lam_friends,
+            beta_friends,
+            z,
+            factors
+        ), tkwargs = wrapper(*args, **kwargs)
+
+        cdef size_t amp_friends_in = amp_friends
+        cdef size_t f0_friends_in = f0_friends
+        cdef size_t fdot0_friends_in = fdot0_friends
+        cdef size_t phi0_friends_in = phi0_friends
+        cdef size_t iota_friends_in = iota_friends
+        cdef size_t psi_friends_in = psi_friends
+        cdef size_t lam_friends_in = lam_friends
+        cdef size_t beta_friends_in = beta_friends
+        cdef size_t z_in = z
+        cdef size_t factors_in = factors
+
+        self.g = new StretchProposalPackageWrap(
+            <double*> amp_friends_in,
+            <double*> f0_friends_in, 
+            <double*> fdot0_friends_in, 
+            <double*> phi0_friends_in, 
+            <double*> iota_friends_in,
+            <double*> psi_friends_in, 
+            <double*> lam_friends_in,
+            <double*> beta_friends_in,
+            <double*> z_in,
+            <double*> factors_in
+        )
+
+    def g_in(self):
+        return <uintptr_t>self.g
+
+    def __dealloc__(self):
+        if self.g:
+            del self.g
+
+
+cdef class pyPeriodicPackage:
+    cdef PeriodicPackageWrap *g
+
+    def __cinit__(self, 
+        phi0_period, psi_period, lam_period
+    ):
+       
+        self.g = new PeriodicPackageWrap(
+            phi0_period, psi_period, lam_period
+        )
+
+    def g_in(self):
+        return <uintptr_t>self.g
+
+    def __dealloc__(self):
+        if self.g:
+            del self.g
+
+
+cdef class pyPriorPackage:
+    cdef PriorPackageWrap *g
+
+    def __cinit__(self, 
+        f0_min, f0_max, fdot_min, fdot_max, phi0_min, phi0_max, cosinc_min, cosinc_max, psi_min, psi_max, lam_min, lam_max, sinbeta_min, sinbeta_max
+    ):
+    
+        self.g = new PriorPackageWrap(
+            f0_min, f0_max, fdot_min, fdot_max, phi0_min, phi0_max, cosinc_min, cosinc_max, psi_min, psi_max, lam_min, lam_max, sinbeta_min, sinbeta_max
+        )
+
+    def g_in(self):
+        return <uintptr_t>self.g
+
+    def __dealloc__(self):
+        if self.g:
+            del self.g
 
 
 cdef class pyMCMCInfo:
@@ -229,7 +338,6 @@ cdef class pyMCMCInfo:
             L_contribution,
             p_contribution,
             prior_all_curr,
-            prior_all_prop,
             factors_all,
             random_val_all,
             accepted_out,
@@ -241,7 +349,6 @@ cdef class pyMCMCInfo:
         cdef size_t L_contribution_in = L_contribution
         cdef size_t p_contribution_in = p_contribution
         cdef size_t prior_all_curr_in = prior_all_curr
-        cdef size_t prior_all_prop_in = prior_all_prop
         cdef size_t factors_all_in = factors_all
         cdef size_t random_val_all_in = random_val_all
         cdef size_t accepted_out_in = accepted_out
@@ -251,7 +358,6 @@ cdef class pyMCMCInfo:
             <cmplx *>L_contribution_in,
             <cmplx *>p_contribution_in,
             <double *>prior_all_curr_in,
-            <double *>prior_all_prop_in,
             <double *>factors_all_in,
             <double *>random_val_all_in,
             <bool *>accepted_out_in,
@@ -795,6 +901,7 @@ def SharedMemoryMakeNewMove_wrap(
         params_curr,
         params_prop,
         mcmc_info,
+        prior_info,
         device,
         do_synchronize
     ):
@@ -804,6 +911,7 @@ def SharedMemoryMakeNewMove_wrap(
     cdef size_t data_in = data.g_in()
     cdef size_t band_info_in = band_info.g_in()
     cdef size_t mcmc_info_in = mcmc_info.g_in()
+    cdef size_t prior_info_in = prior_info.g_in()
 
     SharedMemoryMakeNewMove(
         <DataPackageWrap *>data_in,
@@ -811,6 +919,7 @@ def SharedMemoryMakeNewMove_wrap(
         <GalacticBinaryParamsWrap *>params_curr_in,
         <GalacticBinaryParamsWrap *>params_prop_in,
         <MCMCInfoWrap *>mcmc_info_in,
+        <PriorPackageWrap *>prior_info_in,
         device,
         do_synchronize,
     )

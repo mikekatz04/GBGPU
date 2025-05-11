@@ -2633,6 +2633,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     GalacticBinaryParams *params_curr,
     GalacticBinaryParams *params_prop,
     MCMCInfo *mcmc_info,
+    PriorPackage *prior_info,
     bool use_global_memory,
     cmplx *global_memory_buffer
 )
@@ -2734,502 +2735,504 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         }
         __syncthreads();
 
-        for (int bin_i = 0; bin_i < this_band_num_bin; bin_i += 1)
-        {
-            current_binary_start_index = this_band_start_bin_ind + bin_i;
-            // get the parameters to add and remove
-            amp_curr = params_curr->amp[current_binary_start_index];
-            f0_curr = params_curr->f0[current_binary_start_index];
-            fdot0_curr = params_curr->fdot0[current_binary_start_index];
-            fddot0_curr = params_curr->fddot0[current_binary_start_index];
-            phi0_curr = params_curr->phi0[current_binary_start_index];
-            iota_curr = params_curr->iota[current_binary_start_index];
-            psi_curr = params_curr->psi[current_binary_start_index];
-            lam_curr = params_curr->lam[current_binary_start_index];
-            theta_curr = params_curr->theta[current_binary_start_index];
+        // for (int bin_i = 0; bin_i < this_band_num_bin; bin_i += 1)
+        // {
+        //     current_binary_start_index = this_band_start_bin_ind + bin_i;
+        //     // get the parameters to add and remove
+        //     amp_curr = params_curr->amp[current_binary_start_index];
+        //     f0_curr = params_curr->f0[current_binary_start_index];
+        //     fdot0_curr = params_curr->fdot0[current_binary_start_index];
+        //     // fddot0_curr = params_curr->fddot0[current_binary_start_index];
+        //     phi0_curr = params_curr->phi0[current_binary_start_index];
+        //     iota_curr = params_curr->iota[current_binary_start_index];
+        //     psi_curr = params_curr->psi[current_binary_start_index];
+        //     lam_curr = params_curr->lam[current_binary_start_index];
+        //     theta_curr = params_curr->theta[current_binary_start_index];
 
-            __syncthreads();
-            build_single_waveform<FFT>(
-                wave_remove,
-                &start_ind_remove,
-                amp_curr,
-                f0_curr,
-                fdot0_curr,
-                fddot0_curr,
-                phi0_curr,
-                iota_curr,
-                psi_curr,
-                lam_curr,
-                theta_curr,
-                params_curr->T,
-                params_curr->dt,
-                params_curr->N,
-                bin_i);
-            __syncthreads();
+        //     double test_val = prior_info->get_phi0_prior(phi0_curr);
+        //     if (blockIdx.x == 0) printf("%e\n", test_val);
+        //     __syncthreads();
+        //     build_single_waveform<FFT>(
+        //         wave_remove,
+        //         &start_ind_remove,
+        //         amp_curr,
+        //         f0_curr,
+        //         fdot0_curr,
+        //         fddot0_curr,
+        //         phi0_curr,
+        //         iota_curr,
+        //         psi_curr,
+        //         lam_curr,
+        //         theta_curr,
+        //         params_curr->T,
+        //         params_curr->dt,
+        //         params_curr->N,
+        //         bin_i);
+        //     __syncthreads();
 
-            for (int i = threadIdx.x; i < params_curr->N; i += blockDim.x)
-            {
-                // add to residual with (-)
-                j = (start_ind_remove - this_band_start_index) + i;
-                if ((j < band_info->max_data_store_size) && (j >= 0))
-                {
-                    A_data[j] -= A_remove[i];
-                    E_data[j] -= E_remove[i];
-                }
-            }
-            __syncthreads();
-        }
-        __syncthreads();
-        for (int bin_i = 0; bin_i < this_band_num_bin; bin_i += 1)
-        {
-            current_binary_start_index = this_band_start_bin_ind + bin_i;
+        //     for (int i = threadIdx.x; i < params_curr->N; i += blockDim.x)
+        //     {
+        //         // add to residual with (-)
+        //         j = (start_ind_remove - this_band_start_index) + i;
+        //         if ((j < band_info->max_data_store_size) && (j >= 0))
+        //         {
+        //             A_data[j] -= A_remove[i];
+        //             E_data[j] -= E_remove[i];
+        //         }
+        //     }
+        //     __syncthreads();
+        // }
+        // __syncthreads();
+        // for (int bin_i = 0; bin_i < this_band_num_bin; bin_i += 1)
+        // {
+        //     current_binary_start_index = this_band_start_bin_ind + bin_i;
 
-            this_binary_inv_temp = mcmc_info->band_inv_temperatures_all[current_binary_start_index];
+        //     this_binary_inv_temp = mcmc_info->band_inv_temperatures_all[current_binary_start_index];
 
-            prior_curr = mcmc_info->prior_all_curr[current_binary_start_index];
-            prior_prop = mcmc_info->prior_all_prop[current_binary_start_index];
+        //     prior_curr = mcmc_info->prior_all_curr[current_binary_start_index];
+        //     prior_prop = mcmc_info->prior_all_prop[current_binary_start_index];
 
-            lp_diff = prior_prop - prior_curr;
-            factors = mcmc_info->factors_all[current_binary_start_index];
-            random_val = mcmc_info->random_val_all[current_binary_start_index];
+        //     lp_diff = prior_prop - prior_curr;
+        //     factors = mcmc_info->factors_all[current_binary_start_index];
+        //     random_val = mcmc_info->random_val_all[current_binary_start_index];
 
-            // get the parameters to add and remove
-            amp_curr = params_curr->amp[current_binary_start_index];
-            f0_curr = params_curr->f0[current_binary_start_index];
-            fdot0_curr = params_curr->fdot0[current_binary_start_index];
-            fddot0_curr = params_curr->fddot0[current_binary_start_index];
-            phi0_curr = params_curr->phi0[current_binary_start_index];
-            iota_curr = params_curr->iota[current_binary_start_index];
-            psi_curr = params_curr->psi[current_binary_start_index];
-            lam_curr = params_curr->lam[current_binary_start_index];
-            theta_curr = params_curr->theta[current_binary_start_index];
+        //     // get the parameters to add and remove
+        //     amp_curr = params_curr->amp[current_binary_start_index];
+        //     f0_curr = params_curr->f0[current_binary_start_index];
+        //     fdot0_curr = params_curr->fdot0[current_binary_start_index];
+        //     fddot0_curr = params_curr->fddot0[current_binary_start_index];
+        //     phi0_curr = params_curr->phi0[current_binary_start_index];
+        //     iota_curr = params_curr->iota[current_binary_start_index];
+        //     psi_curr = params_curr->psi[current_binary_start_index];
+        //     lam_curr = params_curr->lam[current_binary_start_index];
+        //     theta_curr = params_curr->theta[current_binary_start_index];
 
-            amp_prop = params_prop->amp[current_binary_start_index];
-            f0_prop = params_prop->f0[current_binary_start_index];
-            fdot0_prop = params_prop->fdot0[current_binary_start_index];
-            fddot0_prop = params_prop->fddot0[current_binary_start_index];
-            phi0_prop = params_prop->phi0[current_binary_start_index];
-            iota_prop = params_prop->iota[current_binary_start_index];
-            psi_prop = params_prop->psi[current_binary_start_index];
-            lam_prop = params_prop->lam[current_binary_start_index];
-            theta_prop = params_prop->theta[current_binary_start_index];
+        //     amp_prop = params_prop->amp[current_binary_start_index];
+        //     f0_prop = params_prop->f0[current_binary_start_index];
+        //     fdot0_prop = params_prop->fdot0[current_binary_start_index];
+        //     fddot0_prop = params_prop->fddot0[current_binary_start_index];
+        //     phi0_prop = params_prop->phi0[current_binary_start_index];
+        //     iota_prop = params_prop->iota[current_binary_start_index];
+        //     psi_prop = params_prop->psi[current_binary_start_index];
+        //     lam_prop = params_prop->lam[current_binary_start_index];
+        //     theta_prop = params_prop->theta[current_binary_start_index];
 
-            __syncthreads();
-            build_single_waveform<FFT>(
-                wave_remove,
-                &start_ind_remove,
-                amp_curr,
-                f0_curr,
-                fdot0_curr,
-                fddot0_curr,
-                phi0_curr,
-                iota_curr,
-                psi_curr,
-                lam_curr,
-                theta_curr,
-                params_curr->T,
-                params_curr->dt,
-                params_curr->N,
-                bin_i);
-            __syncthreads();
-            build_single_waveform<FFT>(
-                wave_add,
-                &start_ind_add,
-                amp_prop,
-                f0_prop,
-                fdot0_prop,
-                fddot0_prop,
-                phi0_prop,
-                iota_prop,
-                psi_prop,
-                lam_prop,
-                theta_prop,
-                params_curr->T,
-                params_curr->dt,
-                params_curr->N,
-                bin_i);
-            __syncthreads();
+        //     __syncthreads();
+        //     build_single_waveform<FFT>(
+        //         wave_remove,
+        //         &start_ind_remove,
+        //         amp_curr,
+        //         f0_curr,
+        //         fdot0_curr,
+        //         fddot0_curr,
+        //         phi0_curr,
+        //         iota_curr,
+        //         psi_curr,
+        //         lam_curr,
+        //         theta_curr,
+        //         params_curr->T,
+        //         params_curr->dt,
+        //         params_curr->N,
+        //         bin_i);
+        //     __syncthreads();
+        //     build_single_waveform<FFT>(
+        //         wave_add,
+        //         &start_ind_add,
+        //         amp_prop,
+        //         f0_prop,
+        //         fdot0_prop,
+        //         fddot0_prop,
+        //         phi0_prop,
+        //         iota_prop,
+        //         psi_prop,
+        //         lam_prop,
+        //         theta_prop,
+        //         params_curr->T,
+        //         params_curr->dt,
+        //         params_curr->N,
+        //         bin_i);
+        //     __syncthreads();
 
-            // subtract start_freq_ind to find index into subarray
-            if (start_ind_remove <= start_ind_add)
-            {
-                lower_start_ind = start_ind_remove - this_band_start_index;
-                upper_end_ind = start_ind_add - this_band_start_index + params_curr->N;
+        //     // subtract start_freq_ind to find index into subarray
+        //     if (start_ind_remove <= start_ind_add)
+        //     {
+        //         lower_start_ind = start_ind_remove - this_band_start_index;
+        //         upper_end_ind = start_ind_add - this_band_start_index + params_curr->N;
 
-                upper_start_ind = start_ind_add - this_band_start_index;
-                lower_end_ind = start_ind_remove - this_band_start_index + params_curr->N;
+        //         upper_start_ind = start_ind_add - this_band_start_index;
+        //         lower_end_ind = start_ind_remove - this_band_start_index + params_curr->N;
 
-                is_add_lower = false;
-            }
-            else
-            {
-                lower_start_ind = start_ind_add - this_band_start_index;
-                upper_end_ind = start_ind_remove - this_band_start_index + params_curr->N;
+        //         is_add_lower = false;
+        //     }
+        //     else
+        //     {
+        //         lower_start_ind = start_ind_add - this_band_start_index;
+        //         upper_end_ind = start_ind_remove - this_band_start_index + params_curr->N;
 
-                upper_start_ind = start_ind_remove - this_band_start_index;
-                lower_end_ind = start_ind_add - this_band_start_index + params_curr->N;
+        //         upper_start_ind = start_ind_remove - this_band_start_index;
+        //         lower_end_ind = start_ind_add - this_band_start_index + params_curr->N;
 
-                is_add_lower = true;
-            }
-            total_i_vals = upper_end_ind - lower_start_ind;
-            // ECK %d \n", total_i_vals);
-            __syncthreads();
-            d_h_remove_temp = 0.0;
-            d_h_add_temp = 0.0;
-            remove_remove_temp = 0.0;
-            add_add_temp = 0.0;
-            add_remove_temp = 0.0;
+        //         is_add_lower = true;
+        //     }
+        //     total_i_vals = upper_end_ind - lower_start_ind;
+        //     // ECK %d \n", total_i_vals);
+        //     __syncthreads();
+        //     d_h_remove_temp = 0.0;
+        //     d_h_add_temp = 0.0;
+        //     remove_remove_temp = 0.0;
+        //     add_add_temp = 0.0;
+        //     add_remove_temp = 0.0;
 
-            if (total_i_vals < 2 * params_curr->N)
-            {
-                for (int i = threadIdx.x;
-                     i < total_i_vals;
-                     i += blockDim.x)
-                {
+        //     if (total_i_vals < 2 * params_curr->N)
+        //     {
+        //         for (int i = threadIdx.x;
+        //              i < total_i_vals;
+        //              i += blockDim.x)
+        //         {
 
-                    j = lower_start_ind + i;
+        //             j = lower_start_ind + i;
 
-                    if ((j > band_info->max_data_store_size) || (j < 0))
-                    {
-                        d_h_add_temp += -1e300;
-                    }
+        //             if ((j > band_info->max_data_store_size) || (j < 0))
+        //             {
+        //                 d_h_add_temp += -1e300;
+        //             }
 
-                    // noise is still in global memory
-                    // TODO: Maybe put this in shared memory if possible
-                    if ((j < band_info->max_data_store_size) && (j >= 0))
-                    {
-                        d_A = A_data[j];
-                        d_E = E_data[j];
+        //             // noise is still in global memory
+        //             // TODO: Maybe put this in shared memory if possible
+        //             if ((j < band_info->max_data_store_size) && (j >= 0))
+        //             {
+        //                 d_A = A_data[j];
+        //                 d_E = E_data[j];
 
-                        n_A = data->psd_A[this_band_noise_index * data->data_length + j + this_band_start_index];
-                        n_E = data->psd_E[this_band_noise_index * data->data_length + j + this_band_start_index];
-                    }
-                    else
-                    {
-                        d_A = 0.0;
-                        d_E = 0.0;
-                        n_A = 1e100;
-                        n_E = 1e100;
-                    }
+        //                 n_A = data->psd_A[this_band_noise_index * data->data_length + j + this_band_start_index];
+        //                 n_E = data->psd_E[this_band_noise_index * data->data_length + j + this_band_start_index];
+        //             }
+        //             else
+        //             {
+        //                 d_A = 0.0;
+        //                 d_E = 0.0;
+        //                 n_A = 1e100;
+        //                 n_E = 1e100;
+        //             }
                     
 
-                    // if ((bin_i == 0)){
-                    // printf("%d %d %d %d %d %d %d %e %e %e %e %e %e\n", i, j, noise_ind, data_ind, this_band_noise_index * data->data_length + j, this_band_data_index * data->data_length + j, data->data_length, d_A.real(), d_A.imag(), d_E.real(), d_E.imag(), n_A, n_E);
-                    // }
+        //             // if ((bin_i == 0)){
+        //             // printf("%d %d %d %d %d %d %d %e %e %e %e %e %e\n", i, j, noise_ind, data_ind, this_band_noise_index * data->data_length + j, this_band_data_index * data->data_length + j, data->data_length, d_A.real(), d_A.imag(), d_E.real(), d_E.imag(), n_A, n_E);
+        //             // }
 
-                    // if ((bin_i == 0)) printf("%d %e %e %e %e %e %e %e %e %e %e %e %e \n", tid, d_h_remove_temp.real(), d_h_remove_temp.imag(), d_h_add_temp.real(), d_h_add_temp.imag(), add_add_temp.real(), add_add_temp.imag(), remove_remove_temp.real(), remove_remove_temp.imag(), add_remove_temp.real(), add_remove_temp.imag());
+        //             // if ((bin_i == 0)) printf("%d %e %e %e %e %e %e %e %e %e %e %e %e \n", tid, d_h_remove_temp.real(), d_h_remove_temp.imag(), d_h_add_temp.real(), d_h_add_temp.imag(), add_add_temp.real(), add_add_temp.imag(), remove_remove_temp.real(), remove_remove_temp.imag(), add_remove_temp.real(), add_remove_temp.imag());
                     
-                    if (j < upper_start_ind)
-                    {
-                        real_ind = i;
-                        if (is_add_lower)
-                        {
+        //             if (j < upper_start_ind)
+        //             {
+        //                 real_ind = i;
+        //                 if (is_add_lower)
+        //                 {
 
-                            h_A = A_add[real_ind];
-                            h_E = E_add[real_ind];
+        //                     h_A = A_add[real_ind];
+        //                     h_E = E_add[real_ind];
 
-                            // get <d|h> term
-                            d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
-                            d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
+        //                     // get <d|h> term
+        //                     d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
+        //                     d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
 
-                            // <h|h>
-                            add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
-                            add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
-                        }
-                        else
-                        {
-                            h_A = A_remove[real_ind];
-                            h_E = E_remove[real_ind];
+        //                     // <h|h>
+        //                     add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
+        //                     add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+        //                 }
+        //                 else
+        //                 {
+        //                     h_A = A_remove[real_ind];
+        //                     h_E = E_remove[real_ind];
 
-                            // get <d|h> term
-                            d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
-                            d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
+        //                     // get <d|h> term
+        //                     d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
+        //                     d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
 
-                            // <h|h>
-                            remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
-                            remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+        //                     // <h|h>
+        //                     remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
+        //                     remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
 
-                            // if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
-                        }
-                    }
-                    else if (j >= lower_end_ind)
-                    {
-                        real_ind = j - upper_start_ind;
-                        if (!is_add_lower)
-                        {
+        //                     // if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
+        //                 }
+        //             }
+        //             else if (j >= lower_end_ind)
+        //             {
+        //                 real_ind = j - upper_start_ind;
+        //                 if (!is_add_lower)
+        //                 {
 
-                            h_A_add = A_add[real_ind];
-                            h_E_add = E_add[real_ind];
+        //                     h_A_add = A_add[real_ind];
+        //                     h_E_add = E_add[real_ind];
 
-                            // get <d|h> term
-                            d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
-                            d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
+        //                     // get <d|h> term
+        //                     d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
+        //                     d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
 
-                            // <h|h>
-                            add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
-                            add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
-                        }
-                        else
-                        {
-                            h_A_remove = A_remove[real_ind];
-                            h_E_remove = E_remove[real_ind];
+        //                     // <h|h>
+        //                     add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
+        //                     add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
+        //                 }
+        //                 else
+        //                 {
+        //                     h_A_remove = A_remove[real_ind];
+        //                     h_E_remove = E_remove[real_ind];
 
-                            // get <d|h> term
-                            d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
-                            d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
+        //                     // get <d|h> term
+        //                     d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
+        //                     d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
 
-                            // <h|h>
-                            remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
-                            remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
-                        }
-                    }
-                    else // this is where the signals overlap
-                    {
-                        if (is_add_lower)
-                        {
-                            real_ind_add = i;
-                        }
-                        else
-                        {
-                            real_ind_add = j - upper_start_ind;
-                        }
+        //                     // <h|h>
+        //                     remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
+        //                     remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
+        //                 }
+        //             }
+        //             else // this is where the signals overlap
+        //             {
+        //                 if (is_add_lower)
+        //                 {
+        //                     real_ind_add = i;
+        //                 }
+        //                 else
+        //                 {
+        //                     real_ind_add = j - upper_start_ind;
+        //                 }
 
-                        h_A_add = A_add[real_ind_add];
-                        h_E_add = E_add[real_ind_add];
+        //                 h_A_add = A_add[real_ind_add];
+        //                 h_E_add = E_add[real_ind_add];
 
-                        // get <d|h> term
-                        d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
-                        d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
+        //                 // get <d|h> term
+        //                 d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
+        //                 d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
 
-                        // <h|h>
-                        add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
-                        add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
+        //                 // <h|h>
+        //                 add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
+        //                 add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
 
-                        if (!is_add_lower)
-                        {
-                            real_ind_remove = i;
-                        }
-                        else
-                        {
-                            real_ind_remove = j - upper_start_ind;
-                        }
+        //                 if (!is_add_lower)
+        //                 {
+        //                     real_ind_remove = i;
+        //                 }
+        //                 else
+        //                 {
+        //                     real_ind_remove = j - upper_start_ind;
+        //                 }
 
-                        h_A_remove = A_remove[real_ind_remove];
-                        h_E_remove = E_remove[real_ind_remove];
+        //                 h_A_remove = A_remove[real_ind_remove];
+        //                 h_E_remove = E_remove[real_ind_remove];
 
-                        // get <d|h> term
-                        d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
-                        d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
+        //                 // get <d|h> term
+        //                 d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
+        //                 d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
 
-                        // <h|h>
-                        remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
-                        remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
+        //                 // <h|h>
+        //                 remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
+        //                 remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
 
-                        add_remove_temp += gcmplx::conj(h_A_remove) * h_A_add / n_A;
-                        add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
-                    }
-                }
-            }
-            else
-            {
-                for (int i = threadIdx.x;
-                     i < params_curr->N;
-                     i += blockDim.x)
-                {
+        //                 add_remove_temp += gcmplx::conj(h_A_remove) * h_A_add / n_A;
+        //                 add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
+        //             }
+        //         }
+        //     }
+        //     else
+        //     {
+        //         for (int i = threadIdx.x;
+        //              i < params_curr->N;
+        //              i += blockDim.x)
+        //         {
 
-                    j = start_ind_remove + i - this_band_start_index;
+        //             j = start_ind_remove + i - this_band_start_index;
 
-                    //  calculate h term
-                    h_A = A_remove[i];
-                    h_E = E_remove[i];
+        //             //  calculate h term
+        //             h_A = A_remove[i];
+        //             h_E = E_remove[i];
 
-                    // <h|h>
-                    remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
-                    remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+        //             // <h|h>
+        //             remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
+        //             remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
 
-                    if ((j < band_info->max_data_store_size) && (j >= 0))
-                    {
-                        d_A = A_data[j];
-                        d_E = E_data[j];
+        //             if ((j < band_info->max_data_store_size) && (j >= 0))
+        //             {
+        //                 d_A = A_data[j];
+        //                 d_E = E_data[j];
 
-                        n_A = data->psd_A[this_band_noise_index * data->data_length + j + this_band_start_index];
-                        n_E = data->psd_E[this_band_noise_index * data->data_length + j + this_band_start_index];
+        //                 n_A = data->psd_A[this_band_noise_index * data->data_length + j + this_band_start_index];
+        //                 n_E = data->psd_E[this_band_noise_index * data->data_length + j + this_band_start_index];
 
-                        // get <d|h> term
-                        d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
-                        d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
-                    }
-                    else
-                    {
-                        // get <d|h> term
-                        d_h_remove_temp += -1e300;
-                    }
+        //                 // get <d|h> term
+        //                 d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
+        //                 d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
+        //             }
+        //             else
+        //             {
+        //                 // get <d|h> term
+        //                 d_h_remove_temp += -1e300;
+        //             }
                     
-                }
+        //         }
 
-                for (int i = threadIdx.x;
-                     i < params_curr->N;
-                     i += blockDim.x)
-                {
+        //         for (int i = threadIdx.x;
+        //              i < params_curr->N;
+        //              i += blockDim.x)
+        //         {
 
-                    j = start_ind_add + i - this_band_start_index;
+        //             j = start_ind_add + i - this_band_start_index;
 
-                    // if ((bin_i == 0))printf("CHECK add: %d %d %e %e %e %e  \n", i, j, n_A, d_A.real(), n_E, d_E.real());
-                    //  calculate h term
-                    h_A = A_add[i];
-                    h_E = E_add[i];
+        //             // if ((bin_i == 0))printf("CHECK add: %d %d %e %e %e %e  \n", i, j, n_A, d_A.real(), n_E, d_E.real());
+        //             //  calculate h term
+        //             h_A = A_add[i];
+        //             h_E = E_add[i];
 
-                    // <h|h>
-                    add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
-                    add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+        //             // <h|h>
+        //             add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
+        //             add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
 
-                    // get <d|h> term
-                    if ((j < band_info->max_data_store_size) && (j >= 0))
-                    {    
-                        n_A = data->psd_A[this_band_noise_index * data->data_length + j + this_band_start_index];
-                        n_E = data->psd_E[this_band_noise_index * data->data_length + j + this_band_start_index];
+        //             // get <d|h> term
+        //             if ((j < band_info->max_data_store_size) && (j >= 0))
+        //             {    
+        //                 n_A = data->psd_A[this_band_noise_index * data->data_length + j + this_band_start_index];
+        //                 n_E = data->psd_E[this_band_noise_index * data->data_length + j + this_band_start_index];
 
-                        d_A = A_data[j];
-                        d_E = E_data[j];
+        //                 d_A = A_data[j];
+        //                 d_E = E_data[j];
                         
-                        d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
-                        d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
-                    }
-                    else
-                    {
-                        // get <d|h> term
-                        d_h_add_temp += -1e300;
-                    }
-                }
-            }
+        //                 d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
+        //                 d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
+        //             }
+        //             else
+        //             {
+        //                 // get <d|h> term
+        //                 d_h_add_temp += -1e300;
+        //             }
+        //         }
+        //     }
 
-            __syncthreads();
-            d_h_remove_arr[tid] = 4 * df * d_h_remove_temp;
+        //     __syncthreads();
+        //     d_h_remove_arr[tid] = 4 * df * d_h_remove_temp;
 
-            d_h_add_arr[tid] = 4 * df * d_h_add_temp;
-            add_add_arr[tid] = 4 * df * add_add_temp;
-            remove_remove_arr[tid] = 4 * df * remove_remove_temp;
-            add_remove_arr[tid] = 4 * df * add_remove_temp;
-            __syncthreads();
+        //     d_h_add_arr[tid] = 4 * df * d_h_add_temp;
+        //     add_add_arr[tid] = 4 * df * add_add_temp;
+        //     remove_remove_arr[tid] = 4 * df * remove_remove_temp;
+        //     add_remove_arr[tid] = 4 * df * add_remove_temp;
+        //     __syncthreads();
 
-            for (unsigned int s = 1; s < blockDim.x; s *= 2)
-            {
-                if (tid % (2 * s) == 0)
-                {
-                    d_h_remove_arr[tid] += d_h_remove_arr[tid + s];
-                    d_h_add_arr[tid] += d_h_add_arr[tid + s];
-                    add_add_arr[tid] += add_add_arr[tid + s];
-                    remove_remove_arr[tid] += remove_remove_arr[tid + s];
-                    add_remove_arr[tid] += add_remove_arr[tid + s];
-                    // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
-                    // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
-                }
-                __syncthreads();
-            }
-            __syncthreads();
+        //     for (unsigned int s = 1; s < blockDim.x; s *= 2)
+        //     {
+        //         if (tid % (2 * s) == 0)
+        //         {
+        //             d_h_remove_arr[tid] += d_h_remove_arr[tid + s];
+        //             d_h_add_arr[tid] += d_h_add_arr[tid + s];
+        //             add_add_arr[tid] += add_add_arr[tid + s];
+        //             remove_remove_arr[tid] += remove_remove_arr[tid + s];
+        //             add_remove_arr[tid] += add_remove_arr[tid + s];
+        //             // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
+        //             // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
+        //         }
+        //         __syncthreads();
+        //     }
+        //     __syncthreads();
 
-            ll_diff = -1. / 2. * (-2. * d_h_add_arr[0] + 2. * d_h_remove_arr[0] - 2. * add_remove_arr[0] + add_add_arr[0] + remove_remove_arr[0]).real();
-            __syncthreads();
+        //     ll_diff = -1. / 2. * (-2. * d_h_add_arr[0] + 2. * d_h_remove_arr[0] - 2. * add_remove_arr[0] + add_add_arr[0] + remove_remove_arr[0]).real();
+        //     __syncthreads();
 
-            // determine detailed balance with tempering on the Likelihood term
-            lnpdiff = factors + (this_binary_inv_temp * ll_diff) + lp_diff;
+        //     // determine detailed balance with tempering on the Likelihood term
+        //     lnpdiff = factors + (this_binary_inv_temp * ll_diff) + lp_diff;
 
-            // accept or reject
-            accept = lnpdiff > random_val;
-            // accept = false;
-            if ((mcmc_info->is_rj) && (amp_prop / amp_curr > 1e10))
-            {
-                det_snr = ((d_h_add_arr[0].real() + add_remove_arr[0].real()) / sqrt(add_add_arr[0].real()));
-                opt_snr = sqrt(add_add_arr[0].real());
-                // put an snr limit on rj
-                if ((opt_snr < mcmc_info->snr_lim) || (det_snr < mcmc_info->snr_lim) || (abs(1.0 - det_snr / opt_snr) > 0.5))
-                {
-                    // if ((this_band_data_index == 0) && (threadIdx.x == 0)) printf("NIXED %e %e %e %e\n", mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
-                    accept = false;
-                }
-                else
-                {
-                    //if ((this_binary_inv_temp < 0.005) & (threadIdx.x == 0)) printf("KEPT  %e %e %e %e %e\n", this_binary_inv_temp, mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
-                }
-            }
+        //     // accept or reject
+        //     accept = lnpdiff > random_val;
+        //     // accept = false;
+        //     if ((mcmc_info->is_rj) && (amp_prop / amp_curr > 1e10))
+        //     {
+        //         det_snr = ((d_h_add_arr[0].real() + add_remove_arr[0].real()) / sqrt(add_add_arr[0].real()));
+        //         opt_snr = sqrt(add_add_arr[0].real());
+        //         // put an snr limit on rj
+        //         if ((opt_snr < mcmc_info->snr_lim) || (det_snr < mcmc_info->snr_lim) || (abs(1.0 - det_snr / opt_snr) > 0.5))
+        //         {
+        //             // if ((this_band_data_index == 0) && (threadIdx.x == 0)) printf("NIXED %e %e %e %e\n", mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
+        //             accept = false;
+        //         }
+        //         else
+        //         {
+        //             //if ((this_binary_inv_temp < 0.005) & (threadIdx.x == 0)) printf("KEPT  %e %e %e %e %e\n", this_binary_inv_temp, mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
+        //         }
+        //     }
 
-            // if ((mcmc_info->is_rj) && (amp_curr / amp_prop > 1e10) && (!accept) && (N == 1024) && (this_band_start_index >= 740556))
-            // {
-            //     //  + add_remove_arr[0].real()
-            //     det_snr = ((-d_h_remove_arr[0].real()) / sqrt(remove_remove_arr[0].real()));
-            //     opt_snr = sqrt(remove_remove_arr[0].real());
-            //     if ((threadIdx.x == 0))
-            //         //printf("SNR info  %e %e %e %e %e\n", snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr), this_binary_inv_temp);
-            //         printf("lnpdiff: %e, beta: %e, factors: %e, ll_diff: %e, lp_diff: %e\n", lnpdiff, this_binary_inv_temp, factors, ll_diff, lp_diff);
-            // }
+        //     // if ((mcmc_info->is_rj) && (amp_curr / amp_prop > 1e10) && (!accept) && (N == 1024) && (this_band_start_index >= 740556))
+        //     // {
+        //     //     //  + add_remove_arr[0].real()
+        //     //     det_snr = ((-d_h_remove_arr[0].real()) / sqrt(remove_remove_arr[0].real()));
+        //     //     opt_snr = sqrt(remove_remove_arr[0].real());
+        //     //     if ((threadIdx.x == 0))
+        //     //         //printf("SNR info  %e %e %e %e %e\n", snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr), this_binary_inv_temp);
+        //     //         printf("lnpdiff: %e, beta: %e, factors: %e, ll_diff: %e, lp_diff: %e\n", lnpdiff, this_binary_inv_temp, factors, ll_diff, lp_diff);
+        //     // }
 
-            // if ((blockIdx.x == 0) && (threadIdx.x == 0))printf("%d %d %.12e %.12e %.12e %.12e %e %e %e %e %e %e\n", bin_i, accept, f0_prop, f0_curr, wave_remove[0].real(), wave_add[0].real(), ll_diff, this_binary_inv_temp, lp_diff, factors, lnpdiff, random_val);
+        //     // if ((blockIdx.x == 0) && (threadIdx.x == 0))printf("%d %d %.12e %.12e %.12e %.12e %e %e %e %e %e %e\n", bin_i, accept, f0_prop, f0_curr, wave_remove[0].real(), wave_add[0].real(), ll_diff, this_binary_inv_temp, lp_diff, factors, lnpdiff, random_val);
 
-            // readout if it was accepted
-            mcmc_info->accepted_out[current_binary_start_index] = accept;
+        //     // readout if it was accepted
+        //     mcmc_info->accepted_out[current_binary_start_index] = accept;
 
-            if (accept)
-            {
-                if (tid == 0)
-                {
-                    mcmc_info->L_contribution[band_i] += ll_diff;
-                    mcmc_info->p_contribution[band_i] += lp_diff;
-                }
-                __syncthreads();
-                // change current Likelihood
+        //     if (accept)
+        //     {
+        //         if (tid == 0)
+        //         {
+        //             mcmc_info->L_contribution[band_i] += ll_diff;
+        //             mcmc_info->p_contribution[band_i] += lp_diff;
+        //         }
+        //         __syncthreads();
+        //         // change current Likelihood
 
-                for (int i = threadIdx.x;
-                     i < params_curr->N;
-                     i += blockDim.x)
-                {
+        //         for (int i = threadIdx.x;
+        //              i < params_curr->N;
+        //              i += blockDim.x)
+        //         {
 
-                    j = start_ind_remove + i - this_band_start_index;
+        //             j = start_ind_remove + i - this_band_start_index;
 
-                    h_A = A_remove[i];
-                    h_E = E_remove[i];
+        //             h_A = A_remove[i];
+        //             h_E = E_remove[i];
 
-                    // if (i == 0) printf("start: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data->data_A[this_band_data_index * data->data_length + j].real(), data->data_A[this_band_data_index * data->data_length + j].imag(), data->data_E[this_band_data_index * data->data_length + j].real(), data->data_E[this_band_data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
+        //             // if (i == 0) printf("start: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data->data_A[this_band_data_index * data->data_length + j].real(), data->data_A[this_band_data_index * data->data_length + j].imag(), data->data_E[this_band_data_index * data->data_length + j].real(), data->data_E[this_band_data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
 
-                    // data->data_A[this_band_data_index * data->data_length + j] += h_A;
-                    // data->data_E[this_band_data_index * data->data_length + j] += h_E;
+        //             // data->data_A[this_band_data_index * data->data_length + j] += h_A;
+        //             // data->data_E[this_band_data_index * data->data_length + j] += h_E;
 
-                    // remove from residual means (+)
-                    if ((j < band_info->max_data_store_size) && (j >= 0))
-                    {    
-                        A_data[j] +=  h_A;
-                        E_data[j] +=  h_E;
-                    }
-                    // if (i == 0) printf("remove: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n", bin_i, data->data_A[this_band_data_index * data->data_length + j].real(), data->data_A[this_band_data_index * data->data_length + j].imag(), data->data_E[this_band_data_index * data->data_length + j].real(), data->data_E[this_band_data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
-                }
-                __syncthreads();
+        //             // remove from residual means (+)
+        //             if ((j < band_info->max_data_store_size) && (j >= 0))
+        //             {    
+        //                 A_data[j] +=  h_A;
+        //                 E_data[j] +=  h_E;
+        //             }
+        //             // if (i == 0) printf("remove: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n", bin_i, data->data_A[this_band_data_index * data->data_length + j].real(), data->data_A[this_band_data_index * data->data_length + j].imag(), data->data_E[this_band_data_index * data->data_length + j].real(), data->data_E[this_band_data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
+        //         }
+        //         __syncthreads();
 
-                for (int i = threadIdx.x;
-                     i < params_curr->N;
-                     i += blockDim.x)
-                {
+        //         for (int i = threadIdx.x;
+        //              i < params_curr->N;
+        //              i += blockDim.x)
+        //         {
 
-                    j = start_ind_add + i - this_band_start_index;
+        //             j = start_ind_add + i - this_band_start_index;
 
-                    h_A = A_add[i];
-                    h_E = E_add[i];
+        //             h_A = A_add[i];
+        //             h_E = E_add[i];
 
-                    // data->data_A[this_band_data_index * data->data_length + j] -= h_A;
-                    // data->data_E[this_band_data_index * data->data_length + j] -= h_E;
+        //             // data->data_A[this_band_data_index * data->data_length + j] -= h_A;
+        //             // data->data_E[this_band_data_index * data->data_length + j] -= h_E;
 
-                    // add from residual means (-)
-                    if ((j < band_info->max_data_store_size) && (j >= 0))
-                    {
-                        A_data[j] -=  h_A;
-                        E_data[j] -=  h_E;
-                    }
-                    // if (i == 0) printf("add: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data->data_A[this_band_data_index * data->data_length + j].real(), data->data_A[this_band_data_index * data->data_length + j].imag(), data->data_E[this_band_data_index * data->data_length + j].real(), data->data_E[this_band_data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
-                }
-                __syncthreads();
-                // do not need to adjust data as this one is already in there
-            }
-            __syncthreads();
-        }
-        __syncthreads();
+        //             // add from residual means (-)
+        //             if ((j < band_info->max_data_store_size) && (j >= 0))
+        //             {
+        //                 A_data[j] -=  h_A;
+        //                 E_data[j] -=  h_E;
+        //             }
+        //             // if (i == 0) printf("add: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data->data_A[this_band_data_index * data->data_length + j].real(), data->data_A[this_band_data_index * data->data_length + j].imag(), data->data_E[this_band_data_index * data->data_length + j].real(), data->data_E[this_band_data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
+        //         }
+        //         __syncthreads();
+        //         // do not need to adjust data as this one is already in there
+        //     }
+        //     __syncthreads();
+        // }
+        // __syncthreads();
     }
     __syncthreads();
 }
@@ -3341,6 +3344,10 @@ void make_new_move_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaMalloc(&mcmc_info_d, sizeof(MCMCInfo)));
     CUDA_CHECK_AND_EXIT(cudaMemcpy(mcmc_info_d, inputs.mcmc_info, sizeof(MCMCInfo), cudaMemcpyHostToDevice));
     
+    PriorPackage *prior_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&prior_info_d, sizeof(PriorPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(prior_info_d, inputs.prior_info, sizeof(PriorPackage), cudaMemcpyHostToDevice));
+    
     
     //  Invokes kernel with FFT::block_dim threads in CUDA block
     make_new_move<FFT><<<num_blocks_run, FFT::block_dim, shared_memory_size_mine>>>(
@@ -3349,6 +3356,7 @@ void make_new_move_wrap(InputInfo inputs)
         params_curr_d,
         params_prop_d,
         mcmc_info_d,
+        prior_info_d,
         use_global_memory,
         global_memory_buffer
     );
@@ -3372,6 +3380,7 @@ void make_new_move_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaFree(data_d));
     CUDA_CHECK_AND_EXIT(cudaFree(band_info_d));
     CUDA_CHECK_AND_EXIT(cudaFree(mcmc_info_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(prior_info_d));
 
     if (use_global_memory)
     {
@@ -3391,6 +3400,7 @@ void SharedMemoryMakeNewMove(
     GalacticBinaryParams *params_curr,
     GalacticBinaryParams *params_prop,
     MCMCInfo *mcmc_info,
+    PriorPackage *prior_info,
     int device,
     bool do_synchronize
 )
@@ -3403,6 +3413,7 @@ void SharedMemoryMakeNewMove(
     inputs.params_curr = params_curr;
     inputs.params_prop = params_prop;
     inputs.mcmc_info = mcmc_info;
+    inputs.prior_info = prior_info;
     inputs.device = device;
     inputs.do_synchronize = do_synchronize;
 
@@ -3898,7 +3909,6 @@ MCMCInfo::MCMCInfo(
     cmplx *L_contribution_,
     cmplx *p_contribution_,
     double *prior_all_curr_,
-    double *prior_all_prop_,
     double *factors_all_,
     double *random_val_all_,
     bool *accepted_out_,
@@ -3910,7 +3920,6 @@ MCMCInfo::MCMCInfo(
     L_contribution = L_contribution_;
     p_contribution = p_contribution_;
     prior_all_curr = prior_all_curr_;
-    prior_all_prop = prior_all_prop_;
     factors_all = factors_all_;
     random_val_all = random_val_all_;
     accepted_out = accepted_out_;
@@ -3918,3 +3927,216 @@ MCMCInfo::MCMCInfo(
     is_rj = is_rj_;
     snr_lim = snr_lim_;
 }
+
+PriorPackage::PriorPackage(
+    double f0_min_,
+    double f0_max_,
+    double fdot_min_,
+    double fdot_max_,
+    double phi0_min_,
+    double phi0_max_,
+    double cosinc_min_,
+    double cosinc_max_,
+    double psi_min_,
+    double psi_max_,
+    double lam_min_,
+    double lam_max_,
+    double sinbeta_min_,
+    double sinbeta_max_
+)
+{
+    f0_min = f0_min_;
+    f0_max = f0_max_;
+    fdot_min = fdot_min_;
+    fdot_max = fdot_max_;
+    phi0_min = phi0_min_;
+    phi0_max = phi0_max_;
+    cosinc_min = cosinc_min_;
+    cosinc_max = cosinc_max_;
+    psi_min = psi_min_;
+    psi_max = psi_max_;
+    lam_min = lam_min_;
+    lam_max = lam_max_;
+    sinbeta_min = sinbeta_min_;
+    sinbeta_max = sinbeta_max_;
+}
+
+CUDA_HOSTDEV
+double PriorPackage::get_prior_val(
+    const double amp, 
+    const double f0, 
+    const double fdot, 
+    const double phi0, 
+    const double cosinc,
+    const double psi,
+    const double lam,
+    const double sinbeta
+)
+{
+    double prior_val_out = 0.0;
+    prior_val_out += get_amp_prior(amp);
+    prior_val_out += get_f0_prior(f0);
+    prior_val_out += get_fdot_prior(fdot);
+    prior_val_out += get_phi0_prior(phi0);
+    prior_val_out += get_cosinc_prior(cosinc);
+    prior_val_out += get_psi_prior(psi);
+    prior_val_out += get_lam_prior(lam);
+    prior_val_out += get_sinbeta_prior(sinbeta);
+
+    return prior_val_out;
+}
+
+CUDA_HOSTDEV double PriorPackage::get_amp_prior(const double amp)
+{
+    return 0.0;
+}
+
+CUDA_HOSTDEV double PriorPackage::get_f0_prior(const double f0)
+{
+    return log(1.0 / (f0_max - f0_min));
+}
+
+CUDA_HOSTDEV double PriorPackage::get_fdot_prior(const double fdot)
+{
+    return log(1.0 / (fdot_max - fdot_min));
+}
+
+CUDA_HOSTDEV double PriorPackage::get_phi0_prior(const double phi0)
+{
+    return log(1.0 / (phi0_max - phi0_min));
+}
+
+CUDA_HOSTDEV double PriorPackage::get_cosinc_prior(const double cosinc)
+{
+    return log(1.0 / (cosinc_max - cosinc_min));
+}
+
+CUDA_HOSTDEV double PriorPackage::get_psi_prior(const double psi)
+{
+    return log(1.0 / (psi_max - psi_min));
+}
+
+CUDA_HOSTDEV double PriorPackage::get_lam_prior(const double lam)
+{
+    return log(1.0 / (lam_max - lam_min));
+}
+
+CUDA_HOSTDEV double PriorPackage::get_sinbeta_prior(const double sinbeta)
+{
+    return log(1.0 / (sinbeta_max - sinbeta_min));
+}
+
+PeriodicPackage::PeriodicPackage(
+    double phi0_period_, double psi_period_, double lam_period_
+)
+{
+    phi0_period = phi0_period_;
+    psi_period = psi_period_;
+    lam_period = lam_period_;
+}
+
+CUDA_HOSTDEV
+void PeriodicPackage::wrap(double *x, double x_period)
+{
+    *x = fmod(*x, x_period);
+}
+
+StretchProposalPackage::StretchProposalPackage(
+    double* amp_friends_,
+    double* f0_friends_, 
+    double* fdot0_friends_, 
+    double* phi0_friends_, 
+    double* iota_friends_,
+    double* psi_friends_, 
+    double* lam_friends_,
+    double* beta_friends_,
+    double* z_,
+    double* factors_
+)
+{
+    amp_friends = amp_friends_;
+    f0_friends = f0_friends_;
+    fdot0_friends = fdot0_friends_;
+    phi0_friends = phi0_friends_;
+    iota_friends = iota_friends_;
+    psi_friends = psi_friends_;
+    lam_friends = lam_friends_;
+    beta_friends =  beta_friends_;
+    z = z_;
+    factors = factors_;
+}
+
+
+CUDA_HOSTDEV 
+void StretchProposalPackage::direct_change(double *x_prop, const double x_curr, const double x_friend, const double fraction)
+{
+    double diff = x_curr - x_friend;
+    *x_prop = x_friend + fraction * diff;
+}
+
+CUDA_HOSTDEV 
+void StretchProposalPackage::wrap_change(double *x_prop, const double x_curr, const double x_friend, const double fraction, const double period, void (*wrap_func)(double *))
+{
+    double diff = x_curr - x_friend;
+
+    if (abs(diff) > period / 2.)
+    {
+        if (diff > 0.0)
+        {
+            diff = x_curr - (x_friend + period);
+        }
+        else
+        {
+            diff = x_curr - (x_friend - period);
+        }
+    }
+    double tmp = (x_friend + fraction * diff);
+    wrap_func(&tmp);
+    *x_prop = tmp;
+}
+
+
+TransformPackage::TransformPackage()
+{
+    return;
+}
+
+CUDA_HOSTDEV 
+void TransformPackage::transform(double *amp, double *f0, double *fdot, double *fddot, double *phi0, double *inc, double *psi, double *lam, double *beta)
+{
+    f0_transform(f0);
+    cosinc_transform(inc);
+    sinbeta_transform(beta);
+
+    // must be after f0
+    amp_transform(amp, f0);
+}
+
+CUDA_HOSTDEV 
+void TransformPackage::amp_transform(double *amp, const double f0, const double Tobs)
+{
+    double f_star = 1 / (2. * M_PI * lisaL) * Clight;
+    double factor = 1./2. * sqrt((Tobs * sin(f0 / f_star) ** 2) / get_sensitivity(f0, sens_fn="noisepsd_AE", **self.noise_kwargs))
+    *amp = (*amp) / factor;
+}
+
+CUDA_HOSTDEV 
+void TransformPackage::f0_transform(double *f0)
+{
+    *f0 = *f0 / 1e3;
+}
+
+CUDA_HOSTDEV 
+void TransformPackage::cosinc_transform(double *inc)
+{
+    *inc = acos(*inc);
+}  
+
+CUDA_HOSTDEV 
+void TransformPackage::sinbeta_transform(double *beta)
+{
+    double beta_tmp = asin(*beta);
+    double theta_tmp = M_PI / 2 - beta_tmp;
+    *beta = theta_tmp;
+}
+        

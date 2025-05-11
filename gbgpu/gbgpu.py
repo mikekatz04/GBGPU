@@ -32,7 +32,7 @@ try:
     from .cutils.gbgpu_utils import get_ll as get_ll_gpu
     from .cutils.gbgpu_utils import fill_global as fill_global_gpu
     from .cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
-    from .cutils.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods
+    from .cutils.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
 
 except (ModuleNotFoundError, ImportError):
     pass
@@ -105,6 +105,9 @@ class GBGPU(object):
             self.pyDataPackage = pyDataPackage
             self.pyBandPackage = pyBandPackage
             self.pyMCMCInfo = pyMCMCInfo
+            self.pyPriorPackage = pyPriorPackage
+            self.pyPeriodicPackage = pyPeriodicPackage
+            self.pyStretchProposalPackage = pyStretchProposalPackage
 
         else:
             self.xp = np
