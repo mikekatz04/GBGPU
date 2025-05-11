@@ -82,46 +82,13 @@ class GBGPU(object):
 
     """
 
-<<<<<<< HEAD
-    def __init__(self, orbits: Orbits = None, use_gpu=False):
-=======
-    def __init__(self, use_gpu=False, gpus=None):
->>>>>>> 10846de (started adding multigpu capability)
+    def __init__(self, orbits: Orbits = None, use_gpu=False, gpus=None):
 
         self.use_gpu = use_gpu
-
+        self.gpus = gpus
+        
         # setup Cython/C++/CUDA calls based on if using GPU
-        if self.use_gpu:
-            self.xp = xp
-            self.get_ll_func = get_ll_gpu
-            self.fill_global_func = fill_global_gpu
-            self.global_get_ll_func = direct_like_wrap_gpu
-            self.swap_ll_diff_func = swap_ll_diff_gpu
-            self.gpus = gpus
-            self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
-            self.psd_likelihood = psd_likelihood
-            # self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
-            self.SharedMemoryMakeNewMove_wrap = SharedMemoryMakeNewMove_wrap
-            self.SharedMemoryMakeTemperingMove_wrap = SharedMemoryMakeTemperingMove_wrap
-            self.compute_logpdf = compute_logpdf
-            self.pyGalacticBinaryParams = pyGalacticBinaryParams
-            self.pyDataPackage = pyDataPackage
-            self.pyBandPackage = pyBandPackage
-            self.pyMCMCInfo = pyMCMCInfo
-            self.pyPriorPackage = pyPriorPackage
-            self.pyPeriodicPackage = pyPeriodicPackage
-            self.pyStretchProposalPackage = pyStretchProposalPackage
-            self.check_prior_vals = check_prior_vals
-            self.get_psd_val = get_psd_val
-            self.get_lisasens_val = get_lisasens_val
-            self.SharedMemoryChiSquaredComp_wrap = SharedMemoryChiSquaredComp_wrap
-
-        else:
-            self.xp = np
-            self.get_ll_func = get_ll_cpu
-            self.fill_global_func = fill_global_cpu
-            self.global_get_ll_func = direct_like_wrap_cpu
-            self.swap_ll_diff_func = swap_ll_diff_cpu
+        if not use_gpu:
             self.gpus = None
             
         self.d_d = None

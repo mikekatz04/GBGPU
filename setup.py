@@ -149,7 +149,7 @@ if run_cuda_install:
                 "'-fPIC'",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include", "cufftdx/include"],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "cufftdx/include"],
     )
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
 
@@ -192,10 +192,10 @@ if run_cuda_install:
 cu_files = ["gbgpu_utils"]
 pyx_files = ["GBGPU"]
 for fp in cu_files:
-    shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
+    shutil.copy("gbgpu/cutils/src/" + fp + ".cu", "gbgpu/cutils/src/" + fp + ".cpp")
 
 for fp in pyx_files:
-    shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
+    shutil.copy("gbgpu/cutils/src/" + fp + ".pyx", "gbgpu/cutils/src/" + fp + "_cpu.pyx")
 
 ext_cpu_dict = dict(
     sources=["gbgpu/cutils/src/gbgpu_utils.cpp", "gbgpu/cutils/src/GBGPU_cpu.pyx"],
