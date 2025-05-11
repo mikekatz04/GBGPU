@@ -3,6 +3,116 @@
 
 #include "global.h"
 
+class GalacticBinaryParams{
+    public:
+        double* amp; 
+        double* f0; 
+        double* fdot0; 
+        double* fddot0; 
+        double* phi0; 
+        double* iota;
+        double* psi; 
+        double* lam;
+        double* theta;
+        double T; 
+        double dt;
+        int N;
+        int num_bin_all;
+        int start_freq_ind;
+
+        GalacticBinaryParams(
+            double* amp,
+            double* f0, 
+            double* fdot0, 
+            double* fddot0, 
+            double* phi0, 
+            double* iota,
+            double* psi, 
+            double* lam,
+            double* theta,
+            double T, 
+            double dt,
+            int N,
+            int num_bin_all,
+            int start_freq_ind
+        );
+
+};
+
+class DataPackage{
+    public:
+        cmplx* data_A; 
+        cmplx* data_E; 
+        double* psd_A; 
+        double* psd_E; 
+        double df; 
+        int data_length;
+        int num_data;
+        int num_psd;
+
+        DataPackage(
+            cmplx* data_A,
+            cmplx* data_E,
+            double* psd_A,
+            double* psd_E,
+            double df,
+            int data_length,
+            int num_data,
+            int num_psd
+        );
+
+};
+
+class BandPackage{
+    public:
+        int *data_index;
+        int *noise_index;
+        int *band_start_bin_ind;
+        int *band_num_bins;
+        int *band_start_data_ind;
+        int *band_data_lengths;
+        int num_bands;
+        int max_data_store_size;
+
+        BandPackage(
+            int *data_index,
+            int *noise_index,
+            int *band_start_bin_ind,
+            int *band_num_bins,
+            int *band_start_data_ind,
+            int *band_data_lengths,
+            int num_bands,
+            int max_data_store_size
+        );
+};
+
+class MCMCInfo{
+    public:
+        cmplx *L_contribution;
+        cmplx *p_contribution;
+        double *prior_all_curr;
+        double *prior_all_prop;
+        double *factors_all;
+        double *random_val_all;
+        bool *accepted_out;
+        double *band_inv_temperatures_all;
+        bool is_rj;
+        double snr_lim;
+
+        MCMCInfo(
+            cmplx *L_contribution,
+            cmplx *p_contribution,
+            double *prior_all_curr,
+            double *prior_all_prop,
+            double *factors_all,
+            double *random_val_all,
+            bool *accepted_out,
+            double *band_inv_temperatures_all,
+            bool is_rj,
+            double snr_lim
+        );
+};
+
 void SharedMemoryWaveComp(
     cmplx* tdi_out,
     double* amp, 
@@ -73,8 +183,8 @@ typedef struct InputInfoTag{
     double* factors;
     cmplx *L_contribution;
     cmplx *p_contribution;
-    double *params_curr;
-    double *params_prop;
+    GalacticBinaryParams *params_curr;
+    GalacticBinaryParams *params_prop;
     double *prior_all_curr;
     double *prior_all_prop;
     double *factors_all;
@@ -89,6 +199,9 @@ typedef struct InputInfoTag{
     int max_data_store_size;
     bool is_rj;
     double snr_lim;
+    DataPackage *data;
+    BandPackage *band_info;
+    MCMCInfo *mcmc_info;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -203,38 +316,23 @@ void specialty_piece_wise_likelihoods_wrap(
 );
 
 void SharedMemoryMakeMove(
-    cmplx *L_contribution,
-    cmplx *p_contribution,
-    cmplx *data_A,
-    cmplx *data_E,
-    double *noise_A,
-    double *noise_E,
-    int *data_index,
-    int *noise_index,
-    double *params_curr,
-    double *params_prop,
-    double *prior_all_curr,
-    double *prior_all_prop,
-    double *factors_all,
-    double *random_val_all,
-    int *band_start_bin_ind,
-    int *band_num_bins,
-    int *band_start_data_ind,
-    int *band_data_lengths,
-    double *band_inv_temperatures_all,
-    bool *accepted_out,
-    double T,
-    double dt,
-    int N,
-    int num_bin_all,
-    int start_freq_ind,
-    int data_length,
-    int num_bands,
-    int max_data_store_size,
+    DataPackage *data,
+    BandPackage *band_info,
+    GalacticBinaryParams *params_curr,
+    GalacticBinaryParams *params_prop,
+    MCMCInfo *mcmc_info,
     int device,
-    bool do_synchronize,
-    bool is_rj,
-    double snr_lim
+    bool do_synchronize
+);
+
+void SharedMemoryMakeNewMove(
+    DataPackage *data,
+    BandPackage *band_info,
+    GalacticBinaryParams *params_curr,
+    GalacticBinaryParams *params_prop,
+    MCMCInfo *mcmc_info,
+    int device,
+    bool do_synchronize
 );
 
 void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 

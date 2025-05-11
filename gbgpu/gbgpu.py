@@ -99,7 +99,12 @@ class GBGPU(object):
             self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
             self.psd_likelihood = psd_likelihood
             self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
+            self.SharedMemoryMakeNewMove_wrap = SharedMemoryMakeNewMove_wrap
             self.compute_logpdf = compute_logpdf
+            self.pyGalacticBinaryParams = pyGalacticBinaryParams
+            self.pyDataPackage = pyDataPackage
+            self.pyBandPackage = pyBandPackage
+            self.pyMCMCInfo = pyMCMCInfo
 
         else:
             self.xp = np
