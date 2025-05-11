@@ -880,8 +880,8 @@ class GBGPU(object):
         )
 
         # read out to buffer arrays
-        templates[:, 0] = template_A.reshape(total_groups, data_length)
-        templates[:, 1] = template_E.reshape(total_groups, data_length)
+        templates[:, 0] += template_A.reshape(total_groups, data_length)
+        templates[:, 1] += template_E.reshape(total_groups, data_length)
 
     def generate_global_template(
         self,
@@ -1070,6 +1070,14 @@ class GBGPU(object):
         self.add_remove = add_remove
         self.remove_remove = remove_remove
         self.add_add = add_add
+
+        self.A_remove = A_remove.reshape(-1, num_bin).T
+        self.E_remove = E_remove.reshape(-1, num_bin).T
+        self.start_inds_remove = start_inds_remove
+
+        self.A_add = A_add.reshape(-1, num_bin).T
+        self.E_add = E_add.reshape(-1, num_bin).T
+        self.start_inds_add = start_inds_add
 
         # compute Likelihood
         ll_diff = -1 / 2 * (-2 * d_h_add + 2 * d_h_remove - 2 * add_remove + add_add + remove_remove).real
