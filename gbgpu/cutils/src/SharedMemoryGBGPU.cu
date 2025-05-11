@@ -3572,6 +3572,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         if (band_here.update_data_index < band_here.data_index) tmp_data_index = band_here.update_data_index;
         else tmp_data_index = band_here.data_index;
         
+        if (threadIdx.x == 0){
+
+        }
         for (int i = threadIdx.x; i < band_here.band_data_lengths; i += blockDim.x)
         {
             A_data[i] = data.data_A[band_here.data_index * data.data_length + band_here.band_start_data_ind + i];
@@ -3663,7 +3666,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
         for (int prop_i = 0; prop_i < stretch_info.num_proposals * band_here.band_num_bins; prop_i += 1)
         {
-            if (threadIdx.x == 0)
+            // if (threadIdx.x == 0) printf("check1\n");
             {
                 random_val = log(curand_uniform_double(&localState));
                 if (mcmc_info.is_rj)
@@ -3754,6 +3757,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
             lp_diff = prior_prop - prior_curr;
             
+            // if (threadIdx.x == 0) printf("check2 %e\n", lp_diff);
+            
             // if ((threadIdx.x == 0) && (blockIdx.x < 10)) printf("%e %e %e\n", lp_diff, prior_prop, prior_curr);
             // if (threadIdx.x == 0) printf("prop: %d %e %e %e %e %e %e %e %e %e %e %e %e\n", band_i, prior_prop, band_here.fmin_allow, band_here.fmax_allow, prop_binary.amp, prop_binary.f0_ms, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.cosinc, prop_binary.psi, prop_binary.lam, prop_binary.sinbeta);
 
@@ -3762,8 +3767,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 
                 curr_binary.transform();
                 prop_binary.transform();
-
-                //if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("%d %e %e %e\n %e %e %e %e %e %e %e %e\n %e %e %e %e %e %e %e %e\n\n\n", bin_i_gen, prior_curr, prior_prop, factors, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
+                // if (threadIdx.x == 0) printf("check3 %e\n",prop_binary.inc);
+            
+                // if ((threadIdx.x == 0)) printf("CHECK9: %d %e %e %e\n %e %e %e %e %e %e %e %e\n %e %e %e %e %e %e %e %e\n\n\n", bin_i_gen, prior_curr, prior_prop, factors, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
 
                 
                 // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
@@ -3783,6 +3789,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     bin_i_gen);
                 __syncthreads();
 
+                // if (threadIdx.x == 0) printf("check4 %e\n", wave_add[0].real());
+            
                 if (true)  // abs((double)start_ind_add - (double)start_ind_remove) < 20.0)
                 {
 
@@ -3838,6 +3846,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                                 n_A = data.psd_A[band_here.noise_index * data.data_length + j + band_here.band_start_data_ind];
                                 n_E = data.psd_E[band_here.noise_index * data.data_length + j + band_here.band_start_data_ind];
+                                // if (threadIdx.x < 10) printf("CHECKIT %d %e %e %e %e %e\n", tid, n_A, n_E, d_A.real(), d_A.real(), d_E.imag());
                             }
                             else
                             {
@@ -4152,7 +4161,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                         __syncthreads();
                     }
                     __syncthreads();
-
+                    // if (threadIdx.x < 12) printf("check6 %d %e %e %e %e %e\n", tid, d_h_add_arr[tid].real(), d_h_remove_arr[tid].real(), remove_remove_arr[tid].real(), add_add_arr[tid].real(), add_remove_arr[tid].real());
+            
                     if (mcmc_info.phase_maximize)
                     {
                         d_h_add_term = gcmplx::abs(d_h_add_arr[0]);
@@ -4192,7 +4202,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     // determine detailed balance with tempering on the Likelihood term
                     lnpdiff = factors + (this_band_inv_temp * ll_diff) + lp_diff;
                     //if ((this_band_inv_temp != 0.0) && (threadIdx.x == 0)) printf("WHAT3: %d %e\n", band_i, this_band_inv_temp);
-
+                    // if (threadIdx.x == 0) printf("check6 %e %e %e %e %e\n", lnpdiff, this_band_inv_temp, ll_diff, lp_diff, factors);
+            
                     // accept or reject
                     accept = lnpdiff > random_val;
                     // if ((mcmc_info.is_rj) && (band_here.band_num_bins > 10) && (threadIdx.x == 0)) printf("%d %e %e %e %e %e %e %e\n", band_i, lnpdiff, factors, ll_diff, this_band_inv_temp, lp_diff, prior_curr, prior_prop);
@@ -4764,7 +4775,7 @@ void make_new_move_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    // std::cout << "before real kernel " << num_blocks_run << std::endl; 
+    std::cout << "before real kernel " << inputs.device << std::endl; 
     
     // if (inputs.mcmc_info->is_rj) num_blocks_run = 1;
     //  Invokes kernel with FFT::block_dim threads in CUDA block
@@ -4782,14 +4793,14 @@ void make_new_move_wrap(InputInfo inputs)
     );
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    // CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    // std::cout << "after real kernel " << 32 << std::endl; 
+    if (inputs.do_synchronize)
+    {
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
+    std::cout << "after real kernel " << inputs.device << std::endl; 
     
-    // if (inputs.do_synchronize)
-    // {
-    //     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-    // }
 
     // std::cout << "output [1st FFT]:\n";
     // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
@@ -4797,9 +4808,9 @@ void make_new_move_wrap(InputInfo inputs)
     // }
 
     // std::cout << shared_memory_size << std::endl;
-    // std::cout << "Success" <<  std::endl;
+     std::cout << "Success" <<  std::endl;
 
-    CUDA_CHECK_AND_EXIT(cudaFree(params_curr_d));
+    CUDA_CHECK_AND_EXIT(cudaFreeAsync(params_curr_d));
     CUDA_CHECK_AND_EXIT(cudaFree(data_d));
     CUDA_CHECK_AND_EXIT(cudaFree(band_info_d));
     CUDA_CHECK_AND_EXIT(cudaFree(mcmc_info_d));
@@ -5405,6 +5416,16 @@ void make_tempering_swap_wrap(InputInfo inputs)
 
         num_blocks_run = inputs.num_swap_setups;
     }
+
+
+    //TODO: class to run this so that we can allocate from python a new instance of all the gpu info
+    // run from python without any malloc, memcpy, free
+    // free everythin
+    // make sure to add checks. 
+    
+
+
+
 
     CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
         make_tempering_swap<FFT>,
