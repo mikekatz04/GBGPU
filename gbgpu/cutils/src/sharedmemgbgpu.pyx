@@ -157,6 +157,20 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         bool do_synchronize
     ) except +
 
+
+    void SharedMemoryMakeTemperingMove(
+        DataPackageWrap *data,
+        BandPackageWrap *band_info,
+        GalacticBinaryParamsWrap *params_curr,
+        MCMCInfoWrap *mcmc_info,
+        PriorPackageWrap *prior_info,
+        StretchProposalPackageWrap *stretch_info,
+        PeriodicPackageWrap *periodic_info,
+        int num_swap_setups,
+        int device,
+        bool do_synchronize
+    ) except +
+
     void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
                     double* Amp_all, double* alpha_all, double* sl1_all, double* kn_all, double* sl2_all, double df, int data_length, int num_data, int num_psds) except+
         
@@ -219,7 +233,13 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             int max_data_store_size,
             double *fmin_allow,
             double *fmax_allow,
-            int *update_data_index
+            int *update_data_index,
+            int ntemps,
+            int *band_ind,
+            int *walker_ind,
+            int *temp_ind,
+            int *swaps_proposed,
+            int *swaps_accepted
         )
 
     cdef cppclass MCMCInfoWrap "MCMCInfo":
@@ -252,7 +272,9 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             int num_friends_init,
             int num_proposals,
             double a,
-            int ndim
+            int ndim,
+            bool *inds,
+            double *factors
         );
 
         void dealloc();
@@ -278,7 +300,9 @@ cdef class pyStretchProposalPackage:
             num_friends_init,
             num_proposals,
             a,
-            ndim
+            ndim,
+            inds,
+            factors
         ), tkwargs = wrapper(*args, **kwargs)
 
         cdef size_t amp_friends_in = amp_friends
@@ -289,6 +313,8 @@ cdef class pyStretchProposalPackage:
         cdef size_t psi_friends_in = psi_friends
         cdef size_t lam_friends_in = lam_friends
         cdef size_t beta_friends_in = beta_friends
+        cdef size_t inds_in = inds
+        cdef size_t factors_in = factors
         
         self.g = new StretchProposalPackageWrap(
             <double*> amp_friends_in,
@@ -303,7 +329,9 @@ cdef class pyStretchProposalPackage:
             num_friends_init,
             num_proposals,
             a,
-            ndim
+            ndim,
+            <bool *> inds_in,
+            <double *> factors_in
         )
 
     def g_in(self):
@@ -413,7 +441,13 @@ cdef class pyBandPackage:
             max_data_store_size,
             fmin_allow,
             fmax_allow,
-            update_data_index
+            update_data_index,
+            ntemps,
+            band_ind,
+            walker_ind,
+            temp_ind,
+            swaps_proposed,
+            swaps_accepted
         ), tkwargs = wrapper(*args, **kwargs)
 
         cdef size_t data_index_in = data_index
@@ -425,6 +459,11 @@ cdef class pyBandPackage:
         cdef size_t fmin_allow_in = fmin_allow
         cdef size_t fmax_allow_in = fmax_allow
         cdef size_t update_data_index_in = update_data_index
+        cdef size_t band_ind_in = band_ind
+        cdef size_t walker_ind_in = walker_ind
+        cdef size_t temp_ind_in = temp_ind
+        cdef size_t swaps_proposed_in = swaps_proposed
+        cdef size_t swaps_accepted_in = swaps_accepted
 
         self.g = new BandPackageWrap(
             <int *>data_index_in,
@@ -437,7 +476,13 @@ cdef class pyBandPackage:
             max_data_store_size,
             <double *>fmin_allow_in,
             <double *>fmax_allow_in,
-            <int *>update_data_index_in
+            <int *>update_data_index_in,
+            ntemps,
+            <int *>band_ind_in,
+            <int *>walker_ind_in,
+            <int *>temp_ind_in,
+            <int *>swaps_proposed_in,
+            <int *>swaps_accepted_in
         )
 
     def g_in(self):
@@ -987,6 +1032,41 @@ def SharedMemoryMakeNewMove_wrap(
         <PriorPackageWrap *>prior_info_in,
         <StretchProposalPackageWrap *> stretch_info_in,
         <PeriodicPackageWrap *> periodic_info_in,
+        device,
+        do_synchronize,
+    )
+
+@pointer_adjust
+def SharedMemoryMakeTemperingMove_wrap(
+        data,
+        band_info,
+        params_curr,
+        mcmc_info,
+        prior_info,
+        stretch_info,
+        periodic_info,
+        num_swap_setups,
+        device,
+        do_synchronize
+    ):
+
+    cdef size_t params_curr_in = params_curr.g_in()
+    cdef size_t data_in = data.g_in()
+    cdef size_t band_info_in = band_info.g_in()
+    cdef size_t mcmc_info_in = mcmc_info.g_in()
+    cdef size_t prior_info_in = prior_info.g_in()
+    cdef size_t stretch_info_in = stretch_info.g_in()
+    cdef size_t periodic_info_in = periodic_info.g_in()
+
+    SharedMemoryMakeTemperingMove(
+        <DataPackageWrap *>data_in,
+        <BandPackageWrap *>band_info_in,
+        <GalacticBinaryParamsWrap *>params_curr_in,
+        <MCMCInfoWrap *>mcmc_info_in,
+        <PriorPackageWrap *>prior_info_in,
+        <StretchProposalPackageWrap *> stretch_info_in,
+        <PeriodicPackageWrap *> periodic_info_in,
+        num_swap_setups,
         device,
         do_synchronize,
     )

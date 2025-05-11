@@ -100,6 +100,7 @@ class GBGPU(object):
             self.psd_likelihood = psd_likelihood
             # self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
             self.SharedMemoryMakeNewMove_wrap = SharedMemoryMakeNewMove_wrap
+            self.SharedMemoryMakeTemperingMove_wrap = SharedMemoryMakeTemperingMove_wrap
             self.compute_logpdf = compute_logpdf
             self.pyGalacticBinaryParams = pyGalacticBinaryParams
             self.pyDataPackage = pyDataPackage

@@ -43,7 +43,7 @@ class SingleGalacticBinary{
         double kn;
         double sl2;
 
-    CUDA_DEV SingleGalacticBinary(const double Tobs_, const double Soms_d_, const double Sa_a_, const double Amp_, const double alpha_, const double sl1_, const double kn_, const double sl2_);
+    CUDA_DEV SingleGalacticBinary(const int N_, const double Tobs_, const double Soms_d_, const double Sa_a_, const double Amp_, const double alpha_, const double sl1_, const double kn_, const double sl2_);
     CUDA_DEV void transform();
     CUDA_DEV double amp_transform();
     CUDA_DEV double f0_transform();
@@ -118,6 +118,7 @@ class GalacticBinaryParams{
 
 class SingleBand{
     public:
+        int loc_index;
         int data_index;
         int noise_index;
         int band_start_bin_ind;
@@ -128,10 +129,17 @@ class SingleBand{
         double fmin_allow;
         double fmax_allow;
         int update_data_index;
+        double current_like;
+        double swapped_like;
+        double inv_temp;
+        int band_ind;
+        int walker_ind;
+        int temp_ind;
         GalacticBinaryParams gb_params;
 
         // CUDA_HOSTDEV SingleBand();
         CUDA_HOSTDEV void setup(
+            int loc_index_,
             int data_index_,
             int noise_index_,
             int band_start_bin_ind_,
@@ -142,6 +150,10 @@ class SingleBand{
             double fmin_allow_,
             double fmax_allow_,
             int update_data_index_,
+            double inv_temp,
+            int band_ind,
+            int walker_ind,
+            int temp_ind,
             GalacticBinaryParams *gb_params_all
         );
 };
@@ -183,6 +195,12 @@ class BandPackage{
         double *fmin_allow;
         double *fmax_allow;
         int *update_data_index;
+        int ntemps;
+        int *band_ind;
+        int *walker_ind;
+        int *temp_ind;
+        int *swaps_proposed;
+        int *swaps_accepted;
 
         BandPackage(
             int *data_index,
@@ -195,7 +213,13 @@ class BandPackage{
             int max_data_store_size,
             double *fmin_allow,
             double *fmax_allow,
-            int *update_data_index
+            int *update_data_index,
+            int ntemps,
+            int *band_ind,
+            int *walker_ind,
+            int *temp_ind,
+            int *swaps_proposed,
+            int *swaps_accepted
         );
 };
 
@@ -273,6 +297,8 @@ class StretchProposalPackage{
         int ndim;
         double a;
         CURANDSTATE *curand_states;
+        bool *inds;
+        double *factors;
     
         StretchProposalPackage(
             double* amp_friends,
@@ -287,7 +313,9 @@ class StretchProposalPackage{
             int num_friends_init,
             int num_proposals,
             double a,
-            int ndim
+            int ndim,
+            bool *inds,
+            double *factors
         );
          
         void dealloc();
@@ -387,6 +415,7 @@ typedef struct InputInfoTag{
     PriorPackage *prior_info;
     StretchProposalPackage *stretch_info;
     PeriodicPackage *periodic_info;
+    int num_swap_setups;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -517,6 +546,19 @@ void SharedMemoryMakeNewMove(
     PriorPackage *prior_info,
     StretchProposalPackage *stretch_info,
     PeriodicPackage *periodic_info,
+    int device,
+    bool do_synchronize
+);
+
+void SharedMemoryMakeTemperingMove(
+    DataPackage *data,
+    BandPackage *band_info,
+    GalacticBinaryParams *params_curr,
+    MCMCInfo *mcmc_info,
+    PriorPackage *prior_info,
+    StretchProposalPackage *stretch_info,
+    PeriodicPackage *periodic_info,
+    int num_swap_setups,
     int device,
     bool do_synchronize
 );

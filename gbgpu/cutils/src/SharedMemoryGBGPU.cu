@@ -3010,6 +3010,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     cmplx add_add_temp = 0.0;
     cmplx add_remove_temp = 0.0;
 
+    bool rj_is_there_already;
     int lower_start_ind, upper_start_ind, lower_end_ind, upper_end_ind;
     bool is_add_lower;
     int total_i_vals;
@@ -3020,6 +3021,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     double n_A, n_E;
     double opt_snr, det_snr;
     SingleGalacticBinary curr_binary(
+        params_curr->N,
         params_curr->T,
         params_curr->Soms_d,
         params_curr->Sa_a,
@@ -3030,6 +3032,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         params_curr->sl2
     );
     SingleGalacticBinary prop_binary(
+        params_curr->N,
         params_curr->T,
         params_curr->Soms_d,
         params_curr->Sa_a,
@@ -3069,6 +3072,18 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             curr_binary.lam = band_here.gb_params.lam[bin_i];
             curr_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
 
+
+
+            // adjust for rj
+            if (mcmc_info->is_rj)
+            {   
+                rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen];
+                if (!rj_is_there_already)
+                {
+                    curr_binary.snr = 1e-20;
+                }
+            }
+
             curr_binary.transform();
 
             // if (threadIdx.x == 0)
@@ -3099,11 +3114,22 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         for (int prop_i = 0; prop_i < stretch_info->num_proposals * band_here.band_num_bins; prop_i += 1)
         {
             if (threadIdx.x == 0)
-               {
-                   bin_i_gen = ((unsigned int)(ceil(curand_uniform_double(&localState) * band_here.band_num_bins))) - 1;
-                   random_val = log(curand_uniform_double(&localState));
-               }
+            {
+                if (mcmc_info->is_rj)
+                {
+                    bin_i_gen = prop_i;
+                }
+                else
+                {
+                    bin_i_gen = ((unsigned int)(ceil(curand_uniform_double(&localState) * band_here.band_num_bins))) - 1;
+                    random_val = log(curand_uniform_double(&localState));
+                }
+            }
             __syncthreads();
+            if ((bin_i_gen >= band_here.band_num_bins) && (mcmc_info->is_rj))
+            {
+                continue;
+            }
             
             current_binary_start_index = band_here.band_start_bin_ind + bin_i_gen;
 
@@ -3118,16 +3144,38 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             curr_binary.lam = band_here.gb_params.lam[bin_i_gen];
             curr_binary.sinbeta = band_here.gb_params.sinbeta[bin_i_gen];
 
-            stretch_info->get_proposal(&prop_binary, &factors, localState, curr_binary, *periodic_info);
+            if (!mcmc_info->is_rj)
+            {
+                stretch_info->get_proposal(&prop_binary, &factors, localState, curr_binary, *periodic_info);
+            }
+            else
+            { 
+                factors = stretch_info->factors[band_here.band_start_bin_ind + bin_i_gen];
+                rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen];
+                prop_binary = curr_binary;
+
+                if (!rj_is_there_already)
+                {
+                    curr_binary.snr = 1e-20;
+                }
+                else
+                {
+                    prop_binary.snr = 1e-20;
+                }
+            }
+
+            // if ((prop_binary.N == 1024) && (threadIdx.x == 0)) printf("%d %d %d %e %e %e %e %e %e %e %e %e\n", blockIdx.x, prop_i, bin_i_gen, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
+                
             prior_prop = prior_info->get_prior_val(prop_binary);
-            // if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("%e\n", prior_prop);
-
             lp_diff = prior_prop - prior_curr;
-
+            
             if ((prior_prop > -1e100) && (prop_binary.f0_ms / 1e3 >= band_here.fmin_allow) && (prop_binary.f0_ms / 1e3 <= band_here.fmax_allow))
             { 
                 curr_binary.transform();
                 prop_binary.transform();
+
+                //if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("%d %e %e %e\n %e %e %e %e %e %e %e %e\n %e %e %e %e %e %e %e %e\n\n\n", bin_i_gen, prior_curr, prior_prop, factors, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
+
                 
                 // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
                 // if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("%e %e %e %e %e %e %e %e %e\n", prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
@@ -3168,7 +3216,6 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     is_add_lower = true;
                 }
                 total_i_vals = upper_end_ind - lower_start_ind;
-                // ECK %d \n", total_i_vals);
                 __syncthreads();
                 d_h_remove_temp = 0.0;
                 d_h_add_temp = 0.0;
@@ -3207,14 +3254,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                             n_A = 1e100;
                             n_E = 1e100;
                         }
-                        
 
-                        // if ((bin_i == 0)){
-                        // printf("%d %d %d %d %d %d %d %e %e %e %e %e %e\n", i, j, noise_ind, data_ind, band_here.noise_index * data->data_length + j, band_here.data_index * data->data_length + j, data->data_length, d_A.real(), d_A.imag(), d_E.real(), d_E.imag(), n_A, n_E);
-                        // }
-
-                        // if ((bin_i == 0)) printf("%d %e %e %e %e %e %e %e %e %e %e %e %e \n", tid, d_h_remove_temp.real(), d_h_remove_temp.imag(), d_h_add_temp.real(), d_h_add_temp.imag(), add_add_temp.real(), add_add_temp.imag(), remove_remove_temp.real(), remove_remove_temp.imag(), add_remove_temp.real(), add_remove_temp.imag());
-                        
                         if (j < upper_start_ind)
                         {
                             real_ind = i;
@@ -3277,6 +3317,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                                 // <h|h>
                                 remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
                                 remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
+
                             }
                         }
                         else // this is where the signals overlap
@@ -3323,6 +3364,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                             add_remove_temp += gcmplx::conj(h_A_remove) * h_A_add / n_A;
                             add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
+
                         }
                     }
                 }
@@ -3426,6 +3468,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                 ll_diff = -1. / 2. * (-2. * d_h_add_arr[0] + 2. * d_h_remove_arr[0] - 2. * add_remove_arr[0] + add_add_arr[0] + remove_remove_arr[0]).real();
                 __syncthreads();
+                // if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("%d %e %e %e %e %e %e\n\n\n", bin_i_gen, ll_diff, d_h_add_arr[0].real(), d_h_remove_arr[0].real(), add_remove_arr[0].real(), add_add_arr[0].real(), remove_remove_arr[0].real());
+
 
                 // determine detailed balance with tempering on the Likelihood term
                 lnpdiff = factors + (this_band_inv_temp * ll_diff) + lp_diff;
@@ -3483,6 +3527,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     band_here.gb_params.psi[bin_i_gen] = prop_binary.psi;
                     band_here.gb_params.lam[bin_i_gen] = prop_binary.lam;
                     band_here.gb_params.sinbeta[bin_i_gen] = prop_binary.sinbeta;
+
+                    if (mcmc_info->is_rj)
+                    {
+                        stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen] = (!stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen]);
+                    }
                 }
                 __syncthreads();
                 // change current Likelihood
@@ -3557,6 +3606,16 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 curr_binary.lam = band_here.gb_params.lam_orig[bin_i];
                 curr_binary.sinbeta = band_here.gb_params.sinbeta_orig[bin_i];
 
+                // adjust for rj
+                if (mcmc_info->is_rj)
+                {   
+                    rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen];
+                    if (!rj_is_there_already)
+                    {
+                        curr_binary.snr = 1e-20;
+                    }
+                }
+
                 curr_binary.transform();
 
                 // if (threadIdx.x == 0)
@@ -3616,7 +3675,7 @@ __global__ void setup_curand_states(curandState *curand_states, int n)
 
 
 __global__
-void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinaryParams *gb_params_all)
+void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinaryParams *gb_params_all, MCMCInfo *mcmc_info)
 {
     SingleBand *band_here;
     for (int band_i = threadIdx.x + blockIdx.x * blockDim.x; band_i < band_info->num_bands; band_i += blockDim.x * gridDim.x)
@@ -3635,6 +3694,7 @@ void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinar
         //     gb_params_all->snr[band_info->band_start_data_ind[band_i]]);
 
         band_here->setup(
+            band_i,
             band_info->data_index[band_i],
             band_info->noise_index[band_i],
             band_info->band_start_bin_ind[band_i],
@@ -3645,8 +3705,35 @@ void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinar
             band_info->fmin_allow[band_i],
             band_info->fmax_allow[band_i],
             band_info->update_data_index[band_i],
+            mcmc_info->band_inv_temperatures_all[band_i],
+            band_info->band_ind[band_i],
+            band_info->walker_ind[band_i],
+            band_info->temp_ind[band_i],
             gb_params_all
         );
+    }
+}
+
+__global__
+void extract_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinaryParams *gb_params_all, MCMCInfo *mcmc_info)
+{
+    for (int band_i = threadIdx.x + blockIdx.x * blockDim.x; band_i < band_info->num_bands; band_i += blockDim.x * gridDim.x)
+    {
+        SingleBand band_here = bands[band_i];
+        // printf("%d %d %d %d %d %d %d %d %e %e %d %e\n", band_i, band_info->data_index[band_i],
+        //     band_info->noise_index[band_i],
+        //     band_info->band_start_bin_ind[band_i],
+        //     band_info->band_num_bins[band_i],
+        //     band_info->band_start_data_ind[band_i],
+        //     band_info->band_data_lengths[band_i],
+        //     band_info->max_data_store_size,
+        //     band_info->fmin_allow[band_i],
+        //     band_info->fmax_allow[band_i],
+        //     band_info->update_data_index[band_i],
+        //     gb_params_all->snr[band_info->band_start_data_ind[band_i]]);
+
+        band_info->walker_ind[band_i] = band_here.walker_ind;
+        band_info->temp_ind[band_i] = band_here.temp_ind;
     }
 }
 
@@ -3782,7 +3869,7 @@ void make_new_move_wrap(InputInfo inputs)
 
     int num_blocks_band_setup = std::ceil(((inputs.band_info)->num_bands + 32 - 1) / 32);
     setup_single_bands<<<num_blocks_band_setup, 32>>>(
-        bands, band_info_d, params_curr_d
+        bands, band_info_d, params_curr_d, mcmc_info_d
     );
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
@@ -3914,451 +4001,679 @@ void SharedMemoryMakeNewMove(
 //////////////////
 
 
-// template <class FFT>
-// __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swap(
-//     DataPackage *data,
-//     BandPackage *band_info,
-//     GalacticBinaryParams *params_curr,
-//     MCMCInfo *mcmc_info,
-//     PriorPackage *prior_info,
-//     StretchProposalPackage *stretch_info,
-//     PeriodicPackage *periodic_info,
-//     bool use_global_memory,
-//     cmplx *global_memory_buffer
-// )
-// {
-//     using complex_type = cmplx;
+template <class FFT>
+__launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swap(
+    DataPackage *data,
+    BandPackage *band_info,
+    GalacticBinaryParams *params_curr,
+    MCMCInfo *mcmc_info,
+    PriorPackage *prior_info,
+    StretchProposalPackage *stretch_info,
+    PeriodicPackage *periodic_info,
+    SingleBand *bands,
+    int num_swap_setups,
+    bool use_global_memory,
+    cmplx *global_memory_buffer
+)
+{
+    using complex_type = cmplx;
 
-//     unsigned int start_ind = 0;
+    extern __shared__ unsigned char shared_mem[];
 
-//     extern __shared__ unsigned char shared_mem[];
+    // auto this_block_data = tdi_out
+    //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
 
-//     // auto this_block_data = tdi_out
-//     //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
+    double df = data->df;
+    int tid = threadIdx.x;
+    unsigned int start_ind = 0;
 
-//     double df = data->df;
-//     int tid = threadIdx.x;
-//     unsigned int start_ind_add = 0;
-//     unsigned int start_ind_remove = 0;
+    extern __shared__ unsigned char shared_mem[];
 
-//     extern __shared__ unsigned char shared_mem[];
+    // auto this_block_data = tdi_out
+    //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
 
-//     // auto this_block_data = tdi_out
-//     //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
+    cmplx *wave = (cmplx *)shared_mem;
+    cmplx *A = &wave[0];
+    cmplx *E = &wave[params_curr->N];
 
-//     cmplx *wave_add = (cmplx *)shared_mem;
-//     cmplx *A_add = &wave_add[0];
-//     cmplx *E_add = &wave_add[params_curr->N];
+    cmplx *d_h_d_h_arr = &wave[3 * params_curr->N];
 
-//     cmplx *wave_remove = &wave_add[3 * params_curr->N];
-//     cmplx *A_remove = &wave_remove[0];
-//     cmplx *E_remove = &wave_remove[params_curr->N];
+    cmplx *A_data;
+    cmplx *E_data;
 
-//     cmplx *d_h_d_h_arr = &wave_remove[3 * params_curr->N];
+    if (use_global_memory)
+    {
+        A_data = &global_memory_buffer[(2 * blockIdx.x) * band_info->max_data_store_size];
+        E_data = &global_memory_buffer[(2 * blockIdx.x + 1) * band_info->max_data_store_size];
+    }
+    else
+    {
+        A_data = &d_h_d_h_arr[FFT::block_dim.x];
+        E_data = &A_data[band_info->max_data_store_size];
+    }
+    __syncthreads();
 
-//     cmplx *A_data;
-//     cmplx *E_data;
+    int j, k;
+    int current_binary_start_index, base_index;
+    int data_index_i, data_index_i1, data_index_tmp;
+    int noise_index_i, noise_index_i1, noise_index_tmp;
+    double ll, paccept;
+    double bi, bi1, tmp;
+    int tmp_loc_index, tmp_walker, tmp_band_start_bin_ind, tmp_band_num_bins;
+    bool accept;
+    __shared__ curandState localState;
+    __shared__ double random_val;
 
-//     if (use_global_memory)
-//     {
-//         A_data = &global_memory_buffer[(2 * blockIdx.x) * band_info->max_data_store_size];
-//         E_data = &global_memory_buffer[(2 * blockIdx.x + 1) * band_info->max_data_store_size];
-//     }
-//     else
-//     {
-//         A_data = &d_h_d_h_arr[FFT::block_dim.x];
-//         E_data = &A_data[band_info->max_data_store_size];
-//     }
-//     __syncthreads();
+    if (threadIdx.x == 0)
+    {
+        localState = stretch_info->curand_states[blockIdx.x];
+    }
+    __syncthreads();
 
-//     int band_here.band_start_data_ind, band_here.band_data_lengths, j, k;
-//     int this_band_start_bin_ind, this_band_num_bin;
-//     int this_band_data_index, this_band_noise_index, this_band_update_data_index;
-//     double this_band_beta_i1, this_band_beta_i;
-//     double this_band_min_f_allow, this_band_max_f_allow;
+    cmplx d_h_d_h_temp = 0.0;
 
-//     int current_binary_start_index, base_index;
-//     double ll, ll_prev, lp_diff;
-//     bool accept;
-//     __shared__ curandState localState;
-//     __shared__ double random_val;
-
-//     if (threadIdx.x == 0)
-//     {
-//         localState = stretch_info->curand_states[blockIdx.x];
-//     }
-//     __syncthreads();
-
-//     cmplx d_h_d_h_temp = 0.0;
-
-//     SingleGalacticBinary curr_binary(
-//         params_curr->T,
-//         params_curr->Soms_d,
-//         params_curr->Sa_a,
-//         params_curr->Amp,
-//         params_curr->alpha,
-//         params_curr->sl1,
-//         params_curr->kn,
-//         params_curr->sl2
-//     );
+    SingleGalacticBinary curr_binary(
+        params_curr->N,
+        params_curr->T,
+        params_curr->Soms_d,
+        params_curr->Sa_a,
+        params_curr->Amp,
+        params_curr->alpha,
+        params_curr->sl1,
+        params_curr->kn,
+        params_curr->sl2
+    );
     
-//     for (int band_i = blockIdx.x; band_i < band_info->num_bands; band_i += gridDim.x)
-//     {
-        
-//         band_here.band_start_data_ind = band_info->band_start_data_ind[band_i]; // overall index to which binary
-//         band_here.band_data_lengths = band_info->band_data_lengths[band_i];
-//         this_band_start_bin_ind = band_info->band_start_bin_ind[band_i];
-//         this_band_num_bin = band_info->band_num_bins[band_i];
-//         this_band_data_index = band_info->data_index[band_i];
-//         this_band_update_data_index = band_info->update_data_index[band_i];
-//         this_band_noise_index = band_info->noise_index[band_i];
-//         this_band_min_f_allow = band_info->fmin_allow[band_i];
-//         this_band_max_f_allow = band_info->fmax_allow[band_i];
-//         this_band_inv_temp = mcmc_info->band_inv_temperatures_all[band_i];
+    // NUM_SWAP_SETUPS IS KEY
+    for (int band_i = blockIdx.x; band_i < num_swap_setups; band_i += gridDim.x)
+    {
+        for (int temp_i = band_info->ntemps - 1; temp_i >= 0; temp_i -= 1)
+        {
+            SingleBand *band_here_i = &bands[band_i * band_info->ntemps + temp_i];
+            data_index_i = band_here_i->data_index;
+            noise_index_i = band_here_i->noise_index;
 
-//         for (int t = mcmc_info->ntemps - 1; t >= 0; t -= 1)
-//         {
-//             for (int i = threadIdx.x; i < band_info->max_data_store_size; i += blockDim.x)
-//             {
-//                 A_data[i] = data->data_A[this_band_data_index * data->data_length + band_here.band_start_data_ind + i];
-//                 E_data[i] = data->data_E[this_band_data_index * data->data_length + band_here.band_start_data_ind + i];
-//                 // if (blockIdx.x == gridDim.x - 1) printf("%d %e, %e\n", i, A_data[i].real(), E_data[i].imag());
-//             }
-//             __syncthreads();
+            for (int i = threadIdx.x; i < band_here_i->band_data_lengths; i += blockDim.x)
+            {
+                A_data[i] = data->data_A[band_here_i->data_index * data->data_length + band_here_i->band_start_data_ind + i];
+                E_data[i] = data->data_E[band_here_i->data_index * data->data_length + band_here_i->band_start_data_ind + i];
+                // if (blockIdx.x == gridDim.x - 1) printf("%d %e, %e\n", i, A_data[i].real(), E_data[i].imag());
+            }
+            __syncthreads();
 
-//             for (int bin_i = 0; bin_i < this_band_num_bin; bin_i += 1)
-//             {
-//                 current_binary_start_index = this_band_start_bin_ind + bin_i;
-//                 // get the parameters to add and remove
+            for (int bin_i = 0; bin_i < band_here_i->band_num_bins; bin_i += 1)
+            {
+                current_binary_start_index = band_here_i->band_start_bin_ind + bin_i;
+                // get the parameters to add and remove
                 
-//                 curr_binary.snr = params_curr->snr[current_binary_start_index];
-//                 curr_binary.f0_ms = params_curr->f0_ms[current_binary_start_index];
-//                 curr_binary.fdot = params_curr->fdot0[current_binary_start_index];
-//                 curr_binary.phi0 = params_curr->phi0[current_binary_start_index];
-//                 curr_binary.cosinc = params_curr->cosinc[current_binary_start_index];
-//                 curr_binary.psi = params_curr->psi[current_binary_start_index];
-//                 curr_binary.lam = params_curr->lam[current_binary_start_index];
-//                 curr_binary.sinbeta = params_curr->sinbeta[current_binary_start_index];
+                curr_binary.snr = band_here_i->gb_params.snr[bin_i];
+                curr_binary.f0_ms = band_here_i->gb_params.f0_ms[bin_i];
+                curr_binary.fdot = band_here_i->gb_params.fdot0[bin_i];
+                curr_binary.phi0 = band_here_i->gb_params.phi0[bin_i];
+                curr_binary.cosinc = band_here_i->gb_params.cosinc[bin_i];
+                curr_binary.psi = band_here_i->gb_params.psi[bin_i];
+                curr_binary.lam = band_here_i->gb_params.lam[bin_i];
+                curr_binary.sinbeta = band_here_i->gb_params.sinbeta[bin_i];
 
-//                 curr_binary.transform();
+                curr_binary.transform();
 
-//                 // if (threadIdx.x == 0)
-//                 //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+                // if (threadIdx.x == 0)
+                //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
 
-//                 __syncthreads();
-//                 build_new_single_waveform<FFT>(
-//                     wave_remove,
-//                     &start_ind_remove,
-//                     curr_binary,
-//                     bin_i);
-//                 __syncthreads();
+                __syncthreads();
+                build_new_single_waveform<FFT>(
+                    wave,
+                    &start_ind,
+                    curr_binary,
+                    bin_i);
+                __syncthreads();
 
-//                 for (int i = threadIdx.x; i < params_curr->N; i += blockDim.x)
-//                 {
-//                     // add to residual with (-)
-//                     j = (start_ind_remove - band_here.band_start_data_ind) + i;
-//                     if ((j < band_info->max_data_store_size) && (j >= 0))
-//                     {
-//                         A_data[j] -= A_remove[i];
-//                         E_data[j] -= E_remove[i];
-//                     }
-//                 }
-//                 __syncthreads();
-//             }
-//             __syncthreads();
-//             d_h_d_h_temp = 0.0;
-
-//             for (int i = threadIdx.x; i < band_info->max_data_store_size; i += blockDim.x)
-//             {
-//                 j = band_here.band_start_data_ind + i;
-//                 d_h_d_h_temp += gcmplx::conj(A_data[i]) * A_data[i] / data->psd_A[this_band_noise_index * data->data_length + j];
-//                 d_h_d_h_temp += gcmplx::conj(E_data[i]) * E_data[i] / data->psd_E[this_band_noise_index * data->data_length + j];
-//             } 
-//             __syncthreads();
-//             d_h_d_h_arr[tid] = 4 * df * d_h_d_h_temp;
-//             __syncthreads();
-
-//             for (unsigned int s = 1; s < blockDim.x; s *= 2)
-//             {
-//                 if (tid % (2 * s) == 0)
-//                 {
-//                     d_h_d_h_arr[tid] += d_h_d_h_arr[tid + s];
-//                 }
-//                 __syncthreads();
-//             }
-//             __syncthreads();
-
-//             ll = -1. / 2. * d_h_d_h_arr[0];
-//             __syncthreads();
-//             this_band_beta_i1 = mcmc_info->band_beta_up[band_i * band_info->num_bands + t];
-
-//             if (t < mcmc_info->ntemps - 1)
-//             {
-//                 paccept = (this_band_beta_i - this_band_beta_i1) * (ll - ll_prev);
+                for (int i = threadIdx.x; i < params_curr->N; i += blockDim.x)
+                {
+                    // add to residual with (-)
+                    j = (start_ind - band_here_i->band_start_data_ind) + i;
+                    if ((j < band_info->max_data_store_size) && (j >= 0))
+                    {
+                        A_data[j] -= A[i];
+                        E_data[j] -= E[i];
+                    }
+                }
+                __syncthreads();
+            }
+            __syncthreads();
             
-//                 if (threadIdx.x == 0)
-//                 {
-//                     bin_i_gen = ((unsigned int)(ceil(curand_uniform_double(&localState) * this_band_num_bin))) - 1;
-//                     random_val = log(curand_uniform_double(&localState));
-//                 }
-//                 __syncthreads();
-//                 accept = ll_diff > random_val;
-//                 if (!accept){ll_prev = ll;}
-//             }  
-//             else {ll_prev = ll;}
-//             __syncthreads();
+            d_h_d_h_temp = 0.0;
+            for (int i = threadIdx.x; i < band_here_i->band_data_lengths; i += blockDim.x)
+            {
+                j = band_here_i->band_start_data_ind + i;
+                d_h_d_h_temp += gcmplx::conj(A_data[i]) * A_data[i] / data->psd_A[band_here_i->noise_index * data->data_length + j];
+                d_h_d_h_temp += gcmplx::conj(E_data[i]) * E_data[i] / data->psd_E[band_here_i->noise_index * data->data_length + j];
+            } 
+            __syncthreads();
+            d_h_d_h_arr[tid] = 4 * df * d_h_d_h_temp;
+            __syncthreads();
+
+            for (unsigned int s = 1; s < blockDim.x; s *= 2)
+            {
+                if (tid % (2 * s) == 0)
+                {
+                    d_h_d_h_arr[tid] += d_h_d_h_arr[tid + s];
+                }
+                __syncthreads();
+            }
+            __syncthreads();
+
+            ll = -1. / 2. * d_h_d_h_arr[0].real();
+            __syncthreads();
+            band_here_i->current_like = ll;
+            if ((blockIdx.x == 0) && (threadIdx.x == 0)) printf("check 2 %d %d %d %d %e\n", band_i, temp_i, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->current_like);
+
+        }
+        __syncthreads();
+        
+        // GREATER THAN 0
+        for (int temp_i = band_info->ntemps - 1; temp_i > 0; temp_i -= 1)
+        {
+            SingleBand *band_here_i = &bands[band_i * band_info->ntemps + temp_i];
+            SingleBand *band_here_i1 = &bands[band_i * band_info->ntemps + temp_i - 1];
+            bi = band_here_i->inv_temp;
+            bi1 = band_here_i1->inv_temp;
+
+            // Here we are testing the swaps
+            data_index_i = band_here_i->data_index;
+            noise_index_i = band_here_i->noise_index;
+
+            data_index_i1 = band_here_i1->data_index;
+            noise_index_i1 = band_here_i1->noise_index;
+
+            for (int which = 0; which < 2; which += 1)
+            {
+                // to make accessible outside ifelse
+                SingleBand* band_here_tmp = band_here_i;
+                if (which == 0)
+                {
+                    data_index_tmp = data_index_i;
+                    noise_index_tmp = noise_index_i;
+                    band_here_tmp = band_here_i1;
+                }
+                else
+                {
+                    data_index_tmp = data_index_i1;
+                    noise_index_tmp = noise_index_i1;
+                    band_here_tmp = band_here_i;
+                }
+                for (int i = threadIdx.x; i < band_here_tmp->band_data_lengths; i += blockDim.x)
+                {
+                    A_data[i] = data->data_A[data_index_tmp * data->data_length + band_here_tmp->band_start_data_ind + i];
+                    E_data[i] = data->data_E[data_index_tmp * data->data_length + band_here_tmp->band_start_data_ind + i];
+                    // if (blockIdx.x == gridDim.x - 1) printf("%d %e, %e\n", i, A_data[i].real(), E_data[i].imag());
+                }
+                __syncthreads();
+
+                for (int bin_i = 0; bin_i < band_here_tmp->band_num_bins; bin_i += 1)
+                {
+                    current_binary_start_index = band_here_tmp->band_start_bin_ind + bin_i;
+                    // get the parameters to add and remove
+                    
+                    curr_binary.snr = band_here_tmp->gb_params.snr[bin_i];
+                    curr_binary.f0_ms = band_here_tmp->gb_params.f0_ms[bin_i];
+                    curr_binary.fdot = band_here_tmp->gb_params.fdot0[bin_i];
+                    curr_binary.phi0 = band_here_tmp->gb_params.phi0[bin_i];
+                    curr_binary.cosinc = band_here_tmp->gb_params.cosinc[bin_i];
+                    curr_binary.psi = band_here_tmp->gb_params.psi[bin_i];
+                    curr_binary.lam = band_here_tmp->gb_params.lam[bin_i];
+                    curr_binary.sinbeta = band_here_tmp->gb_params.sinbeta[bin_i];
+
+                    curr_binary.transform();
+
+                    // if (threadIdx.x == 0)
+                    //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+
+                    __syncthreads();
+                    build_new_single_waveform<FFT>(
+                        wave,
+                        &start_ind,
+                        curr_binary,
+                        bin_i);
+                    __syncthreads();
+
+                    for (int i = threadIdx.x; i < params_curr->N; i += blockDim.x)
+                    {
+                        // add to residual with (-)
+                        j = (start_ind - band_here_tmp->band_start_data_ind) + i;
+                        if ((j < band_info->max_data_store_size) && (j >= 0))
+                        {
+                            A_data[j] -= A[i];
+                            E_data[j] -= E[i];
+                        }
+                    }
+                    __syncthreads();
+                }
+                __syncthreads();
+                
+                d_h_d_h_temp = 0.0;
+                for (int i = threadIdx.x; i < band_here_tmp->band_data_lengths; i += blockDim.x)
+                {
+                    j = band_here_tmp->band_start_data_ind + i;
+                    d_h_d_h_temp += gcmplx::conj(A_data[i]) * A_data[i] / data->psd_A[noise_index_tmp * data->data_length + j];
+                    d_h_d_h_temp += gcmplx::conj(E_data[i]) * E_data[i] / data->psd_E[noise_index_tmp * data->data_length + j];
+                } 
+                __syncthreads();
+                d_h_d_h_arr[tid] = 4 * df * d_h_d_h_temp;
+                __syncthreads();
+
+                for (unsigned int s = 1; s < blockDim.x; s *= 2)
+                {
+                    if (tid % (2 * s) == 0)
+                    {
+                        d_h_d_h_arr[tid] += d_h_d_h_arr[tid + s];
+                    }
+                    __syncthreads();
+                }
+                __syncthreads();
+
+                ll = -1. / 2. * d_h_d_h_arr[0].real();
+                __syncthreads();
             
-//             this_band_beta_i = this_band_beta_i1;
-//         }
+                band_here_tmp->swapped_like = ll;
+            }
+            
+            paccept = bi * (band_here_i1->swapped_like - band_here_i->current_like) + bi1 * (band_here_i->swapped_like - band_here_i1->current_like);
+            __syncthreads();
+            if (threadIdx.x == 0)
+            {
+                random_val = log(curand_uniform_double(&localState));
+            }
+            __syncthreads();
+            accept = paccept > random_val;
+            if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("check 3 %d %d %d %d %d %d %d %d %d %d \n %e %e %e %e %e %e %e %e %d\n\n", band_i, temp_i, band_here_i->loc_index, band_here_i->walker_ind, band_here_i->temp_ind, band_here_i->band_num_bins, band_here_i1->loc_index, band_here_i1->walker_ind, band_here_i1->temp_ind, band_here_i1->band_num_bins, bi, bi1, band_here_i->current_like, band_here_i->swapped_like, band_here_i1->current_like, band_here_i1->swapped_like, paccept, random_val, int(accept));
+             __syncthreads();
+            band_info->swaps_proposed[band_i] += 1;
+            if (accept)
+            {
+                if (threadIdx.x == 0){
+
+                    band_info->swaps_accepted[band_i] += 1;
+                    // switch the log like values
+                    band_here_i->current_like = band_here_i1->swapped_like;
+                    band_here_i1->current_like = band_here_i->swapped_like;
+
+                    tmp_loc_index = band_here_i->loc_index;
+                    band_here_i->loc_index = band_here_i1->loc_index;
+                    band_here_i1->loc_index = tmp_loc_index;
+
+                    GalacticBinaryParams tmp_bin_params = band_here_i->gb_params;
+                    band_here_i->gb_params = band_here_i1->gb_params;
+                    band_here_i1->gb_params = tmp_bin_params;
+
+                    tmp_band_start_bin_ind = band_here_i->band_start_bin_ind;
+                    band_here_i->band_start_bin_ind = band_here_i1->band_start_bin_ind;
+                    band_here_i1->band_start_bin_ind = tmp_band_start_bin_ind;
+
+                    tmp_band_num_bins = band_here_i->band_num_bins;
+                    band_here_i->band_num_bins = band_here_i1->band_num_bins;
+                    band_here_i1->band_num_bins = tmp_band_num_bins;
+                }
+                __syncthreads();
+            }
+
+            if ((temp_i == 1) && (accept))
+            {
+                // update the cold chain information
+                // need to be careful not to overlap with other bands running simultaneous (every 3 or 4 or something)
+                for (int bin_i = 0; bin_i < band_here_i1->band_num_bins; bin_i += 1)
+                {
+                    current_binary_start_index = band_here_i1->band_start_bin_ind + bin_i;
+                    // get the parameters to add and remove
+                    
+                    curr_binary.snr = band_here_i1->gb_params.snr_orig[bin_i];
+                    curr_binary.f0_ms = band_here_i1->gb_params.f0_ms_orig[bin_i];
+                    curr_binary.fdot = band_here_i1->gb_params.fdot0_orig[bin_i];
+                    curr_binary.phi0 = band_here_i1->gb_params.phi0_orig[bin_i];
+                    curr_binary.cosinc = band_here_i1->gb_params.cosinc_orig[bin_i];
+                    curr_binary.psi = band_here_i1->gb_params.psi_orig[bin_i];
+                    curr_binary.lam = band_here_i1->gb_params.lam_orig[bin_i];
+                    curr_binary.sinbeta = band_here_i1->gb_params.sinbeta_orig[bin_i];
+
+                    curr_binary.transform();
+
+                    // if (threadIdx.x == 0)
+                    //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+
+                    __syncthreads();
+                    build_new_single_waveform<FFT>(
+                        wave,
+                        &start_ind,
+                        curr_binary,
+                        bin_i);
+                    __syncthreads();
+
+                    // remove from residual with (+)
+                    for (int i = threadIdx.x; i < band_here_i1->gb_params.N; i += blockDim.x)
+                    {
+                        
+                        j = start_ind + i;
+                        if ((j < data->data_length) && (j >= 0))
+                        {
+                            data->data_A[band_here_i1->update_data_index * data->data_length + j] += A[i];
+                            data->data_E[band_here_i1->update_data_index * data->data_length + j] += E[i];
+                        }
+                    }
+                    __syncthreads();
+                }
+                __syncthreads();
+                
+                // update the cold chain information
+                // need to be careful not to overlap with other bands running simultaneous (every 3 or 4 or something)
+                for (int bin_i = 0; bin_i < band_here_i->band_num_bins; bin_i += 1)
+                {
+                    current_binary_start_index = band_here_i->band_start_bin_ind + bin_i;
+                    // get the parameters to add and remove
+                    
+                    curr_binary.snr = band_here_i->gb_params.snr_orig[bin_i];
+                    curr_binary.f0_ms = band_here_i->gb_params.f0_ms_orig[bin_i];
+                    curr_binary.fdot = band_here_i->gb_params.fdot0_orig[bin_i];
+                    curr_binary.phi0 = band_here_i->gb_params.phi0_orig[bin_i];
+                    curr_binary.cosinc = band_here_i->gb_params.cosinc_orig[bin_i];
+                    curr_binary.psi = band_here_i->gb_params.psi_orig[bin_i];
+                    curr_binary.lam = band_here_i->gb_params.lam_orig[bin_i];
+                    curr_binary.sinbeta = band_here_i->gb_params.sinbeta_orig[bin_i];
+
+                    curr_binary.transform();
+
+                    // if (threadIdx.x == 0)
+                    //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+
+                    __syncthreads();
+                    build_new_single_waveform<FFT>(
+                        wave,
+                        &start_ind,
+                        curr_binary,
+                        bin_i);
+                    __syncthreads();
+
+                    // add to residual with (-)
+                    for (int i = threadIdx.x; i < band_here_i->gb_params.N; i += blockDim.x)
+                    {
+                        
+                        j = start_ind + i;
+                        if ((j < data->data_length) && (j >= 0))
+                        {
+                            data->data_A[band_here_i->update_data_index * data->data_length + j] -= A[i];
+                            data->data_E[band_here_i->update_data_index * data->data_length + j] -= E[i];
+                        }
+                    }
+                    __syncthreads();
+                }
+                __syncthreads();
+            }
+        }
+    }
+    __syncthreads();
+
+    if (threadIdx.x == 0)
+    {
+        stretch_info->curand_states[blockIdx.x] = localState;
+    }
+    __syncthreads();
+}
+
+// In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
+//
+// One block is run, it calculates two 128-point C2C double precision FFTs.
+// Data is generated on host, copied to device buffer, and then results are copied back to host.
+template <unsigned int Arch, unsigned int N>
+void make_tempering_swap_wrap(InputInfo inputs)
+{
+    using namespace cufftdx;
+
+    if (inputs.device >= 0)
+    {
+        // set the device
+        CUDA_CHECK_AND_EXIT(cudaSetDevice(inputs.device));
+    }
+
+    // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
+    // will be executed on block level. Shared memory is required for co-operation between threads.
+    // Additionally,
+
+    using FFT = decltype(Block() + Size<N>() + Type<fft_type::c2c>() + Direction<fft_direction::forward>() +
+                         Precision<double>() + ElementsPerThread<8>() + FFTsPerBlock<1>() + SM<Arch>());
+    using complex_type = cmplx;
+
+    // Allocate managed memory for input/output
+    auto size = FFT::ffts_per_block * cufftdx::size_of<FFT>::value;
+    auto size_bytes = size * sizeof(cmplx);
+
+    // Shared memory must fit input data and must be big enough to run FFT
+    auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
+
+    auto memory_size_waveforms = 3 * N * sizeof(cmplx);
+    auto memory_size_likelihoods = 1 * FFT::block_dim.x * sizeof(cmplx);
+    auto memory_size_data_streams = 2 * inputs.band_info->max_data_store_size * sizeof(cmplx);
+    // first is waveforms, second is ll, third is A, E data, fourth is A psd and E psd
+    // std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
+    // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //     std::cout << data[i].x << " " << data[i].y << std::endl;
+    // }
+
+    auto total_memory_size = memory_size_waveforms + memory_size_likelihoods + memory_size_data_streams;
+
+    // Increase max shared memory if needed
+
+    cudaFuncAttributes attr;
+    CUDA_CHECK_AND_EXIT(cudaFuncGetAttributes(&attr, make_tempering_swap<FFT>));
+
+    std::cout << "limit " << attr.maxDynamicSharedSizeBytes << std::endl;
+
+    size_t global_memory_size_per_block, total_global_memory_size, shared_memory_size_mine;
+    int num_blocks_per_sm, num_sm; 
+    int num_blocks_run;
+    cmplx *global_memory_buffer;
+    bool use_global_memory;
+    if (total_memory_size > 130000)
+    {
+        use_global_memory = true;
+        shared_memory_size_mine = memory_size_waveforms + memory_size_likelihoods;
+
+        CUDA_CHECK_AND_EXIT(
+            cudaDeviceGetAttribute(&num_blocks_per_sm, cudaDevAttrMaxBlocksPerMultiprocessor, inputs.device)
+        );
+        CUDA_CHECK_AND_EXIT(
+            cudaDeviceGetAttribute(&num_sm, cudaDevAttrMultiProcessorCount, inputs.device)
+        );
+        std::cout << "check sm " << num_blocks_per_sm << " " << num_sm << std::endl;
         
-//     }
-//     __syncthreads();
-
-//     if (threadIdx.x == 0)
-//     {
-//         stretch_info->curand_states[blockIdx.x] = localState;
-//     }
-//     __syncthreads();
-// }
-
-// // In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
-// //
-// // One block is run, it calculates two 128-point C2C double precision FFTs.
-// // Data is generated on host, copied to device buffer, and then results are copied back to host.
-// template <unsigned int Arch, unsigned int N>
-// void make_tempering_swap_wrap(InputInfo inputs)
-// {
-//     using namespace cufftdx;
-
-//     if (inputs.device >= 0)
-//     {
-//         // set the device
-//         CUDA_CHECK_AND_EXIT(cudaSetDevice(inputs.device));
-//     }
-
-//     // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
-//     // will be executed on block level. Shared memory is required for co-operation between threads.
-//     // Additionally,
-
-//     using FFT = decltype(Block() + Size<N>() + Type<fft_type::c2c>() + Direction<fft_direction::forward>() +
-//                          Precision<double>() + ElementsPerThread<8>() + FFTsPerBlock<1>() + SM<Arch>());
-//     using complex_type = cmplx;
-
-//     // Allocate managed memory for input/output
-//     auto size = FFT::ffts_per_block * cufftdx::size_of<FFT>::value;
-//     auto size_bytes = size * sizeof(cmplx);
-
-//     // Shared memory must fit input data and must be big enough to run FFT
-//     auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
-
-//     auto memory_size_waveforms = 3 * N * sizeof(cmplx) + 3 * N * sizeof(cmplx);
-//     auto memory_size_likelihoods = 5 * FFT::block_dim.x * sizeof(cmplx);
-//     auto memory_size_data_streams = 2 * inputs.band_info->max_data_store_size * sizeof(cmplx);
-//     // first is waveforms, second is ll, third is A, E data, fourth is A psd and E psd
-//     // std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
-//     // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
-//     //     std::cout << data[i].x << " " << data[i].y << std::endl;
-//     // }
-
-//     auto total_memory_size = memory_size_waveforms + memory_size_likelihoods + memory_size_data_streams;
-
-//     // Increase max shared memory if needed
-
-//     cudaFuncAttributes attr;
-//     CUDA_CHECK_AND_EXIT(cudaFuncGetAttributes(&attr, make_tempering_swap<FFT>));
-
-//     std::cout << "limit " << attr.maxDynamicSharedSizeBytes << std::endl;
-
-//     size_t global_memory_size_per_block, total_global_memory_size, shared_memory_size_mine;
-//     int num_blocks_per_sm, num_sm; 
-//     int num_blocks_run;
-//     cmplx *global_memory_buffer;
-//     bool use_global_memory;
-//     if (total_memory_size > 130000)
-//     {
-//         use_global_memory = true;
-//         shared_memory_size_mine = memory_size_waveforms + memory_size_likelihoods;
-
-//         CUDA_CHECK_AND_EXIT(
-//             cudaDeviceGetAttribute(&num_blocks_per_sm, cudaDevAttrMaxBlocksPerMultiprocessor, inputs.device)
-//         );
-//         CUDA_CHECK_AND_EXIT(
-//             cudaDeviceGetAttribute(&num_sm, cudaDevAttrMultiProcessorCount, inputs.device)
-//         );
-//         std::cout << "check sm " << num_blocks_per_sm << " " << num_sm << std::endl;
+        global_memory_size_per_block = 2 * inputs.band_info->max_data_store_size * sizeof(cmplx);
+        total_global_memory_size = num_blocks_per_sm * num_sm * global_memory_size_per_block;
+        num_blocks_run = num_blocks_per_sm * num_sm;
         
-//         global_memory_size_per_block = 2 * inputs.band_info->max_data_store_size * sizeof(cmplx);
-//         total_global_memory_size = num_blocks_per_sm * num_sm * global_memory_size_per_block;
-//         num_blocks_run = num_blocks_per_sm * num_sm;
-        
-//         CUDA_CHECK_AND_EXIT(
-//             cudaMalloc(&global_memory_buffer, total_global_memory_size)
-//         );
-//     }
-//     else
-//     {
-//         shared_memory_size_mine = total_memory_size;
-//         use_global_memory = false;
+        CUDA_CHECK_AND_EXIT(
+            cudaMalloc(&global_memory_buffer, total_global_memory_size)
+        );
+    }
+    else
+    {
+        shared_memory_size_mine = total_memory_size;
+        use_global_memory = false;
 
-//         num_blocks_run = (inputs.band_info)->num_bands;
-//     }
+        num_blocks_run = inputs.num_swap_setups;
+    }
 
-//     CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
-//         make_tempering_swap<FFT>,
-//         cudaFuncAttributeMaxDynamicSharedMemorySize,
-//         shared_memory_size_mine));
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
+        make_tempering_swap<FFT>,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        shared_memory_size_mine));
 
-//     GalacticBinaryParams *params_curr_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&params_curr_d, sizeof(GalacticBinaryParams)));
+    GalacticBinaryParams *params_curr_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&params_curr_d, sizeof(GalacticBinaryParams)));
     
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(params_curr_d, inputs.params_curr, sizeof(GalacticBinaryParams), cudaMemcpyHostToDevice));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(params_curr_d, inputs.params_curr, sizeof(GalacticBinaryParams), cudaMemcpyHostToDevice));
 
-//     DataPackage *data_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&data_d, sizeof(DataPackage)));
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(data_d, inputs.data, sizeof(DataPackage), cudaMemcpyHostToDevice));
+    DataPackage *data_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&data_d, sizeof(DataPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(data_d, inputs.data, sizeof(DataPackage), cudaMemcpyHostToDevice));
 
-//     BandPackage *band_info_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&band_info_d, sizeof(BandPackage)));
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(band_info_d, inputs.band_info, sizeof(BandPackage), cudaMemcpyHostToDevice));
+    BandPackage *band_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&band_info_d, sizeof(BandPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(band_info_d, inputs.band_info, sizeof(BandPackage), cudaMemcpyHostToDevice));
     
-//     MCMCInfo *mcmc_info_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&mcmc_info_d, sizeof(MCMCInfo)));
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(mcmc_info_d, inputs.mcmc_info, sizeof(MCMCInfo), cudaMemcpyHostToDevice));
+    MCMCInfo *mcmc_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&mcmc_info_d, sizeof(MCMCInfo)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(mcmc_info_d, inputs.mcmc_info, sizeof(MCMCInfo), cudaMemcpyHostToDevice));
     
-//     PriorPackage *prior_info_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&prior_info_d, sizeof(PriorPackage)));
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(prior_info_d, inputs.prior_info, sizeof(PriorPackage), cudaMemcpyHostToDevice));
+    PriorPackage *prior_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&prior_info_d, sizeof(PriorPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(prior_info_d, inputs.prior_info, sizeof(PriorPackage), cudaMemcpyHostToDevice));
     
-//     int nblocks_curand_setup = std::ceil((num_blocks_run + 32 - 1) / 32);
-//     std::cout << "check " << 32 << std::endl; 
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&(inputs.stretch_info->curand_states), num_blocks_run * sizeof(curandState)));
+    int nblocks_curand_setup = std::ceil((num_blocks_run + 32 - 1) / 32);
+    std::cout << "check " << 32 << std::endl; 
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&(inputs.stretch_info->curand_states), num_blocks_run * sizeof(curandState)));
     
-//     // setup the random in-kernel generator
-//     setup_curand_states<<<nblocks_curand_setup, 32>>>(inputs.stretch_info->curand_states, num_blocks_run);
-//     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-//     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    // setup the random in-kernel generator
+    setup_curand_states<<<nblocks_curand_setup, 32>>>(inputs.stretch_info->curand_states, num_blocks_run);
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-
-//     StretchProposalPackage *stretch_info_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&stretch_info_d, sizeof(StretchProposalPackage)));
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(stretch_info_d, inputs.stretch_info, sizeof(StretchProposalPackage), cudaMemcpyHostToDevice));
+    std::cout << "check middle" << 32 << std::endl; 
     
-//     PeriodicPackage *periodic_info_d;
-//     CUDA_CHECK_AND_EXIT(cudaMalloc(&periodic_info_d, sizeof(PeriodicPackage)));
-//     CUDA_CHECK_AND_EXIT(cudaMemcpy(periodic_info_d, inputs.periodic_info, sizeof(PeriodicPackage), cudaMemcpyHostToDevice));
+
+    StretchProposalPackage *stretch_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&stretch_info_d, sizeof(StretchProposalPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(stretch_info_d, inputs.stretch_info, sizeof(StretchProposalPackage), cudaMemcpyHostToDevice));
     
-//     std::cout << "before real kernel " << num_blocks_run << std::endl; 
+    PeriodicPackage *periodic_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&periodic_info_d, sizeof(PeriodicPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(periodic_info_d, inputs.periodic_info, sizeof(PeriodicPackage), cudaMemcpyHostToDevice));
     
-//     //  Invokes kernel with FFT::block_dim threads in CUDA block
-//     make_tempering_swap<FFT><<<num_blocks_run, FFT::block_dim, shared_memory_size_mine>>>(
-//         data_d,
-//         band_info_d,
-//         params_curr_d,
-//         mcmc_info_d,
-//         prior_info_d,
-//         stretch_info_d,
-//         periodic_info_d,
-//         use_global_memory,
-//         global_memory_buffer
-//     );
+    SingleBand *bands;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&bands, (inputs.band_info)->num_bands * sizeof(SingleBand)));
 
-//     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-//     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    std::cout << "before setup kernel " << num_blocks_run << std::endl; 
+    int num_blocks_band_setup = std::ceil(((inputs.band_info)->num_bands + 32 - 1) / 32);
+    setup_single_bands<<<num_blocks_band_setup, 32>>>(
+        bands, band_info_d, params_curr_d, mcmc_info_d
+    );
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-//     std::cout << "after real kernel " << 32 << std::endl; 
+    std::cout << "before real kernel " << num_blocks_run << std::endl; 
     
-//     // if (inputs.do_synchronize)
-//     // {
-//     //     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-//     // }
+    //  Invokes kernel with FFT::block_dim threads in CUDA block
+    make_tempering_swap<FFT><<<num_blocks_run, FFT::block_dim, shared_memory_size_mine>>>(
+        data_d,
+        band_info_d,
+        params_curr_d,
+        mcmc_info_d,
+        prior_info_d,
+        stretch_info_d,
+        periodic_info_d,
+        bands,
+        inputs.num_swap_setups,
+        use_global_memory,
+        global_memory_buffer
+    );
 
-//     // std::cout << "output [1st FFT]:\n";
-//     // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
-//     //     std::cout << data[i].x << " " << data[i].y << std::endl;
-//     // }
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-//     // std::cout << shared_memory_size << std::endl;
-//     // std::cout << "Success" <<  std::endl;
-//     CUDA_CHECK_AND_EXIT(cudaFree(params_curr_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree(data_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree(band_info_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree(mcmc_info_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree(prior_info_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree(stretch_info_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree(periodic_info_d));
-//     CUDA_CHECK_AND_EXIT(cudaFree((inputs.stretch_info->curand_states)));
+    std::cout << "after real kernel " << 32 << std::endl; 
+    
+    // if (inputs.do_synchronize)
+    // {
+    //     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    // }
 
-//     if (use_global_memory)
-//     {
-//         CUDA_CHECK_AND_EXIT(cudaFree(global_memory_buffer));
-//     }
-// }
+    // std::cout << "output [1st FFT]:\n";
+    // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //     std::cout << data[i].x << " " << data[i].y << std::endl;
+    // }
 
-// template <unsigned int Arch, unsigned int N>
-// struct make_tempering_swap_wrap_functor
-// {
-//     void operator()(InputInfo inputs) { return make_tempering_swap_wrap<Arch, N>(inputs); }
-// };
+    // std::cout << shared_memory_size << std::endl;
+    // std::cout << "Success" <<  std::endl;
+    CUDA_CHECK_AND_EXIT(cudaFree(params_curr_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(data_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(band_info_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(mcmc_info_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(prior_info_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(stretch_info_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(periodic_info_d));
+    CUDA_CHECK_AND_EXIT(cudaFree((inputs.stretch_info->curand_states)));
+    CUDA_CHECK_AND_EXIT(cudaFree(bands));
 
-// void SharedMemoryMakeTemperingMove(
-//     DataPackage *data,
-//     BandPackage *band_info,
-//     GalacticBinaryParams *params_curr,
-//     MCMCInfo *mcmc_info,
-//     PriorPackage *prior_info,
-//     StretchProposalPackage *stretch_info,
-//     PeriodicPackage *periodic_info,
-//     int device,
-//     bool do_synchronize
-// )
-// {
+    if (use_global_memory)
+    {
+        CUDA_CHECK_AND_EXIT(cudaFree(global_memory_buffer));
+    }
+}
 
-//     InputInfo inputs;
+template <unsigned int Arch, unsigned int N>
+struct make_tempering_swap_wrap_functor
+{
+    void operator()(InputInfo inputs) { return make_tempering_swap_wrap<Arch, N>(inputs); }
+};
 
-//     inputs.data = data;
-//     inputs.band_info = band_info;
-//     inputs.params_curr = params_curr;
-//     inputs.mcmc_info = mcmc_info;
-//     inputs.prior_info = prior_info;
-//     inputs.stretch_info = stretch_info;
-//     inputs.periodic_info = periodic_info;
-//     inputs.device = device;
-//     inputs.do_synchronize = do_synchronize;
+void SharedMemoryMakeTemperingMove(
+    DataPackage *data,
+    BandPackage *band_info,
+    GalacticBinaryParams *params_curr,
+    MCMCInfo *mcmc_info,
+    PriorPackage *prior_info,
+    StretchProposalPackage *stretch_info,
+    PeriodicPackage *periodic_info,
+    int num_swap_setups,
+    int device,
+    bool do_synchronize
+)
+{
 
-//     switch (params_curr->N)
-//     {
-//     // All SM supported by cuFFTDx
-//     case 32:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 32>(inputs);
-//         return;
-//     case 64:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 64>(inputs);
-//         return;
-//     case 128:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 128>(inputs);
-//         return;
-//     case 256:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 256>(inputs);
-//         return;
-//     case 512:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 512>(inputs);
-//         return;
-//     case 1024:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 1024>(inputs);
-//         return;
-//     case 2048:
-//         example::sm_runner<make_tempering_swap_wrap_functor, 2048>(inputs);
-//         return;
+    InputInfo inputs;
 
-//     default:
-//     {
-//         throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
-//     }
-//     }
+    inputs.data = data;
+    inputs.band_info = band_info;
+    inputs.params_curr = params_curr;
+    inputs.mcmc_info = mcmc_info;
+    inputs.prior_info = prior_info;
+    inputs.stretch_info = stretch_info;
+    inputs.periodic_info = periodic_info;
+    inputs.num_swap_setups = num_swap_setups;
+    inputs.device = device;
+    inputs.do_synchronize = do_synchronize;
 
-//     // const unsigned int arch = example::get_cuda_device_arch();
-//     // simple_block_fft<800>(x);
-// }
+    switch (params_curr->N)
+    {
+    // All SM supported by cuFFTDx
+    case 32:
+        example::sm_runner<make_tempering_swap_wrap_functor, 32>(inputs);
+        return;
+    case 64:
+        example::sm_runner<make_tempering_swap_wrap_functor, 64>(inputs);
+        return;
+    case 128:
+        example::sm_runner<make_tempering_swap_wrap_functor, 128>(inputs);
+        return;
+    case 256:
+        example::sm_runner<make_tempering_swap_wrap_functor, 256>(inputs);
+        return;
+    case 512:
+        example::sm_runner<make_tempering_swap_wrap_functor, 512>(inputs);
+        return;
+    case 1024:
+        example::sm_runner<make_tempering_swap_wrap_functor, 1024>(inputs);
+        return;
+    case 2048:
+        example::sm_runner<make_tempering_swap_wrap_functor, 2048>(inputs);
+        return;
+
+    default:
+    {
+        throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
+    }
+    }
+
+    // const unsigned int arch = example::get_cuda_device_arch();
+    // simple_block_fft<800>(x);
+}
 
 
 //////////////////
@@ -4832,7 +5147,13 @@ BandPackage::BandPackage(
     int max_data_store_size_,
     double *fmin_allow_,
     double *fmax_allow_,
-    int *update_data_index_
+    int *update_data_index_,
+    int ntemps_,
+    int *band_ind_,
+    int *walker_ind_,
+    int *temp_ind_,
+    int *swaps_proposed_,
+    int *swaps_accepted_
 )
 {
     data_index = data_index_;
@@ -4846,6 +5167,12 @@ BandPackage::BandPackage(
     fmin_allow = fmin_allow_;
     fmax_allow = fmax_allow_;
     update_data_index = update_data_index_;
+    ntemps = ntemps_;
+    band_ind = band_ind_;
+    walker_ind = walker_ind_;
+    temp_ind = temp_ind_;
+    swaps_proposed = swaps_proposed_;
+    swaps_accepted = swaps_accepted_;
 }
 
 MCMCInfo::MCMCInfo(
@@ -5033,7 +5360,9 @@ StretchProposalPackage::StretchProposalPackage(
     int num_friends_init_,
     int num_proposals_,
     double a_,
-    int ndim_
+    int ndim_,
+    bool *inds_,
+    double *factors_
 )
 {
     snr_friends = snr_friends_;
@@ -5049,6 +5378,8 @@ StretchProposalPackage::StretchProposalPackage(
     num_proposals = num_proposals_;
     a = a_;
     ndim = ndim_;
+    inds = inds_;
+    factors = factors_;
 }
 
 void StretchProposalPackage::dealloc()
@@ -5092,7 +5423,7 @@ void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double 
         (a - 1.0) * curand_uniform_double(&localState) + 1.0
     , 2.0) / a;
 
-    SingleGalacticBinary gb_friend(gb_in.T, gb_in.Soms_d, gb_in.Sa_a, gb_in.Amp, gb_in.alpha, gb_in.sl1, gb_in.kn, gb_in.sl2);
+    SingleGalacticBinary gb_friend(gb_in.N, gb_in.T, gb_in.Soms_d, gb_in.Sa_a, gb_in.Amp, gb_in.alpha, gb_in.sl1, gb_in.kn, gb_in.sl2);
     
     find_friends(&gb_friend, gb_in.f0_ms, localState);
 
@@ -5138,7 +5469,7 @@ void StretchProposalPackage::wrap_change(double *x_prop, const double x_curr, co
 }
 
 CUDA_DEV
-SingleGalacticBinary::SingleGalacticBinary(const double Tobs_, const double Soms_d_, const double Sa_a_, const double Amp_, const double alpha_, const double sl1_, const double kn_, const double sl2_)
+SingleGalacticBinary::SingleGalacticBinary(const int N_, const double Tobs_, const double Soms_d_, const double Sa_a_, const double Amp_, const double alpha_, const double sl1_, const double kn_, const double sl2_)
 {
     Soms_d = Soms_d_;
     Sa_a = Sa_a_;
@@ -5148,6 +5479,7 @@ SingleGalacticBinary::SingleGalacticBinary(const double Tobs_, const double Soms
     sl2 = sl2_;
     kn = kn_;
     T = Tobs_;
+    N = N_;
 }
 
 CUDA_DEV 
@@ -5194,6 +5526,7 @@ double SingleGalacticBinary::sinbeta_transform()
 
 CUDA_HOSTDEV
 void SingleBand::setup(
+    int loc_index_,
     int data_index_,
     int noise_index_,
     int band_start_bin_ind_,
@@ -5204,9 +5537,14 @@ void SingleBand::setup(
     double fmin_allow_,
     double fmax_allow_,
     int update_data_index_,
+    double inv_temp_,
+    int band_ind_,
+    int walker_ind_,
+    int temp_ind_,
     GalacticBinaryParams *gb_params_all
 )
 {
+    loc_index = loc_index_;
     data_index = data_index_;
     noise_index = noise_index_;
     band_start_bin_ind = band_start_bin_ind_;
@@ -5217,6 +5555,10 @@ void SingleBand::setup(
     fmin_allow = fmin_allow_;
     fmax_allow = fmax_allow_;
     update_data_index = update_data_index_;
+    inv_temp = inv_temp_;
+    band_ind = band_ind_;
+    walker_ind = walker_ind_;
+    temp_ind = temp_ind_;
     gb_params = GalacticBinaryParams(
         &(gb_params_all->snr[band_start_bin_ind]),
         &(gb_params_all->f0_ms[band_start_bin_ind]),
