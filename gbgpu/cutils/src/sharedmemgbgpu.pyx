@@ -135,23 +135,24 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         bool do_synchronize
     ) except+
 
-    void SharedMemoryMakeMove(
-        DataPackageWrap *data,
-        BandPackageWrap *band_info,
-        GalacticBinaryParamsWrap *params_curr,
-        GalacticBinaryParamsWrap *params_prop,
-        MCMCInfoWrap *mcmc_info,
-        int device,
-        bool do_synchronize
-    ) except+
+    #void SharedMemoryMakeMove(
+    #    DataPackageWrap *data,
+    #    BandPackageWrap *band_info,
+    #    GalacticBinaryParamsWrap *params_curr,
+    #    GalacticBinaryParamsWrap *params_prop,
+    #    MCMCInfoWrap *mcmc_info,
+    #    int device,
+    #    bool do_synchronize
+    # ) except+
 
     void SharedMemoryMakeNewMove(
         DataPackageWrap *data,
         BandPackageWrap *band_info,
         GalacticBinaryParamsWrap *params_curr,
-        GalacticBinaryParamsWrap *params_prop,
         MCMCInfoWrap *mcmc_info,
         PriorPackageWrap *prior_info,
+        StretchProposalPackageWrap *stretch_info,
+        PeriodicPackageWrap *periodic_info,
         int device,
         bool do_synchronize
     ) except +
@@ -165,20 +166,34 @@ cdef extern from "SharedMemoryGBGPU.hpp":
 
     cdef cppclass GalacticBinaryParamsWrap "GalacticBinaryParams":
         GalacticBinaryParamsWrap(
-            double* amp,
+            double* snr,
             double* f0, 
             double* fdot0, 
-            double* fddot0, 
             double* phi0, 
-            double* iota,
+            double* cosinc,
             double* psi, 
             double* lam,
-            double* theta,
+            double* sinbeta,
+            double* snr_orig,
+            double* f0_orig, 
+            double* fdot0_orig, 
+            double* phi0_orig, 
+            double* cosinc_orig,
+            double* psi_orig, 
+            double* lam_orig,
+            double* sinbeta_orig,
             double T, 
             double dt,
             int N,
             int num_bin_all,
-            int start_freq_ind
+            int start_freq_ind,
+            double Soms_d,
+            double Sa_a, 
+            double Amp,
+            double alpha,
+            double sl1,
+            double kn,
+            double sl2
         )
     cdef cppclass DataPackageWrap "DataPackage":
         DataPackageWrap(
@@ -201,7 +216,10 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             int *band_start_data_ind,
             int *band_data_lengths,
             int num_bands,
-            int max_data_store_size
+            int max_data_store_size,
+            double *fmin_allow,
+            double *fmax_allow,
+            int *update_data_index
         )
 
     cdef cppclass MCMCInfoWrap "MCMCInfo":
@@ -209,15 +227,13 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             cmplx *L_contribution,
             cmplx *p_contribution,
             double *prior_all_curr,
-            double *factors_all,
-            double *random_val_all,
-            bool *accepted_out,
+            int *accepted_out,
             double *band_inv_temperatures_all,
             bool is_rj,
             double snr_lim
         )
     cdef cppclass PriorPackageWrap "PriorPackage":
-        PriorPackageWrap(double f0_min, double f0_max, double fdot_min, double fdot_max, double phi0_min, double phi0_max, double cosinc_min, double cosinc_max, double psi_min, double psi_max, double lam_min, double lam_max, double sinbeta_min, double sinbeta_max);
+        PriorPackageWrap(double rho_star, double f0_min, double f0_max, double fdot_min, double fdot_max, double phi0_min, double phi0_max, double cosinc_min, double cosinc_max, double psi_min, double psi_max, double lam_min, double lam_max, double sinbeta_min, double sinbeta_max);
 
     cdef cppclass PeriodicPackageWrap "PeriodicPackage":
         PeriodicPackageWrap(double phi0_period, double psi_period, double lam_period);
@@ -232,9 +248,14 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             double* psi_friends, 
             double* lam_friends,
             double* beta_friends,
-            double* z,
-            double* factors
+            int nfriends,
+            int num_friends_init,
+            int num_proposals,
+            double a,
+            int ndim
         );
+
+        void dealloc();
 
 
 cdef class pyStretchProposalPackage:
@@ -253,8 +274,11 @@ cdef class pyStretchProposalPackage:
             psi_friends, 
             lam_friends,
             beta_friends,
-            z,
-            factors
+            nfriends,
+            num_friends_init,
+            num_proposals,
+            a,
+            ndim
         ), tkwargs = wrapper(*args, **kwargs)
 
         cdef size_t amp_friends_in = amp_friends
@@ -265,9 +289,7 @@ cdef class pyStretchProposalPackage:
         cdef size_t psi_friends_in = psi_friends
         cdef size_t lam_friends_in = lam_friends
         cdef size_t beta_friends_in = beta_friends
-        cdef size_t z_in = z
-        cdef size_t factors_in = factors
-
+        
         self.g = new StretchProposalPackageWrap(
             <double*> amp_friends_in,
             <double*> f0_friends_in, 
@@ -277,14 +299,18 @@ cdef class pyStretchProposalPackage:
             <double*> psi_friends_in, 
             <double*> lam_friends_in,
             <double*> beta_friends_in,
-            <double*> z_in,
-            <double*> factors_in
+            nfriends,
+            num_friends_init,
+            num_proposals,
+            a,
+            ndim
         )
 
     def g_in(self):
         return <uintptr_t>self.g
 
     def __dealloc__(self):
+        self.g.dealloc()
         if self.g:
             del self.g
 
@@ -312,11 +338,11 @@ cdef class pyPriorPackage:
     cdef PriorPackageWrap *g
 
     def __cinit__(self, 
-        f0_min, f0_max, fdot_min, fdot_max, phi0_min, phi0_max, cosinc_min, cosinc_max, psi_min, psi_max, lam_min, lam_max, sinbeta_min, sinbeta_max
+        rho_star, f0_min, f0_max, fdot_min, fdot_max, phi0_min, phi0_max, cosinc_min, cosinc_max, psi_min, psi_max, lam_min, lam_max, sinbeta_min, sinbeta_max
     ):
     
         self.g = new PriorPackageWrap(
-            f0_min, f0_max, fdot_min, fdot_max, phi0_min, phi0_max, cosinc_min, cosinc_max, psi_min, psi_max, lam_min, lam_max, sinbeta_min, sinbeta_max
+            rho_star, f0_min, f0_max, fdot_min, fdot_max, phi0_min, phi0_max, cosinc_min, cosinc_max, psi_min, psi_max, lam_min, lam_max, sinbeta_min, sinbeta_max
         )
 
     def g_in(self):
@@ -338,8 +364,6 @@ cdef class pyMCMCInfo:
             L_contribution,
             p_contribution,
             prior_all_curr,
-            factors_all,
-            random_val_all,
             accepted_out,
             band_inv_temperatures_all,
             is_rj,
@@ -349,8 +373,6 @@ cdef class pyMCMCInfo:
         cdef size_t L_contribution_in = L_contribution
         cdef size_t p_contribution_in = p_contribution
         cdef size_t prior_all_curr_in = prior_all_curr
-        cdef size_t factors_all_in = factors_all
-        cdef size_t random_val_all_in = random_val_all
         cdef size_t accepted_out_in = accepted_out
         cdef size_t band_inv_temperatures_all_in = band_inv_temperatures_all
 
@@ -358,9 +380,7 @@ cdef class pyMCMCInfo:
             <cmplx *>L_contribution_in,
             <cmplx *>p_contribution_in,
             <double *>prior_all_curr_in,
-            <double *>factors_all_in,
-            <double *>random_val_all_in,
-            <bool *>accepted_out_in,
+            <int *>accepted_out_in,
             <double *>band_inv_temperatures_all_in,
             is_rj,
             snr_lim
@@ -390,7 +410,10 @@ cdef class pyBandPackage:
             band_start_data_ind,
             band_data_lengths,
             num_bands,
-            max_data_store_size
+            max_data_store_size,
+            fmin_allow,
+            fmax_allow,
+            update_data_index
         ), tkwargs = wrapper(*args, **kwargs)
 
         cdef size_t data_index_in = data_index
@@ -399,6 +422,9 @@ cdef class pyBandPackage:
         cdef size_t band_num_bins_in = band_num_bins
         cdef size_t band_start_data_ind_in = band_start_data_ind
         cdef size_t band_data_lengths_in = band_data_lengths
+        cdef size_t fmin_allow_in = fmin_allow
+        cdef size_t fmax_allow_in = fmax_allow
+        cdef size_t update_data_index_in = update_data_index
 
         self.g = new BandPackageWrap(
             <int *>data_index_in,
@@ -408,7 +434,10 @@ cdef class pyBandPackage:
             <int *>band_start_data_ind_in,
             <int *>band_data_lengths_in,
             num_bands,
-            max_data_store_size
+            max_data_store_size,
+            <double *>fmin_allow_in,
+            <double *>fmax_allow_in,
+            <int *>update_data_index_in
         )
 
     def g_in(self):
@@ -470,47 +499,83 @@ cdef class pyGalacticBinaryParams:
         **kwargs
     ):
         (
-            amp, 
+            snr, 
             f0, 
             fdot0, 
-            fddot0, 
             phi0, 
-            iota, 
+            cosinc, 
             psi, 
             lam, 
-            theta,
+            sinbeta,
+            snr_orig, 
+            f0_orig, 
+            fdot0_orig, 
+            phi0_orig, 
+            cosinc_orig, 
+            psi_orig, 
+            lam_orig, 
+            sinbeta_orig,
             T,
             dt, 
             N,
             num_bin_all,
-            start_freq_ind
+            start_freq_ind,
+            Soms_d,
+            Sa_a, 
+            Amp,
+            alpha,
+            sl1,
+            kn,
+            sl2
         ), tkwargs = wrapper(*args, **kwargs)
 
-        cdef size_t amp_in = amp
+        cdef size_t snr_in = snr
         cdef size_t f0_in = f0
         cdef size_t fdot0_in = fdot0
-        cdef size_t fddot0_in = fddot0
         cdef size_t phi0_in = phi0
-        cdef size_t iota_in = iota
+        cdef size_t cosinc_in = cosinc
         cdef size_t psi_in = psi
         cdef size_t lam_in = lam
-        cdef size_t theta_in = theta
+        cdef size_t sinbeta_in = sinbeta
+        
+        cdef size_t snr_orig_in = snr_orig
+        cdef size_t f0_orig_in = f0_orig
+        cdef size_t fdot0_orig_in = fdot0_orig
+        cdef size_t phi0_orig_in = phi0_orig
+        cdef size_t cosinc_orig_in = cosinc_orig
+        cdef size_t psi_orig_in = psi_orig
+        cdef size_t lam_orig_in = lam_orig
+        cdef size_t sinbeta_orig_in = sinbeta_orig
 
         self.g = new GalacticBinaryParamsWrap(
-            <double *>amp_in, 
+            <double *>snr_in, 
             <double *>f0_in, 
             <double *>fdot0_in, 
-            <double *>fddot0_in, 
             <double *>phi0_in, 
-            <double *>iota_in,
+            <double *>cosinc_in,
             <double *>psi_in, 
             <double *>lam_in,
-            <double *>theta_in,
+            <double *>sinbeta_in,
+            <double *>snr_orig_in, 
+            <double *>f0_orig_in, 
+            <double *>fdot0_orig_in, 
+            <double *>phi0_orig_in, 
+            <double *>cosinc_orig_in,
+            <double *>psi_orig_in, 
+            <double *>lam_orig_in,
+            <double *>sinbeta_orig_in,
             T, 
             dt,
             N,
             num_bin_all,
-            start_freq_ind
+            start_freq_ind,
+            Soms_d,
+            Sa_a, 
+            Amp,
+            alpha,
+            sl1,
+            kn,
+            sl2
         )
 
     def g_in(self):
@@ -865,33 +930,32 @@ def specialty_piece_wise_likelihoods(
     )   
 
 
-@pointer_adjust
-def SharedMemoryMakeMove_wrap(
-        data,
-        band_info,
-        params_curr,
-        params_prop,
-        mcmc_info,
-        device,
-        do_synchronize
-    ):
+# @pointer_adjust
+# def SharedMemoryMakeMove_wrap(
+#         data,
+#        band_info,
+#        params_curr,
+#        params_prop,
+#        mcmc_info,
+#        device,
+#        do_synchronize
+#    ):
 
-    cdef size_t params_curr_in = params_curr.g_in()
-    cdef size_t params_prop_in = params_prop.g_in()
-    cdef size_t data_in = data.g_in()
-    cdef size_t band_info_in = band_info.g_in()
-    cdef size_t mcmc_info_in = mcmc_info.g_in()
+#    cdef size_t params_curr_in = params_curr.g_in()
+#    cdef size_t params_prop_in = params_prop.g_in()
+#    cdef size_t data_in = data.g_in()
+#    cdef size_t band_info_in = band_info.g_in()
+#    cdef size_t mcmc_info_in = mcmc_info.g_in()
 
-    SharedMemoryMakeMove(
-        <DataPackageWrap *>data_in,
-        <BandPackageWrap *>band_info_in,
-        <GalacticBinaryParamsWrap *>params_curr_in,
-        <GalacticBinaryParamsWrap *>params_prop_in,
-        <MCMCInfoWrap *>mcmc_info_in,
-        device,
-        do_synchronize,
-    )
-
+#    SharedMemoryMakeMove(
+#        <DataPackageWrap *>data_in,
+#        <BandPackageWrap *>band_info_in,
+#        <GalacticBinaryParamsWrap *>params_curr_in,
+#        <GalacticBinaryParamsWrap *>params_prop_in,
+#        <MCMCInfoWrap *>mcmc_info_in,
+#        device,
+#        do_synchronize,
+#    )
 
 
 @pointer_adjust
@@ -899,31 +963,33 @@ def SharedMemoryMakeNewMove_wrap(
         data,
         band_info,
         params_curr,
-        params_prop,
         mcmc_info,
         prior_info,
+        stretch_info,
+        periodic_info,
         device,
         do_synchronize
     ):
 
     cdef size_t params_curr_in = params_curr.g_in()
-    cdef size_t params_prop_in = params_prop.g_in()
     cdef size_t data_in = data.g_in()
     cdef size_t band_info_in = band_info.g_in()
     cdef size_t mcmc_info_in = mcmc_info.g_in()
     cdef size_t prior_info_in = prior_info.g_in()
+    cdef size_t stretch_info_in = stretch_info.g_in()
+    cdef size_t periodic_info_in = periodic_info.g_in()
 
     SharedMemoryMakeNewMove(
         <DataPackageWrap *>data_in,
         <BandPackageWrap *>band_info_in,
         <GalacticBinaryParamsWrap *>params_curr_in,
-        <GalacticBinaryParamsWrap *>params_prop_in,
         <MCMCInfoWrap *>mcmc_info_in,
         <PriorPackageWrap *>prior_info_in,
+        <StretchProposalPackageWrap *> stretch_info_in,
+        <PeriodicPackageWrap *> periodic_info_in,
         device,
         do_synchronize,
     )
-
 
 
 @pointer_adjust

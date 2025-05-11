@@ -4,45 +4,146 @@
 #include "global.h"
 
 #ifdef __CUDACC__
+#include <curand_kernel.h>
+
 #define CUDA_HOSTDEV __host__ __device__
+#define CUDA_DEV __device__
+#define CURANDSTATE curandState
 #else
 #define CUDA_HOSTDEV
+#define CUDA_DEV
+#define CURANDSTATE void*
 #endif
 
-class GalacticBinaryParams{
+class SingleGalacticBinary{
     public:
-        double* amp; 
-        double* f0; 
-        double* fdot0; 
-        double* fddot0; 
-        double* phi0; 
-        double* iota;
-        double* psi; 
-        double* lam;
-        double* theta;
+        double snr; 
+        double f0_ms; 
+        double fdot; 
+        double fddot; 
+        double phi0; 
+        double cosinc;
+        double psi; 
+        double lam;
+        double sinbeta;
+        double f0;
+        double inc;
+        double theta;
+        double amp;
         double T; 
         double dt;
         int N;
         int num_bin_all;
         int start_freq_ind;
+        double Soms_d;
+        double Sa_a;
+        double Amp;
+        double alpha;
+        double sl1;
+        double kn;
+        double sl2;
 
+    CUDA_DEV SingleGalacticBinary(const double Tobs_, const double Soms_d_, const double Sa_a_, const double Amp_, const double alpha_, const double sl1_, const double kn_, const double sl2_);
+    CUDA_DEV void transform();
+    CUDA_DEV double amp_transform();
+    CUDA_DEV double f0_transform();
+    CUDA_DEV double cosinc_transform();
+    CUDA_DEV double sinbeta_transform();
+};
+
+class GalacticBinaryParams{
+    public:
+        double* snr; 
+        double* f0_ms; 
+        double* fdot0; 
+        double* phi0; 
+        double* cosinc;
+        double* psi; 
+        double* lam;
+        double* sinbeta;
+        double* snr_orig; 
+        double* f0_ms_orig; 
+        double* fdot0_orig; 
+        double* phi0_orig; 
+        double* cosinc_orig;
+        double* psi_orig; 
+        double* lam_orig;
+        double* sinbeta_orig;
+        double T; 
+        double dt;
+        int N;
+        int num_bin_all;
+        int start_freq_ind;
+        double Soms_d;
+        double Sa_a;
+        double Amp;
+        double alpha;
+        double sl1;
+        double kn;
+        double sl2;
+
+        CUDA_HOSTDEV
         GalacticBinaryParams(
-            double* amp,
-            double* f0, 
+            double* snr,
+            double* f0_ms, 
             double* fdot0, 
-            double* fddot0, 
             double* phi0, 
-            double* iota,
+            double* cosinc,
             double* psi, 
             double* lam,
-            double* theta,
+            double* sinbeta,
+            double* snr_orig,
+            double* f0_ms_orig, 
+            double* fdot0_orig, 
+            double* phi0_orig, 
+            double* cosinc_orig,
+            double* psi_orig, 
+            double* lam_orig,
+            double* sinbeta_orig,
             double T, 
             double dt,
             int N,
             int num_bin_all,
-            int start_freq_ind
+            int start_freq_ind,
+            double Soms_d,
+            double Sa_a, 
+            double Amp,
+            double alpha,
+            double sl1,
+            double kn,
+            double sl2
         );
 
+};
+
+class SingleBand{
+    public:
+        int data_index;
+        int noise_index;
+        int band_start_bin_ind;
+        int band_num_bins;
+        int band_start_data_ind;
+        int band_data_lengths;
+        int max_data_store_size;
+        double fmin_allow;
+        double fmax_allow;
+        int update_data_index;
+        GalacticBinaryParams gb_params;
+
+        // CUDA_HOSTDEV SingleBand();
+        CUDA_HOSTDEV void setup(
+            int data_index_,
+            int noise_index_,
+            int band_start_bin_ind_,
+            int band_num_bins_,
+            int band_start_data_ind_,
+            int band_data_lengths_,
+            int max_data_store_size_,
+            double fmin_allow_,
+            double fmax_allow_,
+            int update_data_index_,
+            GalacticBinaryParams *gb_params_all
+        );
 };
 
 class DataPackage{
@@ -79,6 +180,9 @@ class BandPackage{
         int *band_data_lengths;
         int num_bands;
         int max_data_store_size;
+        double *fmin_allow;
+        double *fmax_allow;
+        int *update_data_index;
 
         BandPackage(
             int *data_index,
@@ -88,7 +192,10 @@ class BandPackage{
             int *band_start_data_ind,
             int *band_data_lengths,
             int num_bands,
-            int max_data_store_size
+            int max_data_store_size,
+            double *fmin_allow,
+            double *fmax_allow,
+            int *update_data_index
         );
 };
 
@@ -97,9 +204,7 @@ class MCMCInfo{
         cmplx *L_contribution;
         cmplx *p_contribution;
         double *prior_all_curr;
-        double *factors_all;
-        double *random_val_all;
-        bool *accepted_out;
+        int *accepted_out;
         double *band_inv_temperatures_all;
         bool is_rj;
         double snr_lim;
@@ -108,9 +213,7 @@ class MCMCInfo{
             cmplx *L_contribution,
             cmplx *p_contribution,
             double *prior_all_curr,
-            double *factors_all,
-            double *random_val_all,
-            bool *accepted_out,
+            int *accepted_out,
             double *band_inv_temperatures_all,
             bool is_rj,
             double snr_lim
@@ -119,6 +222,7 @@ class MCMCInfo{
 
 class PriorPackage{
     public:
+        double rho_star;
         double f0_min, f0_max;
         double fdot_min, fdot_max;
         double phi0_min, phi0_max;
@@ -127,20 +231,13 @@ class PriorPackage{
         double lam_min, lam_max;
         double sinbeta_min, sinbeta_max;
 
-        PriorPackage(double f0_min, double f0_max, double fdot_min, double fdot_max, double phi0_min, double phi0_max, double cosinc_min, double cosinc_max, double psi_min, double psi_max, double lam_min, double lam_max, double sinbeta_min, double sinbeta_max);
+        PriorPackage(double rho_star, double f0_min, double f0_max, double fdot_min, double fdot_max, double phi0_min, double phi0_max, double cosinc_min, double cosinc_max, double psi_min, double psi_max, double lam_min, double lam_max, double sinbeta_min, double sinbeta_max);
         
         CUDA_HOSTDEV 
         double get_prior_val(
-            const double amp, 
-            const double f0, 
-            const double fdot, 
-            const double phi0, 
-            const double cosinc,
-            const double psi,
-            const double lam,
-            const double sinbeta
+            const SingleGalacticBinary gb_in
         );
-        CUDA_HOSTDEV double get_amp_prior(const double amp);
+        CUDA_HOSTDEV double get_snr_prior(const double snr);
         CUDA_HOSTDEV double get_f0_prior(const double f0);
         CUDA_HOSTDEV double get_fdot_prior(const double fdot);
         CUDA_HOSTDEV double get_phi0_prior(const double phi0);
@@ -157,37 +254,25 @@ class PeriodicPackage{
         double lam_period;
     
         PeriodicPackage(double phi0_period, double psi_period, double lam_period);
-         
-        CUDA_HOSTDEV void wrap(double *x, double x_period);
-};
-
-
-class TransformPackage{
-    public:
-    
-        TransformPackage();
-         
-        CUDA_HOSTDEV void transform(double *amp, double *f0, double *fdot, double *fddot, double *phi0, double *inc, double *psi, double *lam, double *beta);
-        CUDA_HOSTDEV void amp_transform(double *amp, const double f0);
-        CUDA_HOSTDEV void f0_transform(double *f0);
-        CUDA_HOSTDEV void cosinc_transform(double *inc);
-        CUDA_HOSTDEV void sinbeta_transform(double *beta);
-
 };
 
 
 class StretchProposalPackage{
     public:
-        double* amp_friends; 
+        double* snr_friends; 
         double* f0_friends; 
         double* fdot0_friends; 
         double* phi0_friends; 
-        double* iota_friends;
+        double* cosinc_friends;
         double* psi_friends; 
         double* lam_friends;
-        double* beta_friends;
-        double* z;
-        double* factors;
+        double* sinbeta_friends;
+        int nfriends;
+        int num_friends_init;
+        int num_proposals;
+        int ndim;
+        double a;
+        CURANDSTATE *curand_states;
     
         StretchProposalPackage(
             double* amp_friends,
@@ -198,12 +283,18 @@ class StretchProposalPackage{
             double* psi_friends, 
             double* lam_friends,
             double* beta_friends,
-            double* z,
-            double* factors
+            int nfriends,
+            int num_friends_init,
+            int num_proposals,
+            double a,
+            int ndim
         );
          
+        void dealloc();
+        void find_friends(SingleGalacticBinary *gb_out, double f_val_in, CURANDSTATE localState);
+        CUDA_DEV void get_proposal(SingleGalacticBinary *gb_prop, double *factors, CURANDSTATE localState, const SingleGalacticBinary gb_in, const PeriodicPackage periodic_info);
         CUDA_HOSTDEV void direct_change(double *x_prop, const double x_curr, const double x_friend, const double fraction);
-        CUDA_HOSTDEV void wrap_change(double *x_prop, const double x_curr, const double x_friend, const double fraction, const double period, void (*wrap_func)(double *));
+        CUDA_HOSTDEV void wrap_change(double *x_prop, const double x_curr, const double x_friend, const double fraction, const double period);
 };
 
 void SharedMemoryWaveComp(
@@ -277,9 +368,7 @@ typedef struct InputInfoTag{
     cmplx *L_contribution;
     cmplx *p_contribution;
     GalacticBinaryParams *params_curr;
-    GalacticBinaryParams *params_prop;
     double *prior_all_curr;
-    double *prior_all_prop;
     double *factors_all;
     double *random_val_all;
     int *band_start_bin_ind;
@@ -296,6 +385,8 @@ typedef struct InputInfoTag{
     BandPackage *band_info;
     MCMCInfo *mcmc_info;
     PriorPackage *prior_info;
+    StretchProposalPackage *stretch_info;
+    PeriodicPackage *periodic_info;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -413,7 +504,6 @@ void SharedMemoryMakeMove(
     DataPackage *data,
     BandPackage *band_info,
     GalacticBinaryParams *params_curr,
-    GalacticBinaryParams *params_prop,
     MCMCInfo *mcmc_info,
     int device,
     bool do_synchronize
@@ -423,9 +513,10 @@ void SharedMemoryMakeNewMove(
     DataPackage *data,
     BandPackage *band_info,
     GalacticBinaryParams *params_curr,
-    GalacticBinaryParams *params_prop,
     MCMCInfo *mcmc_info,
     PriorPackage *prior_info,
+    StretchProposalPackage *stretch_info,
+    PeriodicPackage *periodic_info,
     int device,
     bool do_synchronize
 );
