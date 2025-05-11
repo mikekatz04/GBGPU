@@ -219,6 +219,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
             cmplx* base_data_E,
             double* psd_A,
             double* psd_E,
+            double* lisasens_A,
+            double* lisasens_E,
             double df,
             int data_length,
             int num_data,
@@ -288,6 +290,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
 
     void check_prior_vals_wrap(double* prior_out, PriorPackageWrap *prior_info, GalacticBinaryParamsWrap *gb_params, int num_func);
     void get_psd_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f) except+
+    void get_lisasens_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
                                double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f) except+
 
 cdef class pyStretchProposalPackage:
@@ -526,6 +530,8 @@ cdef class pyDataPackage:
             base_data_E,
             psd_A,
             psd_E,
+            lisasens_A,
+            lisasens_E,
             df,
             data_length,
             num_data,
@@ -538,6 +544,8 @@ cdef class pyDataPackage:
         cdef size_t base_data_E_in = base_data_E
         cdef size_t psd_A_in = psd_A
         cdef size_t psd_E_in = psd_E
+        cdef size_t lisasens_A_in = lisasens_A
+        cdef size_t lisasens_E_in = lisasens_E
 
         self.g = new DataPackageWrap(
             <cmplx*> data_A_in,
@@ -546,6 +554,8 @@ cdef class pyDataPackage:
             <cmplx*> base_data_E_in,
             <double*> psd_A_in,
             <double*> psd_E_in,
+            <double*> lisasens_A_in,
+            <double*> lisasens_E_in,
             df,
             data_length,
             num_data,
@@ -1172,4 +1182,26 @@ def get_psd_val(Sn_A_out, Sn_E_out, f_arr, noise_index_all, A_Soms_d_in_all, A_S
     cdef size_t sl2_all_in = sl2_all
 
     get_psd_val_wrap(<double *>Sn_A_out_in, <double *>Sn_E_out_in, <double *>f_arr_in, <int *>noise_index_all_in, <double *>A_Soms_d_in_all_in, <double *>A_Sa_a_in_all_in, <double *>E_Soms_d_in_all_in, <double *>E_Sa_a_in_all_in,
+                               <double *>Amp_all_in, <double *>alpha_all_in, <double *>sl1_all_in, <double *>kn_all_in, <double *>sl2_all_in, num_f)
+
+
+@pointer_adjust
+def get_lisasens_val(Sn_A_out, Sn_E_out, f_arr, noise_index_all, A_Soms_d_in_all, A_Sa_a_in_all, E_Soms_d_in_all, E_Sa_a_in_all,
+                               Amp_all, alpha_all, sl1_all, kn_all, sl2_all, num_f):
+    
+    cdef size_t Sn_A_out_in = Sn_A_out
+    cdef size_t Sn_E_out_in = Sn_E_out
+    cdef size_t f_arr_in = f_arr
+    cdef size_t noise_index_all_in = noise_index_all
+    cdef size_t A_Soms_d_in_all_in = A_Soms_d_in_all
+    cdef size_t A_Sa_a_in_all_in = A_Sa_a_in_all
+    cdef size_t E_Soms_d_in_all_in = E_Soms_d_in_all
+    cdef size_t E_Sa_a_in_all_in = E_Sa_a_in_all
+    cdef size_t Amp_all_in = Amp_all
+    cdef size_t alpha_all_in = alpha_all
+    cdef size_t sl1_all_in = sl1_all
+    cdef size_t kn_all_in = kn_all
+    cdef size_t sl2_all_in = sl2_all
+
+    get_lisasens_val_wrap(<double *>Sn_A_out_in, <double *>Sn_E_out_in, <double *>f_arr_in, <int *>noise_index_all_in, <double *>A_Soms_d_in_all_in, <double *>A_Sa_a_in_all_in, <double *>E_Soms_d_in_all_in, <double *>E_Sa_a_in_all_in,
                                <double *>Amp_all_in, <double *>alpha_all_in, <double *>sl1_all_in, <double *>kn_all_in, <double *>sl2_all_in, num_f)
