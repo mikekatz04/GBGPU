@@ -22,16 +22,15 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double T,
         double dt, 
         int N, 
-        int num_bin_all
+        int num_bin_all,
+        int tdi_channel_setup
     ) except+
 
     void SharedMemoryLikeComp(
         cmplx* d_h,
         cmplx* h_h,
-        cmplx* data_A,
-        cmplx* data_E,
-        double* noise_A,
-        double* noise_E,
+        cmplx* data,
+        double* noise,
         int* data_index,
         int* noise_index,
         double* amp, 
@@ -49,8 +48,11 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int num_bin_all,
         int start_freq_ind, 
         int data_length,
+        int tdi_channel_setup,
         int device,
-        bool do_synchronize
+        bool do_synchronize,
+        int num_data,
+        int num_noise
     ) except+
 
     void SharedMemorySwapLikeComp(
@@ -59,10 +61,8 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         cmplx* remove_remove,
         cmplx* add_add,
         cmplx* add_remove,
-        cmplx* data_A,
-        cmplx* data_E,
-        double* noise_A,
-        double* noise_E,
+        cmplx* data,
+        double* noise,
         int* data_index,
         int* noise_index,
         double* amp_add, 
@@ -87,18 +87,20 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind,
+        int *start_freq_inds,
         int data_length,
+        int tdi_channel_setup,
         int device,
-        bool do_synchronize
+        bool do_synchronize,
+        int num_data,
+        int num_noise
     ) except+
 
     void SharedMemoryChiSquaredComp(
         cmplx *h1_h1,
         cmplx *h2_h2,
         cmplx *h1_h2,
-        double *noise_A,
-        double *noise_E,
+        double *noise,
         int *noise_index,
         double *amp,
         double *f0,
@@ -115,13 +117,15 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int num_bin_all,
         int start_freq_ind,
         int data_length,
+        int tdi_channel_setup,
         int device,
-        bool do_synchronize
+        bool do_synchronize,
+        int num_data, 
+        int num_noise
     ) except+
 
     void SharedMemoryGenerateGlobal(
-        cmplx* data_A,
-        cmplx* data_E,
+        cmplx* data,
         int* data_index,
         double* factors,
         double* amp, 
@@ -137,18 +141,17 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind,
+        int *start_freq_inds,
         int data_length,
+        int tdi_channel_setup,
         int device,
         bool do_synchronize
     ) except+
 
     void specialty_piece_wise_likelihoods_wrap(
         double* lnL,
-        cmplx* data_A,
-        cmplx* data_E,
-        double* noise_A,
-        double* noise_E,
+        cmplx* data,
+        double* noise,
         int* data_index,
         int* noise_index,
         int* start_inds,
@@ -157,7 +160,10 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int num_parts,
         int start_freq_ind,
         int data_length,
-        bool do_synchronize
+        int tdi_channel_setup,
+        bool do_synchronize,
+        int num_data, 
+        int num_noise
     ) except+
 
     #void SharedMemoryMakeMove(
@@ -198,7 +204,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int max_val
     ) except +
 
-    void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
+    void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
                     double* Amp_all, double* alpha_all, double* sl1_all, double* kn_all, double* sl2_all, double df, int data_length, int num_data, int num_psds) except+
         
     void compute_logpdf_wrap(double *logpdf_out, int *component_index, double *points,
@@ -713,7 +719,8 @@ def SharedMemoryWaveComp_wrap(
     T,
     dt, 
     N,
-    num_bin_all
+    num_bin_all, 
+    tdi_channel_setup
 ):
     cdef size_t tdi_out_in = tdi_out
     cdef size_t amp_in = amp
@@ -740,7 +747,8 @@ def SharedMemoryWaveComp_wrap(
         T, 
         dt,
         N,
-        num_bin_all
+        num_bin_all,
+        tdi_channel_setup
     )
 
 
@@ -748,10 +756,8 @@ def SharedMemoryWaveComp_wrap(
 def SharedMemoryLikeComp_wrap(
         d_h,
         h_h,
-        data_A,
-        data_E,
-        noise_A,
-        noise_E,
+        data,
+        noise,
         data_index, 
         noise_index,
         amp, 
@@ -769,16 +775,17 @@ def SharedMemoryLikeComp_wrap(
         num_bin_all,
         start_freq_ind,
         data_length,
+        tdi_channel_setup,
         device,
-        do_synchronize
+        do_synchronize,
+        num_data,
+        num_noise
     ):
 
     cdef size_t d_h_in = d_h
     cdef size_t h_h_in = h_h
-    cdef size_t data_A_in = data_A
-    cdef size_t data_E_in = data_E
-    cdef size_t noise_A_in = noise_A
-    cdef size_t noise_E_in = noise_E
+    cdef size_t data_in = data
+    cdef size_t noise_in = noise
     cdef size_t data_index_in = data_index
     cdef size_t noise_index_in = noise_index
     cdef size_t amp_in = amp
@@ -794,10 +801,8 @@ def SharedMemoryLikeComp_wrap(
     SharedMemoryLikeComp(
         <cmplx *> d_h_in,
         <cmplx *> h_h_in,
-        <cmplx *> data_A_in,
-        <cmplx *> data_E_in,
-        <double *> noise_A_in,
-        <double *> noise_E_in,
+        <cmplx *> data_in,
+        <double *> noise_in,
         <int*> data_index_in,
         <int*> noise_index_in,
         <double *>amp_in, 
@@ -815,8 +820,11 @@ def SharedMemoryLikeComp_wrap(
         num_bin_all,
         start_freq_ind,
         data_length,
+        tdi_channel_setup,
         device,
-        do_synchronize
+        do_synchronize,
+        num_data,
+        num_noise
     )
 
 
@@ -827,10 +835,8 @@ def SharedMemorySwapLikeComp_wrap(
         remove_remove,
         add_add,
         add_remove,
-        data_A,
-        data_E,
-        noise_A,
-        noise_E,
+        data,
+        noise,
         data_index, 
         noise_index,
         amp_add, 
@@ -855,10 +861,13 @@ def SharedMemorySwapLikeComp_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_inds,
         data_length,
+        tdi_channel_setup,
         device,
-        do_synchronize
+        do_synchronize,
+        num_data,
+        num_noise
     ):
 
     cdef size_t d_h_remove_in = d_h_remove
@@ -866,10 +875,8 @@ def SharedMemorySwapLikeComp_wrap(
     cdef size_t remove_remove_in = remove_remove
     cdef size_t add_add_in = add_add
     cdef size_t add_remove_in = add_remove
-    cdef size_t data_A_in = data_A
-    cdef size_t data_E_in = data_E
-    cdef size_t noise_A_in = noise_A
-    cdef size_t noise_E_in = noise_E
+    cdef size_t data_in = data
+    cdef size_t noise_in = noise
     cdef size_t data_index_in = data_index
     cdef size_t noise_index_in = noise_index
     cdef size_t amp_add_in = amp_add
@@ -890,6 +897,7 @@ def SharedMemorySwapLikeComp_wrap(
     cdef size_t psi_remove_in = psi_remove
     cdef size_t lam_remove_in = lam_remove
     cdef size_t theta_remove_in = theta_remove
+    cdef size_t start_freq_inds_in = start_freq_inds
 
     SharedMemorySwapLikeComp(
         <cmplx *> d_h_remove_in,
@@ -897,10 +905,8 @@ def SharedMemorySwapLikeComp_wrap(
         <cmplx *> remove_remove_in,
         <cmplx *> add_add_in,
         <cmplx *> add_remove_in,
-        <cmplx *> data_A_in,
-        <cmplx *> data_E_in,
-        <double *> noise_A_in,
-        <double *> noise_E_in,
+        <cmplx *> data_in,
+        <double *> noise_in,
         <int*> data_index_in,
         <int*> noise_index_in,
         <double *>amp_add_in, 
@@ -925,10 +931,13 @@ def SharedMemorySwapLikeComp_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*> start_freq_inds_in,
         data_length,
+        tdi_channel_setup,
         device,
-        do_synchronize
+        do_synchronize,
+        num_data,
+        num_noise
     )
 
 
@@ -938,8 +947,7 @@ def SharedMemoryChiSquaredComp_wrap(
         h1_h1,
         h2_h2,
         h1_h2,
-        noise_A,
-        noise_E,
+        noise,
         noise_index,
         amp, 
         f0, 
@@ -956,15 +964,17 @@ def SharedMemoryChiSquaredComp_wrap(
         num_bin_all,
         start_freq_ind,
         data_length,
+        tdi_channel_setup,
         device,
-        do_synchronize
+        do_synchronize,
+        num_data, 
+        num_noise
     ):
 
     cdef size_t h1_h1_in = h1_h1
     cdef size_t h2_h2_in = h2_h2
     cdef size_t h1_h2_in = h1_h2
-    cdef size_t noise_A_in = noise_A
-    cdef size_t noise_E_in = noise_E
+    cdef size_t noise_in = noise
     cdef size_t noise_index_in = noise_index
     cdef size_t amp_in = amp
     cdef size_t f0_in = f0
@@ -980,8 +990,7 @@ def SharedMemoryChiSquaredComp_wrap(
         <cmplx *> h1_h1_in,
         <cmplx *> h2_h2_in,
         <cmplx *> h1_h2_in,
-        <double *> noise_A_in,
-        <double *> noise_E_in,
+        <double *> noise_in,
         <int*> noise_index_in,
         <double *>amp_in, 
         <double *>f0_in, 
@@ -998,15 +1007,17 @@ def SharedMemoryChiSquaredComp_wrap(
         num_bin_all,
         start_freq_ind,
         data_length,
+        tdi_channel_setup,
         device,
-        do_synchronize
+        do_synchronize,
+        num_data, 
+        num_noise
     )
 
 
 @pointer_adjust
 def SharedMemoryGenerateGlobal_wrap(
-        data_A,
-        data_E,
+        data,
         data_index,
         factors,
         amp, 
@@ -1022,14 +1033,14 @@ def SharedMemoryGenerateGlobal_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_inds,
         data_length,
+        tdi_channel_setup,
         device,
         do_synchronize
     ):
 
-    cdef size_t data_A_in = data_A
-    cdef size_t data_E_in = data_E
+    cdef size_t data_in = data
     cdef size_t data_index_in = data_index
     cdef size_t amp_in = amp
     cdef size_t f0_in = f0
@@ -1041,10 +1052,10 @@ def SharedMemoryGenerateGlobal_wrap(
     cdef size_t lam_in = lam
     cdef size_t theta_in = theta
     cdef size_t factors_in = factors
+    cdef size_t start_freq_inds_in = start_freq_inds
 
     SharedMemoryGenerateGlobal(
-        <cmplx *> data_A_in,
-        <cmplx *> data_E_in,
+        <cmplx *> data_in,
         <int*> data_index_in,
         <double *> factors_in,
         <double *>amp_in, 
@@ -1060,8 +1071,9 @@ def SharedMemoryGenerateGlobal_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*>start_freq_inds_in,
         data_length,
+        tdi_channel_setup,
         device,
         do_synchronize
     )
@@ -1069,10 +1081,8 @@ def SharedMemoryGenerateGlobal_wrap(
 @pointer_adjust
 def specialty_piece_wise_likelihoods(
         lnL,
-        data_A,
-        data_E,
-        noise_A,
-        noise_E,
+        data,
+        noise,
         data_index,
         noise_index,
         start_inds,
@@ -1081,14 +1091,15 @@ def specialty_piece_wise_likelihoods(
         num_parts,
         start_freq_ind,
         data_length,
-        do_synchronize
+        tdi_channel_setup,
+        do_synchronize,
+        num_data, 
+        num_noise
     ):
 
     cdef size_t lnL_in = lnL
-    cdef size_t data_A_in = data_A
-    cdef size_t data_E_in = data_E
-    cdef size_t noise_A_in = noise_A
-    cdef size_t noise_E_in = noise_E
+    cdef size_t data_in = data
+    cdef size_t noise_in = noise
     cdef size_t data_index_in = data_index
     cdef size_t noise_index_in = noise_index
     cdef size_t start_inds_in = start_inds
@@ -1096,10 +1107,8 @@ def specialty_piece_wise_likelihoods(
 
     specialty_piece_wise_likelihoods_wrap(
         <double*> lnL_in,
-        <cmplx*> data_A_in,
-        <cmplx*> data_E_in,
-        <double*> noise_A_in,
-        <double*> noise_E_in,
+        <cmplx*> data_in,
+        <double*> noise_in,
         <int*> data_index_in,
         <int*> noise_index_in,
         <int*> start_inds_in,
@@ -1108,7 +1117,10 @@ def specialty_piece_wise_likelihoods(
         num_parts,
         start_freq_ind,
         data_length,
-        do_synchronize
+        tdi_channel_setup,
+        do_synchronize,
+        num_data, 
+        num_noise
     )   
 
 
@@ -1222,13 +1234,12 @@ def check_prior_vals(prior_vals, prior_info, gb_params, num_func):
 
 
 @pointer_adjust
-def psd_likelihood(like_contrib_final, f_arr, A_data, E_data, data_index_all,  A_Soms_d_in_all,  A_Sa_a_in_all,  E_Soms_d_in_all,  E_Sa_a_in_all, 
+def psd_likelihood(like_contrib_final, f_arr, data, data_index_all,  A_Soms_d_in_all,  A_Sa_a_in_all,  E_Soms_d_in_all,  E_Sa_a_in_all, 
                      Amp_all,  alpha_all,  sl1_all,  kn_all, sl2_all, df, data_length, num_data, num_psds):
 
     cdef size_t like_contrib_final_in = like_contrib_final
     cdef size_t f_arr_in = f_arr
-    cdef size_t A_data_in = A_data
-    cdef size_t E_data_in = E_data
+    cdef size_t data_in = data
     cdef size_t data_index_all_in = data_index_all
     cdef size_t A_Soms_d_in_all_in = A_Soms_d_in_all
     cdef size_t A_Sa_a_in_all_in = A_Sa_a_in_all
@@ -1240,7 +1251,7 @@ def psd_likelihood(like_contrib_final, f_arr, A_data, E_data, data_index_all,  A
     cdef size_t kn_all_in = kn_all
     cdef size_t sl2_all_in = sl2_all
 
-    psd_likelihood_wrap(<double*> like_contrib_final_in, <double*> f_arr_in, <cmplx*> A_data_in, <cmplx*> E_data_in, <int*> data_index_all_in, <double*> A_Soms_d_in_all_in, <double*> A_Sa_a_in_all_in, <double*> E_Soms_d_in_all_in, <double*> E_Sa_a_in_all_in, 
+    psd_likelihood_wrap(<double*> like_contrib_final_in, <double*> f_arr_in, <cmplx*> data_in, <int*> data_index_all_in, <double*> A_Soms_d_in_all_in, <double*> A_Sa_a_in_all_in, <double*> E_Soms_d_in_all_in, <double*> E_Sa_a_in_all_in, 
                     <double*> Amp_all_in, <double*> alpha_all_in, <double*> sl1_all_in, <double*> kn_all_in, <double*> sl2_all_in, df, data_length, num_data, num_psds)
 
 @pointer_adjust

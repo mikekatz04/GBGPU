@@ -15,6 +15,13 @@
 #define CURANDSTATE void*
 #endif
 
+#define TDI_CHANNEL_SETUP_XYZ 1
+#define TDI_CHANNEL_SETUP_AET 2
+#define TDI_CHANNEL_SETUP_AE 3
+
+#define ARRAY_TYPE_DATA 1
+#define ARRAY_TYPE_TEMPLATE 2
+
 class SingleGalacticBinary{
     public:
         double snr; 
@@ -363,7 +370,8 @@ void SharedMemoryWaveComp(
     double T,
     double dt,
     int N, 
-    int num_bin_all
+    int num_bin_all, 
+    int tdi_channel_setup
 );
 
 typedef struct InputInfoTag{
@@ -383,13 +391,12 @@ typedef struct InputInfoTag{
     cmplx *tdi_out;
     cmplx *d_h;
     cmplx *h_h;
-    cmplx *data_A; 
-    cmplx *data_E;
-    double *noise_A;
-    double *noise_E;
+    cmplx *data_arr;
+    double *noise; // invC
     int *data_index;
     int *noise_index;
     int start_freq_ind;
+    int *start_freq_inds;
     int data_length;
     cmplx* d_h_remove;
     cmplx* d_h_add;
@@ -445,15 +452,16 @@ typedef struct InputInfoTag{
     int num_swap_setups;
     int min_val;
     int max_val;
+    int tdi_channel_setup;
+    int num_data; 
+    int num_noise;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
     cmplx* d_h,
     cmplx* h_h,
-    cmplx* data_A,
-    cmplx* data_E,
-    double* noise_A,
-    double* noise_E,
+    cmplx* data,
+    double* noise,
     int* data_index,
     int* noise_index,
     double* amp, 
@@ -471,8 +479,11 @@ void SharedMemoryLikeComp(
     int num_bin_all,
     int start_freq_ind,
     int data_length,
+    int tdi_channel_setup,
     int device,
-    bool do_synchronize
+    bool do_synchronize,
+    int num_data,
+    int num_noise
 );
 
 
@@ -482,10 +493,8 @@ void SharedMemorySwapLikeComp(
     cmplx* remove_remove,
     cmplx* add_add,
     cmplx* add_remove,
-    cmplx* data_A,
-    cmplx* data_E,
-    double* noise_A,
-    double* noise_E,
+    cmplx* data,
+    double* noise,
     int* data_index,
     int* noise_index,
     double* amp_add, 
@@ -510,18 +519,20 @@ void SharedMemorySwapLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
+    int tdi_channel_setup,
     int device,
-    bool do_synchronize
+    bool do_synchronize,
+    int num_data,
+    int num_noise
 );
 
 void SharedMemoryChiSquaredComp(
     cmplx *h1_h1,
     cmplx *h2_h2,
     cmplx *h1_h2,
-    double *noise_A,
-    double *noise_E,
+    double *noise,
     int *noise_index,
     double *amp,
     double *f0,
@@ -538,14 +549,16 @@ void SharedMemoryChiSquaredComp(
     int num_bin_all,
     int start_freq_ind,
     int data_length,
+    int tdi_channel_setup,
     int device,
-    bool do_synchronize
+    bool do_synchronize,
+    int num_data, 
+    int num_noise
 );
 
 
 void SharedMemoryGenerateGlobal(
-    cmplx* data_A,
-    cmplx* data_E,
+    cmplx* data,
     int* data_index,
     double* factors,
     double* amp, 
@@ -561,18 +574,17 @@ void SharedMemoryGenerateGlobal(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
+    int tdi_channel_setup,
     int device,
     bool do_synchronize
 );
 
 void specialty_piece_wise_likelihoods_wrap(
     double* lnL,
-    cmplx* data_A,
-    cmplx* data_E,
-    double* noise_A,
-    double* noise_E,
+    cmplx* data,
+    double* noise,
     int* data_index,
     int* noise_index,
     int* start_inds,
@@ -581,7 +593,10 @@ void specialty_piece_wise_likelihoods_wrap(
     int num_parts,
     int start_freq_ind,
     int data_length,
-    bool do_synchronize
+    int tdi_channel_setup,
+    bool do_synchronize,
+    int num_data, 
+    int num_noise
 );
 
 void SharedMemoryMakeMove(
@@ -622,7 +637,7 @@ void SharedMemoryMakeTemperingMove(
 
 void check_prior_vals_wrap(double* prior_out, PriorPackage *prior_info, GalacticBinaryParams *gb_params, int num_func);
 
-void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
+void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
                     double* Amp_all, double* alpha_all, double* sl1_all, double* kn_all, double* sl2_all, double df, int data_length, int num_data, int num_psds);
 
 void compute_logpdf_wrap(double *logpdf_out, int *component_index, double *points,
