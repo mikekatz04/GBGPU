@@ -45,7 +45,7 @@ class SingleGalacticBinary{
 
     CUDA_DEV SingleGalacticBinary(const int N_, const double Tobs_, const double Soms_d_, const double Sa_a_, const double Amp_, const double alpha_, const double sl1_, const double kn_, const double sl2_);
     CUDA_DEV void transform();
-    CUDA_DEV double amp_transform();
+    CUDA_DEV double amp_transform(double amp, double f0, double Sn_f);
     CUDA_DEV double f0_transform();
     CUDA_DEV double cosinc_transform();
     CUDA_DEV double sinbeta_transform();
@@ -53,7 +53,7 @@ class SingleGalacticBinary{
 
 class GalacticBinaryParams{
     public:
-        double* snr; 
+        double* amp; 
         double* f0_ms; 
         double* fdot0; 
         double* phi0; 
@@ -61,7 +61,7 @@ class GalacticBinaryParams{
         double* psi; 
         double* lam;
         double* sinbeta;
-        double* snr_orig; 
+        double* amp_orig; 
         double* f0_ms_orig; 
         double* fdot0_orig; 
         double* phi0_orig; 
@@ -84,7 +84,7 @@ class GalacticBinaryParams{
 
         CUDA_HOSTDEV
         GalacticBinaryParams(
-            double* snr,
+            double* amp,
             double* f0_ms, 
             double* fdot0, 
             double* phi0, 
@@ -92,7 +92,7 @@ class GalacticBinaryParams{
             double* psi, 
             double* lam,
             double* sinbeta,
-            double* snr_orig,
+            double* amp_orig,
             double* f0_ms_orig, 
             double* fdot0_orig, 
             double* phi0_orig, 
@@ -272,19 +272,19 @@ class PriorPackage{
 
         PriorPackage(double rho_star, double f0_min, double f0_max, double fdot_min, double fdot_max, double phi0_min, double phi0_max, double cosinc_min, double cosinc_max, double psi_min, double psi_max, double lam_min, double lam_max, double sinbeta_min, double sinbeta_max);
         
-        CUDA_HOSTDEV 
+        CUDA_DEV 
         double get_prior_val(
-            const SingleGalacticBinary gb_in, int num_func
+            SingleGalacticBinary gb_in, int num_func, double Sn_f
         );
-        CUDA_HOSTDEV double get_snr_prior(const double snr);
-        CUDA_HOSTDEV double get_f0_prior(const double f0);
-        CUDA_HOSTDEV double get_fdot_prior(const double fdot);
-        CUDA_HOSTDEV double get_phi0_prior(const double phi0);
-        CUDA_HOSTDEV double get_cosinc_prior(const double cosinc);
-        CUDA_HOSTDEV double get_psi_prior(const double psi);
-        CUDA_HOSTDEV double get_lam_prior(const double lam);
-        CUDA_HOSTDEV double get_sinbeta_prior(const double sinbeta);
-        CUDA_HOSTDEV double uniform_dist_logpdf(const double x, const double x_min, const double x_max);
+        CUDA_DEV double get_amp_prior(SingleGalacticBinary gb);
+        CUDA_DEV double get_f0_prior(const double f0);
+        CUDA_DEV double get_fdot_prior(const double fdot);
+        CUDA_DEV double get_phi0_prior(const double phi0);
+        CUDA_DEV double get_cosinc_prior(const double cosinc);
+        CUDA_DEV double get_psi_prior(const double psi);
+        CUDA_DEV double get_lam_prior(const double lam);
+        CUDA_DEV double get_sinbeta_prior(const double sinbeta);
+        CUDA_DEV double uniform_dist_logpdf(const double x, const double x_min, const double x_max);
 };
 
 class PeriodicPackage{
@@ -299,7 +299,7 @@ class PeriodicPackage{
 
 class StretchProposalPackage{
     public:
-        double* snr_friends; 
+        double* amp_friends; 
         double* f0_friends; 
         double* fdot0_friends; 
         double* phi0_friends; 
@@ -591,5 +591,8 @@ void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_dat
 void compute_logpdf_wrap(double *logpdf_out, int *component_index, double *points,
                     double *weights, double *mins, double *maxs, double *means, double *invcovs, double *dets, double *log_Js, 
                     int num_points, int *start_index, int num_components, int ndim);
+
+void get_psd_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f);
 
 #endif // __SHAREDMEMORY_GBGPU_HPP__

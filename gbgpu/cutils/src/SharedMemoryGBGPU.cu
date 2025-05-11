@@ -2361,7 +2361,7 @@ void specialty_piece_wise_likelihoods_wrap(
 //             random_val = mcmc_info->random_val_all[current_binary_start_index];
 
 //             // get the parameters to add and remove
-//             amp_curr = params_curr->snr[current_binary_start_index];
+//             amp_curr = params_curr->amp[current_binary_start_index];
 //             f0_curr = params_curr->f0_ms[current_binary_start_index];
 //             fdot0_curr = params_curr->fdot0[current_binary_start_index];
 //             phi0_curr = params_curr->phi0[current_binary_start_index];
@@ -3000,6 +3000,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     double ll_diff, lp_diff;
     double prior_curr, prior_prop, factors, lnpdiff;
     bool accept;
+    double psd_val_prior;
     __shared__ int bin_i_gen;
     __shared__ curandState localState;
     __shared__ double random_val;
@@ -3021,6 +3022,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     int lower_start_ind, upper_start_ind, lower_end_ind, upper_end_ind;
     bool is_add_lower;
     int total_i_vals;
+    int f0_ind = 0;
 
     cmplx h_A, h_E, h_A_add, h_E_add, h_A_remove, h_E_remove;
     int real_ind, real_ind_add, real_ind_remove;
@@ -3087,7 +3089,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             current_binary_start_index = band_here.band_start_bin_ind + bin_i;
             // get the parameters to add and remove
             
-            curr_binary.snr = band_here.gb_params.snr[bin_i];
+            curr_binary.amp = band_here.gb_params.amp[bin_i];
             curr_binary.f0_ms = band_here.gb_params.f0_ms[bin_i];
             curr_binary.fdot = band_here.gb_params.fdot0[bin_i];
             curr_binary.phi0 = band_here.gb_params.phi0[bin_i];
@@ -3102,7 +3104,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 rj_is_there_already = stretch_info.inds[band_here.band_start_bin_ind + bin_i];
                 if (!rj_is_there_already)
                 {
-                    curr_binary.snr = 1e-20;
+                    curr_binary.amp = 1e-50;
                 }
             }
 
@@ -3178,7 +3180,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             
             current_binary_start_index = band_here.band_start_bin_ind + bin_i_gen;
 
-            curr_binary.snr = band_here.gb_params.snr[bin_i_gen];
+            curr_binary.amp = band_here.gb_params.amp[bin_i_gen];
             curr_binary.f0_ms = band_here.gb_params.f0_ms[bin_i_gen];
             curr_binary.fdot = band_here.gb_params.fdot0[bin_i_gen];
             curr_binary.phi0 = band_here.gb_params.phi0[bin_i_gen];
@@ -3187,13 +3189,24 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             curr_binary.lam = band_here.gb_params.lam[bin_i_gen];
             curr_binary.sinbeta = band_here.gb_params.sinbeta[bin_i_gen];
 
-            // if (threadIdx.x == 0) printf("curr: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i_gen, curr_binary.snr, curr_binary.f0_ms, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.cosinc, curr_binary.psi, curr_binary.lam, curr_binary.sinbeta);
+            // if (threadIdx.x == 0) printf("curr: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i_gen, curr_binary.amp, curr_binary.f0_ms, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.cosinc, curr_binary.psi, curr_binary.lam, curr_binary.sinbeta);
 
             if (!mcmc_info.is_rj)
             {
                 stretch_info.get_proposal(&prop_binary, &factors, localState, curr_binary, periodic_info);
                 prior_curr = mcmc_info.prior_all_curr[current_binary_start_index];
-                prior_prop = prior_info.get_prior_val(prop_binary, 100);
+                
+                f0_ind = (int)floor((prop_binary.f0_ms / 1e3) * prop_binary.T);
+                if ((f0_ind > 0) && (f0_ind < data.data_length - 1))
+                {
+                    psd_val_prior = ((data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.psd_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((prop_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.psd_A[band_here.noise_index * data.data_length + f0_ind]);
+                    // if ((threadIdx.x == 0) && (blockIdx.x < 5)) printf("PSD: %.12e %.12e %.12e %.12e %.12e %.12e\n", (prop_binary.f0_ms / 1e3) - (data.df * f0_ind), (prop_binary.f0_ms / 1e3), (data.df * f0_ind), data.psd_A[band_here.noise_index * data.data_length + f0_ind], psd_val_prior, data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1]);
+                }
+                else
+                {
+                    psd_val_prior = -100.0;
+                }
+                prior_prop = prior_info.get_prior_val(prop_binary, 100, psd_val_prior);
             }
             else
             { 
@@ -3203,21 +3216,40 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                 if (rj_is_there_already)
                 {
-                    prop_binary.snr = 1e-20;
-                    prior_curr = prior_info.get_prior_val(curr_binary, 100);
+                    prop_binary.amp = 1e-50;
+                    f0_ind = (int)floor((curr_binary.f0_ms / 1e3) * curr_binary.T);
+                    if ((f0_ind > 0) && (f0_ind < data.data_length - 1))
+                    {
+                        psd_val_prior = ((data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.psd_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((curr_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.psd_A[band_here.noise_index * data.data_length + f0_ind]);
+                    }
+                    else
+                    {
+                        psd_val_prior = -100.0;
+                    }
+                    prior_curr = prior_info.get_prior_val(curr_binary, 100, psd_val_prior);
                     prior_prop = 0.0;
                 }
                 else
                 {
-                    curr_binary.snr = 1e-20;
+                    curr_binary.amp = 1e-50;
                     prior_curr = 0.0;
-                    prior_prop = prior_info.get_prior_val(prop_binary, 100);
+                    f0_ind = (int)floor((prop_binary.f0_ms / 1e3) * prop_binary.T);
+                    if ((f0_ind > 0) && (f0_ind < data.data_length - 1))
+                    {
+                        psd_val_prior = ((data.psd_A[band_here.noise_index * data.data_length + f0_ind + 1] - data.psd_A[band_here.noise_index * data.data_length + f0_ind]) / data.df * ((prop_binary.f0_ms / 1e3) - (data.df * f0_ind)) + data.psd_A[band_here.noise_index * data.data_length + f0_ind]);
+                    }
+                    else
+                    {
+                        psd_val_prior = -100.0;
+                    }
+                    prior_prop = prior_info.get_prior_val(prop_binary, 100, psd_val_prior);
                 }
             }
 
             lp_diff = prior_prop - prior_curr;
             
-            // if (threadIdx.x == 0) printf("prop: %d %e %e %e %e %e %e %e %e %e %e %e %e\n", band_i, prior_prop, band_here.fmin_allow, band_here.fmax_allow, prop_binary.snr, prop_binary.f0_ms, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.cosinc, prop_binary.psi, prop_binary.lam, prop_binary.sinbeta);
+            // if ((threadIdx.x == 0) && (blockIdx.x < 10)) printf("%e %e %e\n", lp_diff, prior_prop, prior_curr);
+            // if (threadIdx.x == 0) printf("prop: %d %e %e %e %e %e %e %e %e %e %e %e %e\n", band_i, prior_prop, band_here.fmin_allow, band_here.fmax_allow, prop_binary.amp, prop_binary.f0_ms, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.cosinc, prop_binary.psi, prop_binary.lam, prop_binary.sinbeta);
 
             if ((prior_prop > -1e100) && (prop_binary.f0_ms / 1e3 >= band_here.fmin_allow) && (prop_binary.f0_ms / 1e3 <= band_here.fmax_allow) && (abs(curr_binary.f0_ms - prop_binary.f0_ms) / 1e3 < (band_here.gb_params.N * df / 2.)))
             { 
@@ -3678,7 +3710,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     // do not need to adjust data as this one is already in there
                     mcmc_info.prior_all_curr[current_binary_start_index] = prior_prop;
 
-                    band_here.gb_params.snr[bin_i_gen] = prop_binary.snr;
+                    band_here.gb_params.amp[bin_i_gen] = prop_binary.amp;
                     band_here.gb_params.f0_ms[bin_i_gen] = prop_binary.f0_ms;
                     band_here.gb_params.fdot0[bin_i_gen] = prop_binary.fdot;
                     band_here.gb_params.phi0[bin_i_gen] = prop_binary.phi0;
@@ -3837,7 +3869,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 current_binary_start_index = band_here.band_start_bin_ind + bin_i;
                 // get the parameters to add and remove
                 
-                curr_binary.snr = band_here.gb_params.snr_orig[bin_i];
+                curr_binary.amp = band_here.gb_params.amp_orig[bin_i];
                 curr_binary.f0_ms = band_here.gb_params.f0_ms_orig[bin_i];
                 curr_binary.fdot = band_here.gb_params.fdot0_orig[bin_i];
                 curr_binary.phi0 = band_here.gb_params.phi0_orig[bin_i];
@@ -3855,16 +3887,16 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
 
                 //     if (!rj_is_there_already)
                 //     {
-                //         curr_binary.snr = 1e-20;
+                //         curr_binary.amp = 1e-20;
                 //     }
                 //     else
                 //     {
-                //         prop_binary.snr = 1e-20;
+                //         prop_binary.amp = 1e-20;
                 //     }
                 // }
                 // else
                 // {
-                prop_binary.snr = band_here.gb_params.snr[bin_i];
+                prop_binary.amp = band_here.gb_params.amp[bin_i];
                 prop_binary.f0_ms = band_here.gb_params.f0_ms[bin_i];
                 prop_binary.fdot = band_here.gb_params.fdot0[bin_i];
                 prop_binary.phi0 = band_here.gb_params.phi0[bin_i];
@@ -4045,7 +4077,7 @@ void extract_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBin
         //     band_info->fmin_allow[band_i],
         //     band_info->fmax_allow[band_i],
         //     band_info->update_data_index[band_i],
-        //     gb_params_all->snr[band_info->band_start_data_ind[band_i]]);
+        //     gb_params_all->amp[band_info->band_start_data_ind[band_i]]);
 
         band_info->loc_index[band_i] = band_here.loc_index;
         band_info->band_start_bin_ind[band_i] = band_here.band_start_bin_ind;
@@ -4440,7 +4472,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                 current_binary_start_index = band_here_i->band_start_bin_ind + bin_i;
                 // get the parameters to add and remove
                 
-                curr_binary.snr = band_here_i->gb_params.snr[bin_i];
+                curr_binary.amp = band_here_i->gb_params.amp[bin_i];
                 curr_binary.f0_ms = band_here_i->gb_params.f0_ms[bin_i];
                 curr_binary.fdot = band_here_i->gb_params.fdot0[bin_i];
                 curr_binary.phi0 = band_here_i->gb_params.phi0[bin_i];
@@ -4550,7 +4582,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                     current_binary_start_index = band_here_tmp->band_start_bin_ind + bin_i;
                     // get the parameters to add and remove
                     
-                    curr_binary.snr = band_here_tmp->gb_params.snr[bin_i];
+                    curr_binary.amp = band_here_tmp->gb_params.amp[bin_i];
                     curr_binary.f0_ms = band_here_tmp->gb_params.f0_ms[bin_i];
                     curr_binary.fdot = band_here_tmp->gb_params.fdot0[bin_i];
                     curr_binary.phi0 = band_here_tmp->gb_params.phi0[bin_i];
@@ -4662,7 +4694,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                     current_binary_start_index = band_here_i->band_start_bin_ind + bin_i;
                     // get the parameters to add and remove
                     
-                    curr_binary.snr = band_here_i->gb_params.snr[bin_i];
+                    curr_binary.amp = band_here_i->gb_params.amp[bin_i];
                     curr_binary.f0_ms = band_here_i->gb_params.f0_ms[bin_i];
                     curr_binary.fdot = band_here_i->gb_params.fdot0[bin_i];
                     curr_binary.phi0 = band_here_i->gb_params.phi0[bin_i];
@@ -4707,7 +4739,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_tempering_swa
                     current_binary_start_index = band_here_i1->band_start_bin_ind + bin_i;
                     // get the parameters to add and remove
                     
-                    curr_binary.snr = band_here_i1->gb_params.snr[bin_i];
+                    curr_binary.amp = band_here_i1->gb_params.amp[bin_i];
                     curr_binary.f0_ms = band_here_i1->gb_params.f0_ms[bin_i];
                     curr_binary.fdot = band_here_i1->gb_params.fdot0[bin_i];
                     curr_binary.phi0 = band_here_i1->gb_params.phi0[bin_i];
@@ -5403,7 +5435,7 @@ void compute_logpdf_wrap(double *logpdf_out, int *component_index, double *point
 
 CUDA_HOSTDEV
 GalacticBinaryParams::GalacticBinaryParams(
-    double* snr_,
+    double* amp_,
     double* f0_ms_, 
     double* fdot0_, 
     double* phi0_, 
@@ -5411,7 +5443,7 @@ GalacticBinaryParams::GalacticBinaryParams(
     double* psi_, 
     double* lam_,
     double* sinbeta_,
-    double* snr_orig_,
+    double* amp_orig_,
     double* f0_ms_orig_, 
     double* fdot0_orig_, 
     double* phi0_orig_, 
@@ -5433,7 +5465,7 @@ GalacticBinaryParams::GalacticBinaryParams(
     double sl2_
 )
 {
-    snr = snr_;
+    amp = amp_;
     f0_ms = f0_ms_;
     fdot0 = fdot0_;
     phi0 = phi0_;
@@ -5441,7 +5473,7 @@ GalacticBinaryParams::GalacticBinaryParams(
     psi = psi_;
     lam = lam_;
     sinbeta = sinbeta_;
-    snr_orig = snr_orig_;
+    amp_orig = amp_orig_;
     f0_ms_orig = f0_ms_orig_;
     fdot0_orig = fdot0_orig_;
     phi0_orig = phi0_orig_;
@@ -5587,16 +5619,18 @@ PriorPackage::PriorPackage(
     sinbeta_max = sinbeta_max_;
 }
 
-CUDA_HOSTDEV
+CUDA_DEV
 double PriorPackage::get_prior_val(
-    const SingleGalacticBinary gb,
-    int num_func
+    SingleGalacticBinary gb,
+    int num_func,
+    double psd_val_prior
 )
 {
     double prior_val_out = 0.0;
 
+    gb.snr = gb.amp_transform(gb.amp, gb.f0_ms / 1e3, psd_val_prior);
     if ((num_func < 0) || (num_func > 7) || (num_func == 0))
-        prior_val_out += get_snr_prior(gb.snr);
+        prior_val_out += get_amp_prior(gb);
     if ((num_func < 0) || (num_func > 7) || (num_func == 1))
         prior_val_out += get_f0_prior(gb.f0_ms);
     if ((num_func < 0) || (num_func > 7) || (num_func == 2))
@@ -5615,16 +5649,19 @@ double PriorPackage::get_prior_val(
     return prior_val_out;
 }
 
-CUDA_HOSTDEV double PriorPackage::get_snr_prior(const double rho)
+CUDA_DEV double PriorPackage::get_amp_prior(SingleGalacticBinary gb)
 {
+    
+    double rho = gb.snr; // amp * 1e21;
+    double Jac = gb.snr / gb.amp;
     if (rho > 0.0)
     {
-        return log(3. * rho / (4. * pow(rho_star, 2.) * pow((1. + rho / (4 * rho_star)), 5)));
+        return log(abs(Jac)) + log(3. * rho / (4. * pow(rho_star, 2.) * pow((1. + rho / (4 * rho_star)), 5)));
     }
     else {return -INFINITY;}
 }
 
-CUDA_HOSTDEV double PriorPackage::uniform_dist_logpdf(const double x, const double x_min, const double x_max)
+CUDA_DEV double PriorPackage::uniform_dist_logpdf(const double x, const double x_min, const double x_max)
 {
     if ((x >= x_min) && (x <= x_max))
     {
@@ -5636,37 +5673,37 @@ CUDA_HOSTDEV double PriorPackage::uniform_dist_logpdf(const double x, const doub
     }
 }
 
-CUDA_HOSTDEV double PriorPackage::get_f0_prior(const double f0)
+CUDA_DEV double PriorPackage::get_f0_prior(const double f0)
 {
     return uniform_dist_logpdf(f0, f0_min, f0_max);
 }
 
-CUDA_HOSTDEV double PriorPackage::get_fdot_prior(const double fdot)
+CUDA_DEV double PriorPackage::get_fdot_prior(const double fdot)
 {
     return uniform_dist_logpdf(fdot, fdot_min, fdot_max);
 }
 
-CUDA_HOSTDEV double PriorPackage::get_phi0_prior(const double phi0)
+CUDA_DEV double PriorPackage::get_phi0_prior(const double phi0)
 {
     return uniform_dist_logpdf(phi0, phi0_min, phi0_max);
 }
 
-CUDA_HOSTDEV double PriorPackage::get_cosinc_prior(const double cosinc)
+CUDA_DEV double PriorPackage::get_cosinc_prior(const double cosinc)
 {
     return uniform_dist_logpdf(cosinc, cosinc_min, cosinc_max);
 }
 
-CUDA_HOSTDEV double PriorPackage::get_psi_prior(const double psi)
+CUDA_DEV double PriorPackage::get_psi_prior(const double psi)
 {
     return uniform_dist_logpdf(psi, psi_min, psi_max);
 }
 
-CUDA_HOSTDEV double PriorPackage::get_lam_prior(const double lam)
+CUDA_DEV double PriorPackage::get_lam_prior(const double lam)
 {
     return uniform_dist_logpdf(lam, lam_min, lam_max);
 }
 
-CUDA_HOSTDEV double PriorPackage::get_sinbeta_prior(const double sinbeta)
+CUDA_DEV double PriorPackage::get_sinbeta_prior(const double sinbeta)
 {
     return uniform_dist_logpdf(sinbeta, sinbeta_min, sinbeta_max);
 }
@@ -5688,7 +5725,7 @@ __global__ void check_prior_vals(double* prior_out, PriorPackage *prior_info, Ga
             gb_params->sl2
         );
         
-        gb.snr = gb_params->snr[bin_i];
+        gb.amp = gb_params->amp[bin_i];
         gb.f0_ms = gb_params->f0_ms[bin_i];
         gb.fdot = gb_params->fdot0[bin_i];
         gb.phi0 = gb_params->phi0[bin_i];
@@ -5697,7 +5734,8 @@ __global__ void check_prior_vals(double* prior_out, PriorPackage *prior_info, Ga
         gb.lam = gb_params->lam[bin_i];
         gb.sinbeta = gb_params->sinbeta[bin_i];
 
-        prior_out[bin_i] = prior_info->get_prior_val(gb, num_func);
+        double psd_val_prior = -100.0;
+        prior_out[bin_i] = prior_info->get_prior_val(gb, num_func, psd_val_prior);
     }
 }
 
@@ -5783,7 +5821,7 @@ int binary_search(double* f_vals, double val, int imin, int imax)
 
 CUDA_HOSTDEV
 StretchProposalPackage::StretchProposalPackage(
-    double* snr_friends_,
+    double* amp_friends_,
     double* f0_friends_, 
     double* fdot0_friends_, 
     double* phi0_friends_, 
@@ -5800,7 +5838,7 @@ StretchProposalPackage::StretchProposalPackage(
     double *factors_
 )
 {
-    snr_friends = snr_friends_;
+    amp_friends = amp_friends_;
     f0_friends = f0_friends_;
     fdot0_friends = fdot0_friends_;
     phi0_friends = phi0_friends_;
@@ -5861,7 +5899,7 @@ void StretchProposalPackage::find_friends(SingleGalacticBinary *gb_out, double f
     if (ind_friend > num_friends_init - 1) ind_friend = num_friends_init - 1;
     if (ind_friend < 0) ind_friend = 0;
 
-    gb_out->snr = snr_friends[ind_friend];
+    gb_out->amp = amp_friends[ind_friend];
     gb_out->f0_ms = f0_friends[ind_friend];
     gb_out->fdot = fdot0_friends[ind_friend];
     gb_out->phi0 = phi0_friends[ind_friend];
@@ -5883,7 +5921,7 @@ void StretchProposalPackage::get_proposal(SingleGalacticBinary *gb_prop, double 
     
     find_friends(&gb_friend, gb_in.f0_ms, localState);
 
-    direct_change(&(gb_prop->snr), gb_in.snr, gb_friend.snr, zz);
+    direct_change(&(gb_prop->amp), gb_in.amp, gb_friend.amp, zz);
     direct_change(&(gb_prop->f0_ms), gb_in.f0_ms, gb_friend.f0_ms, zz);
     direct_change(&(gb_prop->fdot), gb_in.fdot, gb_friend.fdot, zz);
     wrap_change(&(gb_prop->phi0), gb_in.phi0, gb_friend.phi0, zz, periodic_info.phi0_period);
@@ -5946,15 +5984,18 @@ void SingleGalacticBinary::transform()
     theta = sinbeta_transform();
     fddot = 0.0;
     // must be after f0
-    amp = amp_transform();
+    // amp = amp_transform();
 }
 
 CUDA_DEV 
-double  SingleGalacticBinary::amp_transform()
+double  SingleGalacticBinary::amp_transform(double amp, double f0, double Sn_f)
 {
     double f_star = 1 / (2. * M_PI * lisaL) * Clight;
-    double factor = 1./2. * sqrt((T * pow(sin(f0 / f_star), 2.)) / noisepsd_AE(f0, Soms_d * Soms_d, Sa_a * Sa_a, Amp, alpha, sl1, kn, sl2));
-    return snr / factor;
+    if (Sn_f <= 0.0){
+        Sn_f = noisepsd_AE(f0, Soms_d * Soms_d, Sa_a * Sa_a, Amp, alpha, sl1, kn, sl2);
+    }
+    double factor = 1./2. * sqrt((T * pow(sin(f0 / f_star), 2.)) / Sn_f);
+    return amp * factor;
 }
 
 CUDA_DEV 
@@ -6020,7 +6061,7 @@ void SingleBand::setup(
     walker_ind = walker_ind_;
     temp_ind = temp_ind_;
     gb_params = GalacticBinaryParams(
-        &(gb_params_all->snr[band_start_bin_ind]),
+        &(gb_params_all->amp[band_start_bin_ind]),
         &(gb_params_all->f0_ms[band_start_bin_ind]),
         &(gb_params_all->fdot0[band_start_bin_ind]),
         &(gb_params_all->phi0[band_start_bin_ind]),
@@ -6028,7 +6069,7 @@ void SingleBand::setup(
         &(gb_params_all->psi[band_start_bin_ind]),
         &(gb_params_all->lam[band_start_bin_ind]),
         &(gb_params_all->sinbeta[band_start_bin_ind]),
-        &(gb_params_all->snr_orig[band_start_bin_ind]),
+        &(gb_params_all->amp_orig[band_start_bin_ind]),
         &(gb_params_all->f0_ms_orig[band_start_bin_ind]),
         &(gb_params_all->fdot0_orig[band_start_bin_ind]),
         &(gb_params_all->phi0_orig[band_start_bin_ind]),
@@ -6049,6 +6090,64 @@ void SingleBand::setup(
         gb_params_all->kn,
         gb_params_all->sl2
     );
+}
+
+
+
+#define NUM_THREADS_LIKE 256
+__global__ void get_psd_val(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f)
+{
+    int tid = threadIdx.x;
+    int bid = blockIdx.x;
+    int num_blocks = gridDim.x;
+    int noise_index;
+    double A_Soms_d_in, A_Sa_a_in, E_Soms_d_in, E_Sa_a_in, Amp, alpha, sl1, kn, sl2;
+    double f, Sn_A, Sn_E;
+    double A_Soms_d_val, A_Sa_a_val, E_Soms_d_val, E_Sa_a_val;
+    for (int f_i = blockIdx.x * blockDim.x + threadIdx.x; f_i < num_f; f_i += gridDim.x * blockDim.x)
+    {
+        noise_index = noise_index_all[f_i];
+
+        A_Soms_d_in = A_Soms_d_in_all[noise_index];
+        A_Sa_a_in = A_Sa_a_in_all[noise_index];
+        E_Soms_d_in = E_Soms_d_in_all[noise_index];
+        E_Sa_a_in = E_Sa_a_in_all[noise_index];
+        Amp = Amp_all[noise_index];
+        alpha = alpha_all[noise_index];
+        sl1 = sl1_all[noise_index];
+        kn = kn_all[noise_index];
+        sl2 = sl2_all[noise_index];
+        f = f_arr[f_i];
+        
+        A_Soms_d_val = A_Soms_d_in * A_Soms_d_in;
+        A_Sa_a_val = A_Sa_a_in * A_Sa_a_in;
+        E_Soms_d_val = E_Soms_d_in * E_Soms_d_in;
+        E_Sa_a_val = E_Sa_a_in * E_Sa_a_in;
+        Sn_A = noisepsd_AE(f, A_Soms_d_val, A_Sa_a_val, Amp, alpha, sl1, kn, sl2);
+        Sn_E = noisepsd_AE(f, E_Soms_d_val, E_Sa_a_val, Amp, alpha, sl1, kn, sl2);
+
+        // if (Sn_A != Sn_A)
+        // {
+        //     printf("BADDDDD: %d %e %e %e %e %e %e %e %e\n", f_i, f, A_Soms_d_val, A_Sa_a_val, Amp, alpha, sl1, kn, sl2);
+        // }
+
+        Sn_A_out[f_i] = Sn_A;
+        Sn_E_out[f_i] = Sn_E;
+    }
+}
+
+void get_psd_val_wrap(double *Sn_A_out, double *Sn_E_out, double *f_arr, int *noise_index_all, double *A_Soms_d_in_all, double *A_Sa_a_in_all, double *E_Soms_d_in_all, double *E_Sa_a_in_all,
+                               double *Amp_all, double *alpha_all, double *sl1_all, double *kn_all, double *sl2_all, int num_f)
+{
+
+    int num_blocks = std::ceil((num_f + NUM_THREADS_LIKE - 1) / NUM_THREADS_LIKE);
+
+    get_psd_val<<<num_blocks, NUM_THREADS_LIKE>>>(Sn_A_out, Sn_E_out, f_arr, noise_index_all, A_Soms_d_in_all, A_Sa_a_in_all, E_Soms_d_in_all, E_Sa_a_in_all,
+                                               Amp_all, alpha_all, sl1_all, kn_all, sl2_all, num_f);
+
+    cudaDeviceSynchronize();
+    CUDA_CHECK_AND_EXIT(cudaGetLastError());
 }
 
 

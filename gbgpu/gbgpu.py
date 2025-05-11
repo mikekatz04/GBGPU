@@ -33,7 +33,8 @@ try:
     from .cutils.gbgpu_utils import fill_global as fill_global_gpu
     from .cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
     from .cutils.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
-
+    from .cutils.sharedmem import get_psd_val
+    
 except (ModuleNotFoundError, ImportError):
     pass
 
@@ -110,6 +111,7 @@ class GBGPU(object):
             self.pyPeriodicPackage = pyPeriodicPackage
             self.pyStretchProposalPackage = pyStretchProposalPackage
             self.check_prior_vals = check_prior_vals
+            self.get_psd_val = get_psd_val
 
         else:
             self.xp = np
