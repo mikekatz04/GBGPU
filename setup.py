@@ -139,10 +139,7 @@ if run_cuda_install:
             "gcc": [],  # '-g'],
             "nvcc": [
                 "-arch=sm_80",
-                "-gencode=arch=compute_50,code=sm_50",
-                "-gencode=arch=compute_52,code=sm_52",
                 "-gencode=arch=compute_60,code=sm_60",
-                "-gencode=arch=compute_61,code=sm_61",
                 "-gencode=arch=compute_70,code=sm_70",
                 "-gencode=arch=compute_80,code=sm_80",
                 "--default-stream=per-thread",
@@ -152,14 +149,52 @@ if run_cuda_install:
                 "'-fPIC'",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[
-            numpy_include,
-            include_gsl_dir,
-            CUDA["include"],
-            "gbgpu/cutils/include",
-        ],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "include", "cufftdx/include"],
     )
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
+
+    ext_gpu_dict_2 = dict(
+        sources=["gbgpu/cutils/src/SharedMemoryGBGPU.cu", "gbgpu/cutils/src/sharedmemgbgpu.pyx"],
+        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
+        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
+        language="c++",
+        runtime_library_dirs=[CUDA["lib64"]],
+        # This syntax is specific to this build system
+        # we're only going to use certain compiler args with nvcc
+        # and not with gcc the implementation of this trick is in
+        # customize_compiler()
+        extra_compile_args={
+            "gcc": [], # "-std=c99"],  # '-g'],
+            "nvcc": [
+                "-arch=sm_80",
+                #"-gencode=arch=compute_35,code=sm_35",
+                #"-gencode=arch=compute_50,code=sm_50",
+                #"-gencode=arch=compute_52,code=sm_52",
+                #"-gencode=arch=compute_60,code=sm_60",
+                #"-gencode=arch=compute_61,code=sm_61",
+                #"-gencode=arch=compute_70,code=sm_70",
+                #"-gencode=arch=compute_80,code=sm_80",
+                "--default-stream=per-thread",
+                "--ptxas-options=-v",
+                "-c",
+                "--compiler-options",
+                "'-fPIC'",
+                # "-lineinfo",
+                "-Xcompiler",
+                "-fopenmp",
+            ],  # ,"-G", "-g"] # for debugging
+        },
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/cufftdx/include"],
+    )
+    ext_gpu2 = Extension("gbgpu.cutils.sharedmem", **ext_gpu_dict_2)
+
+cu_files = ["gbgpu_utils"]
+pyx_files = ["GBGPU"]
+for fp in cu_files:
+    shutil.copy("src/" + fp + ".cu", "src/" + fp + ".cpp")
+
+for fp in pyx_files:
+    shutil.copy("src/" + fp + ".pyx", "src/" + fp + "_cpu.pyx")
 
 ext_cpu_dict = dict(
     sources=["gbgpu/cutils/src/gbgpu_utils.cpp", "gbgpu/cutils/src/GBGPU_cpu.pyx"],
@@ -174,7 +209,7 @@ ext_cpu_dict = dict(
 ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
-    extensions = [ext_gpu, ext_cpu]
+    extensions = [ext_gpu2, ext_gpu, ext_cpu]
 
 else:
     extensions = [ext_cpu]
