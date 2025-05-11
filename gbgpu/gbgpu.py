@@ -33,7 +33,7 @@ try:
     from .cutils.gbgpu_utils import fill_global as fill_global_gpu
     from .cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
     from .cutils.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
-    from .cutils.sharedmem import get_psd_val, get_lisasens_val
+    from .cutils.sharedmem import get_psd_val, get_lisasens_val, SharedMemoryChiSquaredComp_wrap
     
 except (ModuleNotFoundError, ImportError):
     pass
@@ -113,6 +113,7 @@ class GBGPU(object):
             self.check_prior_vals = check_prior_vals
             self.get_psd_val = get_psd_val
             self.get_lisasens_val = get_lisasens_val
+            self.SharedMemoryChiSquaredComp_wrap = SharedMemoryChiSquaredComp_wrap
 
         else:
             self.xp = np
@@ -1071,6 +1072,170 @@ class GBGPU(object):
 
         except AttributeError:
             return like_out
+
+    def get_chi_sqared(
+        self,
+        params,
+        psd,
+        phase_marginalize=False,
+        start_freq_ind=0,
+        noise_index=None,
+        use_c_implementation=True,
+        N: int=None,
+        T=4 * YEAR,
+        dt=10.0,
+        oversample=1,
+        return_cupy=False,
+        **kwargs,
+    ):
+        """Get batched log likelihood
+
+        Generate the individual log likelihood for a batched set of Galactic binaries.
+        This is also GPU/CPU agnostic.
+
+        Args:
+            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
+                The shape is ``(number of parameters, number of binaries)``.
+            data (length 2 list of 1D or 2D complex128 xp.ndarrays): List of arrays representing the data
+                stream. These should be CuPy arrays if running on the GPU, NumPy
+                arrays if running on a CPU. The list should be [A channel, E channel].
+                Should be 1D if only one data stream is analyzed. If 2D, shape is
+                ``(number of data streams, data_length)``. If 2D,
+                user must also provide ``data_index`` kwarg.
+            psd (length 2 list of 1D or 2D double xp.ndarrays): List of arrays representing
+                the power spectral density (PSD) in the noise.
+                These should be CuPy arrays if running on the GPU, NumPy
+                arrays if running on a CPU. The list should be [A channel, E channel].
+                Should be 1D if only one PSD is analyzed. If 2D, shape is
+                ``(number of PSDs, data_length)``. If 2D,
+                user must also provide ``noise_index`` kwarg.
+            phase_marginalize (bool, optional): If True, marginalize over the initial phase.
+                Default is False.
+            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
+                for the first entry of ``data``/``psd``. This is used if a subset of a full data stream
+                is presented for the computation. If providing mutliple data streams in ``data``, this single
+                start index value will apply to all of them.
+            data_index (1D xp.int32 array, optional): If providing 2D ``data``, need to provide ``data_index``
+                to indicate the data stream associated with each waveform for which the log-Likelihood
+                is being computed. For example, if you have 100 binaries with 5 different data streams,
+                ``data_index`` will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
+                data stream to use for each source.
+                If ``None``, this will be filled with zeros and only analyzed with the first
+                data stream given. Default is ``None``.
+            noise_index (1D xp.int32 array, optional): If providing 2D ``psd``, need to provide ``noise_index``
+                to indicate the PSD associated with each waveform for which the log-Likelihood
+                is being computed. For example, if you have 100 binaries with 5 different PSDs,
+                ``noise_index`` will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
+                PSD to use for each source.
+                If ``None``, this will be filled with zeros and only analyzed with the first
+                PSD given. Default is ``None``.
+            return_cupy (bool, optional): If ``True``, return CuPy array. Default is ``False``.
+            **kwargs (dict, optional): Passes keyword arguments to the :func:`run_wave` method.
+
+        Raises:
+            TypeError: If data arrays are NumPy/CuPy while template arrays are CuPy/NumPy.
+
+        Returns:
+            1D double np.ndarray: Log likelihood values associated with each binary.
+
+        """
+
+        if self.gpus is not None:
+            # set first index gpu device to control main operations
+            self.xp.cuda.runtime.setDevice(self.gpus[0])
+
+        # get number of observation points and adjust T accordingly
+        N_obs = int(T / dt)
+        T = N_obs * dt
+
+        self.num_bin = num_bin = params.shape[0]
+
+        if N is None:
+            # TODO: G
+            N = get_N(self.xp.asarray(params[:, 0]), self.xp.asarray(params[:, 1]), T, oversample=oversample).max().item()
+
+        # else N will be int
+
+        df = self.df = 1. / T
+
+        # get shape of information
+        if not isinstance(psd, self.xp.ndarray):
+            raise NotImplementedError
+
+        num_data, nchannels, data_length = psd.shape
+        
+        if nchannels < 2:
+            raise ValueError("Calculates for A and E channels.")
+        elif nchannels > 2:
+            warnings.warn("Only calculating A and E channels here currently.")
+
+        df = self.df  = 1. / T
+        psd = [dat.copy().flatten() for dat in psd.transpose(1, 0, 2)]
+
+        if noise_index is None:
+            noise_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
+
+        # check that index values are ready for computation
+        assert noise_index.dtype == self.xp.int32
+
+        comparison_length = len(psd[0])
+
+        assert noise_index.max() * data_length <= comparison_length
+
+        num_here = params.shape[0]
+
+        num_comps_all = int(num_here * (num_here + 1) / 2) - num_here
+
+        # initialize Likelihood terms <d|h> and <h|h>
+        h1_h1 = self.xp.zeros(num_comps_all, dtype=self.xp.complex128)
+        h2_h2 = self.xp.zeros(num_comps_all, dtype=self.xp.complex128)        
+        h1_h2 = self.xp.zeros(num_comps_all, dtype=self.xp.complex128)        
+    
+        amp, f0, fdot, fddot, phi0, iota, psi, lam, beta = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params.T]
+        self.num_bin = num_bin = len(amp)
+
+        theta = np.pi / 2 - beta
+
+        gpu = self.xp.cuda.runtime.getDevice()
+        do_synchronize = True
+
+        SharedMemoryChiSquaredComp_wrap(
+            h1_h1,
+            h2_h2,
+            h1_h2,
+            psd[0],
+            psd[1],
+            noise_index,
+            amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N, num_bin, start_freq_ind, data_length, gpu, do_synchronize
+        )
+
+
+        if phase_marginalize:
+            self.non_marg_h1_h2 = h1_h2.copy()
+            try:
+                self.non_marg_h1_h2 = self.non_marg_h1_h2.get()
+            except AttributeError:
+                pass
+
+            h1_h2 = self.xp.abs(h1_h2)
+
+        # store these likelihood terms for later if needed
+        self.h1_h1 = h1_h1
+        self.h2_h2 = h2_h2
+        self.normalized_corr = h1_h2 / np.sqrt(h1_h1 * h2_h2)
+
+        # compute Likelihood
+        chi_squared_out = -1.0 / 2.0 * (h1_h1 + h2_h2 - 2 * h1_h2).real
+
+        if return_cupy:
+            return chi_squared_out
+
+        # back to CPU if on GPU
+        try:
+            return chi_squared_out.get()
+
+        except AttributeError:
+            return chi_squared_out
 
     def fill_global_template(
         self, group_index, templates, A, E, start_inds, N=None, start_freq_ind=0

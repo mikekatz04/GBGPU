@@ -250,6 +250,7 @@ class MCMCInfo{
         int *accepted_out;
         double *band_inv_temperatures_all;
         bool is_rj;
+        bool phase_maximize;
         double snr_lim;
 
         MCMCInfo(
@@ -259,6 +260,7 @@ class MCMCInfo{
             int *accepted_out,
             double *band_inv_temperatures_all,
             bool is_rj,
+            bool phase_maximize,
             double snr_lim
         );
 };
@@ -410,6 +412,9 @@ typedef struct InputInfoTag{
     double* psi_remove; 
     double* lam_remove;
     double* theta_remove;
+    cmplx* h2_h2;
+    cmplx* h1_h1;
+    cmplx* h1_h2;
     int device;
     bool do_synchronize;
     double* factors;
@@ -500,6 +505,32 @@ void SharedMemorySwapLikeComp(
     double* lam_remove,
     double* theta_remove,
     double T, 
+    double dt,
+    int N,
+    int num_bin_all,
+    int start_freq_ind,
+    int data_length,
+    int device,
+    bool do_synchronize
+);
+
+void SharedMemoryChiSquaredComp(
+    cmplx *h1_h1,
+    cmplx *h2_h2,
+    cmplx *h1_h2,
+    double *noise_A,
+    double *noise_E,
+    int *noise_index,
+    double *amp,
+    double *f0,
+    double *fdot0,
+    double *fddot0,
+    double *phi0,
+    double *iota,
+    double *psi,
+    double *lam,
+    double *theta,
+    double T,
     double dt,
     int N,
     int num_bin_all,
