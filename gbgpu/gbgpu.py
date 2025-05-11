@@ -97,7 +97,9 @@ class GBGPU(object):
             self.swap_ll_diff_func = swap_ll_diff_gpu
             self.gpus = gpus
             self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
+            self.psd_likelihood = psd_likelihood
             self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
+            self.compute_logpdf = compute_logpdf
 
         else:
             self.xp = np
@@ -1203,7 +1205,8 @@ class GBGPU(object):
         if N is None:
             # TODO: G
             N = get_N(self.xp.asarray(params[:, 0]), self.xp.asarray(params[:, 1]), T, oversample=oversample)
-
+            if self.xp.any(N == 0):
+                breakpoint()
         else:
             if isinstance(N, self.xp.ndarray):
                 assert params.shape[0] == N.shape[0]
@@ -1695,6 +1698,7 @@ class GBGPU(object):
                 self.xp.cuda.runtime.deviceSynchronize()
 
             else:
+                raise NotImplementedError("Need to check this code. Not ready for use.")
                 amp_add, f0_add, fdot_add, fddot_add, phi0_add, iota_add, psi_add, lam_add, beta_add = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_add.T]
 
                 amp_remove, f0_remove, fdot_remove, fddot_remove, phi0_remove, iota_remove, psi_remove, lam_remove, beta_remove = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_remove.T]
@@ -1708,22 +1712,54 @@ class GBGPU(object):
                 # no need to set it
                 gpu_here = -1
 
-                SharedMemorySwapLikeComp_wrap(
-                    d_h_remove,
-                    d_h_add,
-                    remove_remove,
-                    add_add,
-                    add_remove,
-                    data_minus_template[0],
-                    data_minus_template[1],
-                    psd[0],
-                    psd[1],
-                    data_index,
-                    noise_index,
-                    amp_add, f0_add, fdot_add, fddot_add, phi0_add, iota_add, psi_add, lam_add, theta_add,
-                    amp_remove, f0_remove, fdot_remove, fddot_remove, phi0_remove, iota_remove, psi_remove, lam_remove, theta_remove, T, dt, N, num_bin, start_freq_ind, data_length, gpu_here, do_synchronize
-                )
-                self.xp.cuda.runtime.deviceSynchronize()
+                for i, N_i in enumerate(unique_Ns):
+
+                    try:
+                        N_i = N_i.item()
+                    except AttributeError:
+                        pass
+
+                    inds_here = self.xp.where(N == N_i)[0]
+                    num_bin_here = len(inds_here)
+
+                    if N_i == 0 or len(inds_here) == 0:
+                        continue
+
+                    d_h_remove_tmp = self.xp.zeros(num_bin_here, dtype=complex)
+                    d_h_add_tmp = self.xp.zeros(num_bin_here, dtype=complex)
+                    remove_remove_tmp = self.xp.zeros(num_bin_here, dtype=complex)
+                    add_add_tmp = self.xp.zeros(num_bin_here, dtype=complex)
+                    add_remove_tmp = self.xp.zeros(num_bin_here, dtype=complex)
+
+                    amp_add_in, f0_add_in, fdot_add_in, fddot_add_in, phi0_add_in, iota_add_in, psi_add_in, lam_add_in, theta_add_in = (amp_add[inds_here], f0_add[inds_here], fdot_add[inds_here], fddot_add[inds_here], phi0_add[inds_here], iota_add[inds_here], psi_add[inds_here], lam_add[inds_here], theta_add[inds_here])
+                    amp_remove_in, f0_remove_in, fdot_remove_in, fddot_remove_in, phi0_remove_in, iota_remove_in, psi_remove_in, lam_remove_in, theta_remove_in = (amp_remove[inds_here], f0_remove[inds_here], fdot_remove[inds_here], fddot_remove[inds_here], phi0_remove[inds_here], iota_remove[inds_here], psi_remove[inds_here], lam_remove[inds_here], theta_remove[inds_here])
+                    
+                    data_index_in = data_index[inds_here].astype(np.int32)
+                    noise_index_in = noise_index[inds_here].astype(np.int32)
+
+                    SharedMemorySwapLikeComp_wrap(
+                        d_h_remove_tmp,
+                        d_h_add_tmp,
+                        remove_remove_tmp,
+                        add_add_tmp,
+                        add_remove_tmp,
+                        data_minus_template[0],
+                        data_minus_template[1],
+                        psd[0],
+                        psd[1],
+                        data_index_in,
+                        noise_index_in,
+                        amp_add_in, f0_add_in, fdot_add_in, fddot_add_in, phi0_add_in, iota_add_in, psi_add_in, lam_add_in, theta_add_in,
+                        amp_remove_in, f0_remove_in, fdot_remove_in, fddot_remove_in, phi0_remove_in, iota_remove_in, psi_remove_in, lam_remove_in, theta_remove_in, T, dt, N_i, num_bin_here, start_freq_ind, data_length, gpu_here, do_synchronize
+                    )
+                    self.xp.cuda.runtime.deviceSynchronize()
+
+                    d_h_remove[inds_here] = d_h_remove_tmp
+                    d_h_add[inds_here] = d_h_add_tmp
+                    remove_remove[inds_here] = remove_remove_tmp
+                    add_add[inds_here] = add_add_tmp
+                    add_remove[inds_here] = add_remove_tmp
+                    self.xp.cuda.runtime.deviceSynchronize()
 
         else:  
             # add kwargs

@@ -182,6 +182,7 @@ if run_cuda_install:
                 # "-lineinfo",
                 "-Xcompiler",
                 "-fopenmp",
+                "-std=c++17"
             ],  # ,"-G", "-g"] # for debugging
         },
         include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/cufftdx/include"],

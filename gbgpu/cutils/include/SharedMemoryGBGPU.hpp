@@ -87,6 +87,8 @@ typedef struct InputInfoTag{
     bool *accepted_out;
     int num_bands;
     int max_data_store_size;
+    bool is_rj;
+    double snr_lim;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -230,7 +232,16 @@ void SharedMemoryMakeMove(
     int num_bands,
     int max_data_store_size,
     int device,
-    bool do_synchronize
+    bool do_synchronize,
+    bool is_rj,
+    double snr_lim
 );
+
+void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
+                    double* Amp_all, double* alpha_all, double* sl1_all, double* kn_all, double* sl2_all, double df, int data_length, int num_data, int num_psds);
+
+void compute_logpdf_wrap(double *logpdf_out, int *component_index, double *points,
+                    double *weights, double *mins, double *maxs, double *means, double *invcovs, double *dets, double *log_Js, 
+                    int num_points, int *start_index, int num_components, int ndim);
 
 #endif // __SHAREDMEMORY_GBGPU_HPP__
