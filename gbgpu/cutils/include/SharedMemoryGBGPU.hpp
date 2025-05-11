@@ -125,6 +125,8 @@ class SingleBand{
         int band_num_bins;
         int band_start_data_ind;
         int band_data_lengths;
+        int band_interest_start_data_ind;
+        int band_interest_data_lengths;
         int max_data_store_size;
         double fmin_allow;
         double fmax_allow;
@@ -147,6 +149,8 @@ class SingleBand{
             int band_num_bins_,
             int band_start_data_ind_,
             int band_data_lengths_,
+            int band_interest_start_data_ind_,
+            int band_interest_data_lengths_,
             int max_data_store_size_,
             double fmin_allow_,
             double fmax_allow_,
@@ -163,6 +167,8 @@ class DataPackage{
     public:
         cmplx* data_A; 
         cmplx* data_E; 
+        cmplx* base_data_A; 
+        cmplx* base_data_E; 
         double* psd_A; 
         double* psd_E; 
         double df; 
@@ -173,6 +179,8 @@ class DataPackage{
         DataPackage(
             cmplx* data_A,
             cmplx* data_E,
+            cmplx* base_data_A,
+            cmplx* base_data_E,
             double* psd_A,
             double* psd_E,
             double df,
@@ -192,6 +200,8 @@ class BandPackage{
         int *band_num_bins;
         int *band_start_data_ind;
         int *band_data_lengths;
+        int *band_interest_start_data_ind;
+        int *band_interest_data_lengths;
         int num_bands;
         int max_data_store_size;
         double *fmin_allow;
@@ -212,6 +222,8 @@ class BandPackage{
             int *band_num_bins,
             int *band_start_data_ind,
             int *band_data_lengths,
+            int *band_interest_start_data_ind,
+            int *band_interest_data_lengths,
             int num_bands,
             int max_data_store_size,
             double *fmin_allow,
@@ -262,7 +274,7 @@ class PriorPackage{
         
         CUDA_HOSTDEV 
         double get_prior_val(
-            const SingleGalacticBinary gb_in
+            const SingleGalacticBinary gb_in, int num_func
         );
         CUDA_HOSTDEV double get_snr_prior(const double snr);
         CUDA_HOSTDEV double get_f0_prior(const double f0);
@@ -570,6 +582,8 @@ void SharedMemoryMakeTemperingMove(
     int min_val,
     int max_val
 );
+
+void check_prior_vals_wrap(double* prior_out, PriorPackage *prior_info, GalacticBinaryParams *gb_params, int num_func);
 
 void psd_likelihood_wrap(double* like_contrib_final, double *f_arr, cmplx* A_data, cmplx* E_data, int* data_index_all, double* A_Soms_d_in_all, double* A_Sa_a_in_all, double* E_Soms_d_in_all, double* E_Sa_a_in_all, 
                     double* Amp_all, double* alpha_all, double* sl1_all, double* kn_all, double* sl2_all, double df, int data_length, int num_data, int num_psds);

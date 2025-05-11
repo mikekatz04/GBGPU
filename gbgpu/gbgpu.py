@@ -109,6 +109,7 @@ class GBGPU(object):
             self.pyPriorPackage = pyPriorPackage
             self.pyPeriodicPackage = pyPeriodicPackage
             self.pyStretchProposalPackage = pyStretchProposalPackage
+            self.check_prior_vals = check_prior_vals
 
         else:
             self.xp = np

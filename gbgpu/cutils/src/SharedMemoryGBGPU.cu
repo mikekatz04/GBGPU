@@ -2987,20 +2987,21 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
     }
     __syncthreads();
 
-    int j, k;
+    int j, k, j_rj_data;
     double this_band_inv_temp;
     
     int current_binary_start_index, base_index;
     double ll_diff, lp_diff;
     double prior_curr, prior_prop, factors, lnpdiff;
     bool accept;
-    __shared__ unsigned int bin_i_gen;
+    __shared__ int bin_i_gen;
     __shared__ curandState localState;
     __shared__ double random_val;
 
     if (threadIdx.x == 0)
     {
         localState = stretch_info->curand_states[blockIdx.x];
+        // bin_i_gen = 0;
     }
     __syncthreads();
 
@@ -3043,18 +3044,32 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         params_curr->sl2
     );
 
+    int tmp_data_index;
+
     for (int band_i = blockIdx.x; band_i < band_info->num_bands; band_i += gridDim.x)
     {
 
         SingleBand band_here = bands[band_i];
 
         this_band_inv_temp = mcmc_info->band_inv_temperatures_all[band_i];
+
+        if (band_here.update_data_index < 18) tmp_data_index = band_here.update_data_index;
+        else tmp_data_index = band_here.data_index;
         
         for (int i = threadIdx.x; i < band_here.band_data_lengths; i += blockDim.x)
         {
             A_data[i] = data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i];
             E_data[i] = data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i];
             // if (blockIdx.x == gridDim.x - 1) printf("%d %e, %e\n", i, A_data[i].real(), E_data[i].imag());
+
+            if ((i + band_here.band_start_data_ind < band_here.band_interest_start_data_ind - int((float)band_here.gb_params.N / 2.0)) || (i + band_here.band_start_data_ind >= band_here.band_interest_start_data_ind + band_here.band_interest_data_lengths + int((float)band_here.gb_params.N / 2.0)))
+            {
+                A_data[i] += (data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i] - data->base_data_A[tmp_data_index * data->data_length + band_here.band_start_data_ind + i]);
+                E_data[i] += (data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i] - data->base_data_E[tmp_data_index * data->data_length + band_here.band_start_data_ind + i]);
+                if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM2: %d %d %.12e %d %.12e %d %.12e %.12e \n", i, band_here.data_index * data->data_length + band_here.band_start_data_ind + i, data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i].real(), band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i, data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i].real(), tmp_data_index * data->data_length + band_here.band_start_data_ind + i, data->base_data_A[tmp_data_index * data->data_length + band_here.band_start_data_ind + i].real(), A_data[i].real());
+                
+            }
+            
         }
         __syncthreads();
 
@@ -3072,12 +3087,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             curr_binary.lam = band_here.gb_params.lam[bin_i];
             curr_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
 
-
-
             // adjust for rj
             if (mcmc_info->is_rj)
             {   
-                rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen];
+                rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i];
                 if (!rj_is_there_already)
                 {
                     curr_binary.snr = 1e-20;
@@ -3097,6 +3110,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 bin_i);
             __syncthreads();
 
+            if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e \n", bin_i, start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
+
             for (int i = threadIdx.x; i < band_here.gb_params.N; i += blockDim.x)
             {
                 // add to residual with (-)
@@ -3106,8 +3121,26 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     A_data[j] -= A_remove[i];
                     E_data[j] -= E_remove[i];
                 }
+                else
+                {
+                    printf("BAD 1 ");
+                }
             }
             __syncthreads();
+            if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM27: %d %.12e %.12e \n", 100, A_data[100].real(), A_data[100].imag());
+                
+        }
+        __syncthreads();
+        double like_share_before = 0.0;
+        if (threadIdx.x == 0)
+        {
+            for (int i = 0; i < band_here.band_data_lengths; i += 1)
+            {
+                if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM3: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
+                
+                like_share_before += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                like_share_before += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+            }
         }
         __syncthreads();
 
@@ -3115,14 +3148,15 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
         {
             if (threadIdx.x == 0)
             {
+                random_val = log(curand_uniform_double(&localState));
                 if (mcmc_info->is_rj)
                 {
                     bin_i_gen = prop_i;
+                    // printf("%d %d\n", blockIdx.x, bin_i_gen);
                 }
                 else
                 {
-                    bin_i_gen = ((unsigned int)(ceil(curand_uniform_double(&localState) * band_here.band_num_bins))) - 1;
-                    random_val = log(curand_uniform_double(&localState));
+                    bin_i_gen = ((int)(ceil(curand_uniform_double(&localState) * band_here.band_num_bins))) - 1;
                 }
             }
             __syncthreads();
@@ -3132,8 +3166,6 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             }
             
             current_binary_start_index = band_here.band_start_bin_ind + bin_i_gen;
-
-            prior_curr = mcmc_info->prior_all_curr[current_binary_start_index];
 
             curr_binary.snr = band_here.gb_params.snr[bin_i_gen];
             curr_binary.f0_ms = band_here.gb_params.f0_ms[bin_i_gen];
@@ -3149,6 +3181,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
             if (!mcmc_info->is_rj)
             {
                 stretch_info->get_proposal(&prop_binary, &factors, localState, curr_binary, *periodic_info);
+                prior_curr = mcmc_info->prior_all_curr[current_binary_start_index];
+                prior_prop = prior_info->get_prior_val(prop_binary, 100);
             }
             else
             { 
@@ -3156,20 +3190,20 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 rj_is_there_already = stretch_info->inds[band_here.band_start_bin_ind + bin_i_gen];
                 prop_binary = curr_binary;
 
-                if (!rj_is_there_already)
+                if (rj_is_there_already)
                 {
-                    curr_binary.snr = 1e-20;
+                    prop_binary.snr = 1e-20;
+                    prior_curr = prior_info->get_prior_val(curr_binary, 100);
+                    prior_prop = 0.0;
                 }
                 else
                 {
-                    prop_binary.snr = 1e-20;
+                    curr_binary.snr = 1e-20;
+                    prior_curr = 0.0;
+                    prior_prop = prior_info->get_prior_val(prop_binary, 100);
                 }
             }
 
-            // if ((prop_binary.N == 1024) && (threadIdx.x == 0)) printf("%d %d %d %e %e %e %e %e %e %e %e %e\n", blockIdx.x, prop_i, bin_i_gen, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
-            // if (threadIdx.x == 0) printf("check 1\n");
- 
-            prior_prop = prior_info->get_prior_val(prop_binary);
             lp_diff = prior_prop - prior_curr;
             
             // if (threadIdx.x == 0) printf("prop: %d %e %e %e %e %e %e %e %e %e %e %e %e\n", band_i, prior_prop, band_here.fmin_allow, band_here.fmax_allow, prop_binary.snr, prop_binary.f0_ms, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.cosinc, prop_binary.psi, prop_binary.lam, prop_binary.sinbeta);
@@ -3200,108 +3234,149 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     bin_i_gen);
                 __syncthreads();
 
-                // subtract start_freq_ind to find index into subarray
-                if (start_ind_remove <= start_ind_add)
+                if (true)  // abs((double)start_ind_add - (double)start_ind_remove) < 20.0)
                 {
-                    lower_start_ind = start_ind_remove - band_here.band_start_data_ind;
-                    upper_end_ind = start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N;
 
-                    upper_start_ind = start_ind_add - band_here.band_start_data_ind;
-                    lower_end_ind = start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N;
-
-                    is_add_lower = false;
-                }
-                else
-                {
-                    lower_start_ind = start_ind_add - band_here.band_start_data_ind;
-                    upper_end_ind = start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N;
-
-                    upper_start_ind = start_ind_remove - band_here.band_start_data_ind;
-                    lower_end_ind = start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N;
-
-                    is_add_lower = true;
-                }
-                total_i_vals = upper_end_ind - lower_start_ind;
-                __syncthreads();
-                d_h_remove_temp = 0.0;
-                d_h_add_temp = 0.0;
-                remove_remove_temp = 0.0;
-                add_add_temp = 0.0;
-                add_remove_temp = 0.0;
-
-                if (total_i_vals < 2 * band_here.gb_params.N)
-                {
-                    for (int i = threadIdx.x;
-                         i < total_i_vals;
-                         i += blockDim.x)
+                    // subtract start_freq_ind to find index into subarray
+                    if (start_ind_remove <= start_ind_add)
                     {
+                        lower_start_ind = start_ind_remove - band_here.band_start_data_ind;
+                        upper_end_ind = start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N;
 
-                        j = lower_start_ind + i;
+                        upper_start_ind = start_ind_add - band_here.band_start_data_ind;
+                        lower_end_ind = start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N;
 
-                        if ((j > band_here.band_data_lengths) || (j < 0))
+                        is_add_lower = false;
+                    }
+                    else
+                    {
+                        lower_start_ind = start_ind_add - band_here.band_start_data_ind;
+                        upper_end_ind = start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N;
+
+                        upper_start_ind = start_ind_remove - band_here.band_start_data_ind;
+                        lower_end_ind = start_ind_add - band_here.band_start_data_ind + band_here.gb_params.N;
+
+                        is_add_lower = true;
+                    }
+                    total_i_vals = upper_end_ind - lower_start_ind;
+                    __syncthreads();
+                    d_h_remove_temp = 0.0;
+                    d_h_add_temp = 0.0;
+                    remove_remove_temp = 0.0;
+                    add_add_temp = 0.0;
+                    add_remove_temp = 0.0;
+
+                    if (total_i_vals < 2 * band_here.gb_params.N)
+                    {
+                        for (int i = threadIdx.x;
+                            i < total_i_vals;
+                            i += blockDim.x)
                         {
-                            d_h_add_temp += -1e300;
-                        }
 
-                        // noise is still in global memory
-                        // TODO: Maybe put this in shared memory if possible
-                        if ((j < band_here.band_data_lengths) && (j >= 0))
-                        {
-                            d_A = A_data[j];
-                            d_E = E_data[j];
+                            j = lower_start_ind + i;
 
-                            n_A = data->psd_A[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
-                            n_E = data->psd_E[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
-                        }
-                        else
-                        {
-                            d_A = 0.0;
-                            d_E = 0.0;
-                            n_A = 1e100;
-                            n_E = 1e100;
-                        }
-
-                        if (j < upper_start_ind)
-                        {
-                            real_ind = i;
-                            if (is_add_lower)
+                            if ((j > band_here.band_data_lengths) || (j < 0))
                             {
+                                d_h_add_temp += -1e300;
+                            }
 
-                                h_A = A_add[real_ind];
-                                h_E = E_add[real_ind];
+                            // noise is still in global memory
+                            // TODO: Maybe put this in shared memory if possible
+                            if ((j < band_here.band_data_lengths) && (j >= 0))
+                            {
+                                d_A = A_data[j];
+                                d_E = E_data[j];
 
-                                // get <d|h> term
-                                d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
-                                d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
-
-                                // <h|h>
-                                add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
-                                add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+                                n_A = data->psd_A[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
+                                n_E = data->psd_E[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
                             }
                             else
                             {
-                                h_A = A_remove[real_ind];
-                                h_E = E_remove[real_ind];
-
-                                // get <d|h> term
-                                d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
-                                d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
-
-                                // <h|h>
-                                remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
-                                remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
-
-                                // if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
+                                d_A = 0.0;
+                                d_E = 0.0;
+                                n_A = 1e100;
+                                n_E = 1e100;
+                                printf("BAD 3 ");
                             }
-                        }
-                        else if (j >= lower_end_ind)
-                        {
-                            real_ind = j - upper_start_ind;
-                            if (!is_add_lower)
-                            {
 
-                                h_A_add = A_add[real_ind];
-                                h_E_add = E_add[real_ind];
+                            if (j < upper_start_ind)
+                            {
+                                real_ind = i;
+                                if (is_add_lower)
+                                {
+
+                                    h_A = A_add[real_ind];
+                                    h_E = E_add[real_ind];
+
+                                    // get <d|h> term
+                                    d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
+                                    d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
+
+                                    // <h|h>
+                                    add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
+                                    add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+                                }
+                                else
+                                {
+                                    h_A = A_remove[real_ind];
+                                    h_E = E_remove[real_ind];
+
+                                    // get <d|h> term
+                                    d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
+                                    d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
+
+                                    // <h|h>
+                                    remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
+                                    remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+
+                                    // if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
+                                }
+                            }
+                            else if (j >= lower_end_ind)
+                            {
+                                real_ind = j - upper_start_ind;
+                                if (!is_add_lower)
+                                {
+
+                                    h_A_add = A_add[real_ind];
+                                    h_E_add = E_add[real_ind];
+
+                                    // get <d|h> term
+                                    d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
+                                    d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
+
+                                    // <h|h>
+                                    add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
+                                    add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
+                                }
+                                else
+                                {
+                                    h_A_remove = A_remove[real_ind];
+                                    h_E_remove = E_remove[real_ind];
+
+                                    // get <d|h> term
+                                    d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
+                                    d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
+
+                                    // <h|h>
+                                    remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
+                                    remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
+
+                                }
+                            }
+                            else // this is where the signals overlap
+                            {
+                                if (is_add_lower)
+                                {
+                                    real_ind_add = i;
+                                }
+                                else
+                                {
+                                    real_ind_add = j - upper_start_ind;
+                                }
+
+                                h_A_add = A_add[real_ind_add];
+                                h_E_add = E_add[real_ind_add];
 
                                 // get <d|h> term
                                 d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
@@ -3310,11 +3385,18 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                                 // <h|h>
                                 add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
                                 add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
-                            }
-                            else
-                            {
-                                h_A_remove = A_remove[real_ind];
-                                h_E_remove = E_remove[real_ind];
+
+                                if (!is_add_lower)
+                                {
+                                    real_ind_remove = i;
+                                }
+                                else
+                                {
+                                    real_ind_remove = j - upper_start_ind;
+                                }
+
+                                h_A_remove = A_remove[real_ind_remove];
+                                h_E_remove = E_remove[real_ind_remove];
 
                                 // get <d|h> term
                                 d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
@@ -3324,178 +3406,236 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                                 remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
                                 remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
 
+                                add_remove_temp += gcmplx::conj(h_A_remove) * h_A_add / n_A;
+                                add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
+
                             }
-                        }
-                        else // this is where the signals overlap
-                        {
-                            if (is_add_lower)
-                            {
-                                real_ind_add = i;
-                            }
-                            else
-                            {
-                                real_ind_add = j - upper_start_ind;
-                            }
-
-                            h_A_add = A_add[real_ind_add];
-                            h_E_add = E_add[real_ind_add];
-
-                            // get <d|h> term
-                            d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
-                            d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
-
-                            // <h|h>
-                            add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
-                            add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
-
-                            if (!is_add_lower)
-                            {
-                                real_ind_remove = i;
-                            }
-                            else
-                            {
-                                real_ind_remove = j - upper_start_ind;
-                            }
-
-                            h_A_remove = A_remove[real_ind_remove];
-                            h_E_remove = E_remove[real_ind_remove];
-
-                            // get <d|h> term
-                            d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
-                            d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
-
-                            // <h|h>
-                            remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
-                            remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
-
-                            add_remove_temp += gcmplx::conj(h_A_remove) * h_A_add / n_A;
-                            add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
-
                         }
                     }
-                }
-                else
-                {
-                    for (int i = threadIdx.x;
-                         i < band_here.gb_params.N;
-                         i += blockDim.x)
+                    else
                     {
+                        // __syncthreads();
+                        // if (threadIdx.x == 0)
+                        // {
+                        //     double d_h_d_h_check = 0.0;
+                        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+                        //     {
+                        //         d_h_d_h_check += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                        //         d_h_d_h_check += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                        //     }
+                        //     printf("d_h_d_h : %d %.12e \n", band_i, d_h_d_h_check);
 
-                        j = start_ind_remove + i - band_here.band_start_data_ind;
+                        //     // printf("start ind: %d\n A: \n", start_ind_remove);
+                        //     // for (int i = 0; i < band_here.gb_params.N; i += 1)
+                        //     // {
+                        //     //     printf("%.16e + 1j * %.16e, ", A_remove[i].real(), A_remove[i].imag());
+                        //     // }
+                        //     // printf("\n\nstart ind: %d\n E: \n", start_ind_remove);
+                        //     // for (int i = 0; i < band_here.gb_params.N; i += 1)
+                        //     // {
+                        //     //     printf("%.16e + 1j * %.16e, ", E_remove[i].real(), E_remove[i].imag());
+                        //     // }
+                        //     // printf("\n\n\n");
+                        // }
+                        // __syncthreads();
+                        // for (int i = threadIdx.x;
+                        //      i < band_here.gb_params.N;
+                        //      i += blockDim.x)
+                        // {
+                        //     j = start_ind_remove + i - band_here.band_start_data_ind;
+                        //     //  calculate h term
+                        //     h_A = A_remove[i];
+                        //     h_E = E_remove[i];
 
-                        //  calculate h term
-                        h_A = A_remove[i];
-                        h_E = E_remove[i];
+                        //     A_data[j] += h_A;
+                        //     E_data[j] += h_E;
+                        // }
+                        // __syncthreads();
+                        // // for (int i = threadIdx.x;
+                        // //      i < band_here.gb_params.N;
+                        // //      i += blockDim.x)
+                        // // {
+                        // //     j = start_ind_add + i - band_here.band_start_data_ind;
+                        // //     //  calculate h term
+                        // //     h_A = A_add[i];
+                        // //     h_E = E_add[i];
 
-                        // <h|h>
-                        remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
-                        remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+                        // //     A_data[j] -= h_A;
+                        // //     E_data[j] -= h_E;
+                        // // }
+                        // __syncthreads();
+                        // if (threadIdx.x == 0)
+                        // {
+                        //     double like_share_check1 = 0.0;
+                        //     for (int i = 0; i < band_here.band_data_lengths; i += 1)
+                        //     {
+                        //         like_share_check1 += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                        //         like_share_check1 += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                        //     }
+                        //     printf("d_h_r_d_h_r : %d %.12e \n", band_i, like_share_check1);
+                        // }
+                        // __syncthreads();
+                        // for (int i = threadIdx.x;
+                        //      i < band_here.gb_params.N;
+                        //      i += blockDim.x)
+                        // {
+                        //     j = start_ind_remove + i - band_here.band_start_data_ind;
+                        //     //  calculate h term
+                        //     h_A = A_remove[i];
+                        //     h_E = E_remove[i];
 
-                        if ((j < band_here.band_data_lengths) && (j >= 0))
-                        {
-                            d_A = A_data[j];
-                            d_E = E_data[j];
+                        //     A_data[j] -= h_A;
+                        //     E_data[j] -= h_E;
+                        // }
+                        // __syncthreads();
+                        // for (int i = threadIdx.x;
+                        //      i < band_here.gb_params.N;
+                        //      i += blockDim.x)
+                        // {
+                        //     j = start_ind_add + i - band_here.band_start_data_ind;
+                        //     //  calculate h term
+                        //     h_A = A_add[i];
+                        //     h_E = E_add[i];
 
-                            n_A = data->psd_A[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
-                            n_E = data->psd_E[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
+                        //     A_data[j] += h_A;
+                        //     E_data[j] += h_E;
+                        // }
+                        __syncthreads();
 
-                            // get <d|h> term
-                            d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
-                            d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
-                        }
-                        else
-                        {
-                            // get <d|h> term
-                            d_h_remove_temp += -1e300;
-                        }
+
+
+
+
                         
-                    }
 
-                    for (int i = threadIdx.x;
-                         i < band_here.gb_params.N;
-                         i += blockDim.x)
-                    {
-
-                        j = start_ind_add + i - band_here.band_start_data_ind;
-
-                        // if ((bin_i == 0))printf("CHECK add: %d %d %e %e %e %e  \n", i, j, n_A, d_A.real(), n_E, d_E.real());
-                        //  calculate h term
-                        h_A = A_add[i];
-                        h_E = E_add[i];
-
-                        // <h|h>
-                        add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
-                        add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
-
-                        // get <d|h> term
-                        if ((j < band_here.band_data_lengths) && (j >= 0))
-                        {    
-                            n_A = data->psd_A[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
-                            n_E = data->psd_E[band_here.noise_index * data->data_length + j + band_here.band_start_data_ind];
-
-                            d_A = A_data[j];
-                            d_E = E_data[j];
-                            
-                            d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
-                            d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
-                        }
-                        else
+                        for (int i = threadIdx.x;
+                            i < band_here.gb_params.N;
+                            i += blockDim.x)
                         {
+
+                            j = start_ind_remove + i - band_here.band_start_data_ind;
+
+                            //  calculate h term
+                            h_A = A_remove[i];
+                            h_E = E_remove[i];
+
+                            n_A = data->psd_A[band_here.noise_index * data->data_length + start_ind_remove + i];
+                            n_E = data->psd_E[band_here.noise_index * data->data_length + start_ind_remove + i];
+
+                            // <h|h>
+                            remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
+                            remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+
+                            if ((j < band_here.band_data_lengths) && (j >= 0))
+                            {
+                                d_A = A_data[j];
+                                d_E = E_data[j];
+
+                                // get <d|h> term
+                                d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
+                                d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
+                            }
+                            else
+                            {
+                                printf("BAD 4 ");
+                                d_h_remove_temp += -1e300;
+                            }
+                            
+                        }
+                        __syncthreads();
+                        for (int i = threadIdx.x;
+                            i < band_here.gb_params.N;
+                            i += blockDim.x)
+                        {
+
+                            j = start_ind_add + i - band_here.band_start_data_ind;
+
+                            // if ((bin_i == 0))printf("CHECK add: %d %d %e %e %e %e  \n", i, j, n_A, d_A.real(), n_E, d_E.real());
+                            //  calculate h term
+                            h_A = A_add[i];
+                            h_E = E_add[i];
+
+                            n_A = data->psd_A[band_here.noise_index * data->data_length + start_ind_add + i];
+                            n_E = data->psd_E[band_here.noise_index * data->data_length + start_ind_add + i];
+
+                            // <h|h>
+                            add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
+                            add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+
                             // get <d|h> term
-                            d_h_add_temp += -1e300;
+                            if ((j < band_here.band_data_lengths) && (j >= 0))
+                            {    
+                                d_A = A_data[j];
+                                d_E = E_data[j];
+                                
+                                d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
+                                d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
+                            }
+                            else
+                            {
+                                printf("BAD 5 ");
+                                d_h_add_temp += -1e300;
+                            }
                         }
                     }
-                }
 
-                __syncthreads();
-                d_h_remove_arr[tid] = 4 * df * d_h_remove_temp;
+                    __syncthreads();
+                    d_h_remove_arr[tid] = 4 * df * d_h_remove_temp;
 
-                d_h_add_arr[tid] = 4 * df * d_h_add_temp;
-                add_add_arr[tid] = 4 * df * add_add_temp;
-                remove_remove_arr[tid] = 4 * df * remove_remove_temp;
-                add_remove_arr[tid] = 4 * df * add_remove_temp;
-                __syncthreads();
+                    d_h_add_arr[tid] = 4 * df * d_h_add_temp;
+                    add_add_arr[tid] = 4 * df * add_add_temp;
+                    remove_remove_arr[tid] = 4 * df * remove_remove_temp;
+                    add_remove_arr[tid] = 4 * df * add_remove_temp;
+                    __syncthreads();
 
-                for (unsigned int s = 1; s < blockDim.x; s *= 2)
-                {
-                    if (tid % (2 * s) == 0)
+                    for (unsigned int s = 1; s < blockDim.x; s *= 2)
                     {
-                        d_h_remove_arr[tid] += d_h_remove_arr[tid + s];
-                        d_h_add_arr[tid] += d_h_add_arr[tid + s];
-                        add_add_arr[tid] += add_add_arr[tid + s];
-                        remove_remove_arr[tid] += remove_remove_arr[tid + s];
-                        add_remove_arr[tid] += add_remove_arr[tid + s];
-                        // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
-                        // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
+                        if (tid % (2 * s) == 0)
+                        {
+                            d_h_remove_arr[tid] += d_h_remove_arr[tid + s];
+                            d_h_add_arr[tid] += d_h_add_arr[tid + s];
+                            add_add_arr[tid] += add_add_arr[tid + s];
+                            remove_remove_arr[tid] += remove_remove_arr[tid + s];
+                            add_remove_arr[tid] += add_remove_arr[tid + s];
+                            // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
+                            // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
+                        }
+                        __syncthreads();
                     }
                     __syncthreads();
+
+                    ll_diff = -1. / 2. * (-2. * d_h_add_arr[0] + 2. * d_h_remove_arr[0] - 2. * add_remove_arr[0] + add_add_arr[0] + remove_remove_arr[0]).real();
+                    __syncthreads();
+                    // if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("%d %e %e %e %e %e %e\n\n\n", bin_i_gen, ll_diff, d_h_add_arr[0].real(), d_h_remove_arr[0].real(), add_remove_arr[0].real(), add_add_arr[0].real(), remove_remove_arr[0].real());
+
+
+                    // determine detailed balance with tempering on the Likelihood term
+                    lnpdiff = factors + (this_band_inv_temp * ll_diff) + lp_diff;
+                    //if ((this_band_inv_temp != 0.0) && (threadIdx.x == 0)) printf("WHAT3: %d %e\n", band_i, this_band_inv_temp);
+
+                    // accept or reject
+                    accept = lnpdiff > random_val;
+                    // if ((mcmc_info->is_rj) && (band_here.band_num_bins > 10) && (threadIdx.x == 0)) printf("%d %e %e %e %e %e %e %e\n", band_i, lnpdiff, factors, ll_diff, this_band_inv_temp, lp_diff, prior_curr, prior_prop);
                 }
-                __syncthreads();
-
-                ll_diff = -1. / 2. * (-2. * d_h_add_arr[0] + 2. * d_h_remove_arr[0] - 2. * add_remove_arr[0] + add_add_arr[0] + remove_remove_arr[0]).real();
-                __syncthreads();
-                // if ((blockIdx.x == 100) && (threadIdx.x == 0)) printf("%d %e %e %e %e %e %e\n\n\n", bin_i_gen, ll_diff, d_h_add_arr[0].real(), d_h_remove_arr[0].real(), add_remove_arr[0].real(), add_add_arr[0].real(), remove_remove_arr[0].real());
-
-
-                // determine detailed balance with tempering on the Likelihood term
-                lnpdiff = factors + (this_band_inv_temp * ll_diff) + lp_diff;
-                //if ((this_band_inv_temp != 0.0) && (threadIdx.x == 0)) printf("WHAT3: %d %e\n", band_i, this_band_inv_temp);
-
-                // accept or reject
-                accept = lnpdiff > random_val;
+                else {accept = false;}
             }
-            else {accept = false;}
-            // accept = false;
+            else
+            {
+                // if ((mcmc_info->is_rj) && (threadIdx.x == 0)) printf("%d %d %e %e %.14e %.14e %.14e\n", band_i, bin_i_gen, prior_curr, prior_prop, prop_binary.f0_ms / 1e3, band_here.fmin_allow, band_here.fmax_allow);
+                accept = false;
+            }
+            // if (mcmc_info->is_rj) accept = false;
             if ((mcmc_info->is_rj) && (prop_binary.amp / curr_binary.amp > 1e10))
             {
-                det_snr = ((d_h_add_arr[0].real() + add_remove_arr[0].real()) / sqrt(add_add_arr[0].real()));
-                opt_snr = sqrt(add_add_arr[0].real());
-                // put an snr limit on rj
-                if ((opt_snr < mcmc_info->snr_lim) || (det_snr < mcmc_info->snr_lim) || (abs(1.0 - det_snr / opt_snr) > 0.5))
-                {
-                    // if ((band_here.data_index == 0) && (threadIdx.x == 0)) printf("NIXED %e %e %e %e\n", mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
-                    accept = false;
-                }
+                // accept = false;
+                // det_snr = ((d_h_add_arr[0].real() + add_remove_arr[0].real()) / sqrt(add_add_arr[0].real()));
+                // opt_snr = sqrt(add_add_arr[0].real());
+                // // put an snr limit on rj
+                // if ((opt_snr < mcmc_info->snr_lim) || (det_snr < mcmc_info->snr_lim) || (abs(1.0 - det_snr / opt_snr) > 0.5))
+                // {
+                //     // if ((band_here.data_index == 0) && (threadIdx.x == 0)) printf("NIXED %e %e %e %e\n", mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
+                //     accept = false;
+                // }
                 // else
                 // {
                     //if ((this_band_inv_temp < 0.005) & (threadIdx.x == 0)) printf("KEPT  %e %e %e %e %e\n", this_band_inv_temp, mcmc_info->snr_lim, opt_snr, det_snr, abs(1.0 - det_snr / opt_snr));
@@ -3549,6 +3689,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 __syncthreads();
                 // change current Likelihood
 
+                // if ((threadIdx.x == 0)) printf("base acc: %d %d %d %d %d %d %e %e %d %d\n", band_i, band_here.data_index, band_here.update_data_index, mcmc_info->accepted_out[band_i], start_ind_add, start_ind_remove, ll_diff, mcmc_info->L_contribution[band_i], band_here.band_start_bin_ind, band_here.band_data_lengths);
+                // if ((threadIdx.x == 0)) printf("curr acc: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i_gen, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+                // if ((threadIdx.x == 0)) printf("prop acc: %d %d %e %e %e %e %e %e %e %e %e\n\n", band_i, bin_i_gen, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
+
+                if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e %d %.12e %.12e  %.12e %.12e \n", bin_i_gen, start_ind_add, prop_binary.f0_ms, A_add[0].real(), A_add[1].real(), A_add[3].real(), start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
+
                 // if ((start_ind_remove - band_here.band_start_data_ind < 0) || (start_ind_remove - band_here.band_start_data_ind + band_here.gb_params.N > band_here.band_data_lengths))
                 // {
                 //     printf("%d %d %d %d %d\n", band_i, start_ind_remove - band_here.band_start_data_ind, start_ind_remove, band_here.band_start_data_ind, band_here.band_data_lengths);
@@ -3574,6 +3720,24 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     {    
                         A_data[j] +=  h_A;
                         E_data[j] +=  h_E;
+                    }
+                    else
+                    {
+                        printf("BAD 10 ");
+                    }
+
+                    if ((mcmc_info->is_rj) && (this_band_inv_temp == 1.0))
+                    {
+                        j_rj_data = start_ind_remove + i;
+                        if ((j_rj_data < data->data_length) && (j_rj_data >= 0))
+                        {
+                            data->data_A[band_here.update_data_index * data->data_length + j_rj_data] += h_A;
+                            data->data_E[band_here.update_data_index * data->data_length + j_rj_data] += h_E;
+                        }
+                        else
+                        {
+                            printf("BAD 6 ");
+                        }
                     }
                     // if (i == 0) printf("remove: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n", bin_i, data->data_A[band_here.data_index * data->data_length + j].real(), data->data_A[band_here.data_index * data->data_length + j].imag(), data->data_E[band_here.data_index * data->data_length + j].real(), data->data_E[band_here.data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
                 }
@@ -3603,15 +3767,57 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                         A_data[j] -=  h_A;
                         E_data[j] -=  h_E;
                     }
+                    else
+                    {
+                        printf("BAD 11 ");
+                    }
                     // if (i == 0) printf("add: %d %.12e %.12e %.12e %.12e : %.12e %.12e %.12e %.12e\n\n", bin_i, data->data_A[band_here.data_index * data->data_length + j].real(), data->data_A[band_here.data_index * data->data_length + j].imag(), data->data_E[band_here.data_index * data->data_length + j].real(), data->data_E[band_here.data_index * data->data_length + j].imag(), h_A.real(), h_A.imag(), h_E.real(), h_E.imag());
+                    if ((mcmc_info->is_rj) && (this_band_inv_temp == 1.0))
+                    {
+                        j_rj_data = start_ind_add + i;
+                        if ((j_rj_data < data->data_length) && (j_rj_data >= 0))
+                        {
+                            data->data_A[band_here.update_data_index * data->data_length + j_rj_data] -= h_A;
+                            data->data_E[band_here.update_data_index * data->data_length + j_rj_data] -= h_E;
+                        }
+                        else
+                        {
+                            printf("BAD 7 ");
+                        }
+                    }
                 }
                 __syncthreads();
+                if (threadIdx.x == 0)
+                {
+                    double like_share_middle = 0.0;
+                    for (int i = 0; i < band_here.band_data_lengths; i += 1)
+                    {
+                        if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM4: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
+                        like_share_middle += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                        like_share_middle += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                    }
+
+                    // printf("start ind: %d\n A: \n", start_ind_remove);
+                    // for (int i = 0; i < band_here.gb_params.N; i += 1)
+                    // {
+                    //     printf("%.16e + 1j * %.16e, ", A_remove[i].real(), A_remove[i].imag());
+                    // }
+                    // printf("\n\nstart ind: %d\n E: \n", start_ind_remove);
+                    // for (int i = 0; i < band_here.gb_params.N; i += 1)
+                    // {
+                    //     printf("%.16e + 1j * %.16e, ", E_remove[i].real(), E_remove[i].imag());
+                    // }
+                    // printf("\n\n\n");
+                    
+                    printf("middle: %d %e %e %e %e %e %.16e %.16e %.16e %.16e %.16e \n", band_i, like_share_before, like_share_middle, like_share_middle - like_share_before, mcmc_info->L_contribution[band_i].real(), like_share_middle - like_share_before - mcmc_info->L_contribution[band_i].real(), d_h_remove_arr[0].real(), d_h_add_arr[0].real(), add_remove_arr[0].real(), add_add_arr[0].real(), remove_remove_arr[0].real());
+
+                }
             }
             __syncthreads();
         }
         __syncthreads();
 
-        if (this_band_inv_temp == 1.0)
+        if ((this_band_inv_temp == 1.0) && (!mcmc_info->is_rj))
         {
             // update the cold chain information
             // need to be careful not to overlap with other bands running simultaneous (every 3 or 4 or something)
@@ -3630,39 +3836,38 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                 curr_binary.sinbeta = band_here.gb_params.sinbeta_orig[bin_i];
 
                 // adjust for rj
-                if (mcmc_info->is_rj)
-                {
-                    // got to be the opposite becuase it is changed
-                    rj_is_there_already = !stretch_info->inds[band_here.band_start_bin_ind + bin_i];
-                    prop_binary = curr_binary;
+                // if (mcmc_info->is_rj)
+                // {
+                //     // got to be the opposite becuase it is changed
+                //     rj_is_there_already = !stretch_info->inds[band_here.band_start_bin_ind + bin_i];
+                //     prop_binary = curr_binary;
 
-                    if (!rj_is_there_already)
-                    {
-                        curr_binary.snr = 1e-20;
-                    }
-                    else
-                    {
-                        prop_binary.snr = 1e-20;
-                    }
-                }
-                else
-                {
-                    prop_binary.snr = band_here.gb_params.snr[bin_i];
-                    prop_binary.f0_ms = band_here.gb_params.f0_ms[bin_i];
-                    prop_binary.fdot = band_here.gb_params.fdot0[bin_i];
-                    prop_binary.phi0 = band_here.gb_params.phi0[bin_i];
-                    prop_binary.cosinc = band_here.gb_params.cosinc[bin_i];
-                    prop_binary.psi = band_here.gb_params.psi[bin_i];
-                    prop_binary.lam = band_here.gb_params.lam[bin_i];
-                    prop_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
-                }
+                //     if (!rj_is_there_already)
+                //     {
+                //         curr_binary.snr = 1e-20;
+                //     }
+                //     else
+                //     {
+                //         prop_binary.snr = 1e-20;
+                //     }
+                // }
+                // else
+                // {
+                prop_binary.snr = band_here.gb_params.snr[bin_i];
+                prop_binary.f0_ms = band_here.gb_params.f0_ms[bin_i];
+                prop_binary.fdot = band_here.gb_params.fdot0[bin_i];
+                prop_binary.phi0 = band_here.gb_params.phi0[bin_i];
+                prop_binary.cosinc = band_here.gb_params.cosinc[bin_i];
+                prop_binary.psi = band_here.gb_params.psi[bin_i];
+                prop_binary.lam = band_here.gb_params.lam[bin_i];
+                prop_binary.sinbeta = band_here.gb_params.sinbeta[bin_i];
+                //}
+
+                if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM25: %d %d %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms);
+
 
                 curr_binary.transform();
                 prop_binary.transform();
-
-                // if ((band_here.walker_ind == 10) && (band_i == 122) && (threadIdx.x == 0)) printf("base: %d %d %d %d\n", band_i, band_here.data_index, band_here.update_data_index, mcmc_info->accepted_out[band_i]);
-                // if ((band_here.walker_ind == 10) && (band_i == 122) && (threadIdx.x == 0)) printf("curr: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
-                // if ((band_here.walker_ind == 10) && (band_i == 122) && (threadIdx.x == 0)) printf("prop: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
 
                 // if (threadIdx.x == 0)
                 //     printf("%e %e %e %e %e %e %e %e %e\n", curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
@@ -3681,6 +3886,13 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     bin_i_gen);
                 __syncthreads();
 
+                if ((threadIdx.x == 0) && (band_here.band_start_data_ind == 3811)) printf("HMMM35: %d %d %.12e %.12e  %.12e %.12e %d %.12e %.12e  %.12e %.12e \n", bin_i, start_ind_add, prop_binary.f0_ms, A_add[0].real(), A_add[1].real(), A_add[3].real(), start_ind_remove, curr_binary.f0_ms, A_remove[0].real(), A_remove[1].real(), A_remove[3].real());
+
+                // if ((threadIdx.x == 0)) printf("base up: %d %d %d %d %d %d\n", band_i, band_here.data_index, band_here.update_data_index, mcmc_info->accepted_out[band_i], start_ind_add, start_ind_remove);
+                // if ((threadIdx.x == 0)) printf("curr up: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, curr_binary.amp, curr_binary.f0, curr_binary.fdot, curr_binary.fddot, curr_binary.phi0, curr_binary.inc, curr_binary.psi, curr_binary.lam, curr_binary.theta);
+                // if ((threadIdx.x == 0)) printf("prop up: %d %d %e %e %e %e %e %e %e %e %e\n", band_i, bin_i, prop_binary.amp, prop_binary.f0, prop_binary.fdot, prop_binary.fddot, prop_binary.phi0, prop_binary.inc, prop_binary.psi, prop_binary.lam, prop_binary.theta);
+
+
                 // remove from residual with (+)
                 for (int i = threadIdx.x; i < band_here.gb_params.N; i += blockDim.x)
                 {
@@ -3690,6 +3902,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                     {
                         data->data_A[band_here.update_data_index * data->data_length + j] += A_remove[i];
                         data->data_E[band_here.update_data_index * data->data_length + j] += E_remove[i];
+                    }
+                    else
+                    {
+                        printf("BAD 8 ");
                     }
                 }
                 __syncthreads();
@@ -3703,12 +3919,36 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void make_new_move(
                         data->data_A[band_here.update_data_index * data->data_length + j] -= A_add[i];
                         data->data_E[band_here.update_data_index * data->data_length + j] -= E_add[i];
                     }
+                    else
+                    {
+                        printf("BAD 9 ");
+                    }
                 }
                 __syncthreads();
             }
             __syncthreads();
             // add new residual from shared (or global memory)
         }
+        __syncthreads();
+        double like_share_after = 0.0;
+        // double like_all_check = 0.0;
+        if ((threadIdx.x == 0) && (3811 == band_here.band_start_data_ind))
+        {
+               
+            for (int i = 0; i < band_here.band_data_lengths; i += 1)
+            {
+                if ((band_here.band_start_data_ind == 3811) && (i == 100)) printf("HMMM5: %d %.12e %.12e \n", i, A_data[i].real(), A_data[i].imag());
+                // printf("%.16e + 1j * %.16e,", A_data[i].real(), A_data[i].imag());
+                like_share_after += (-1./2. * 4 * df * A_data[i] * gcmplx::conj(A_data[i]) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                like_share_after += (-1./2. * 4 * df * E_data[i] * gcmplx::conj(E_data[i]) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+
+                /// like_all_check += (-1./2. * 4 * df * (data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i]) * gcmplx::conj((data->data_A[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_A[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i])) / data->psd_A[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+                // like_all_check += (-1./2. * 4 * df * (data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i]) * gcmplx::conj((data->data_E[band_here.data_index * data->data_length + band_here.band_start_data_ind + i] + data->data_E[band_here.update_data_index * data->data_length + band_here.band_start_data_ind + i])) / data->psd_E[band_here.noise_index * data->data_length + band_here.band_start_data_ind + i]).real();
+            }
+            printf("\nYAYAYAYAY: %d %e %.12e %e %e %e \n", band_i, like_share_before, like_share_after, like_share_after - like_share_before, mcmc_info->L_contribution[band_i].real(), like_share_after - like_share_before - mcmc_info->L_contribution[band_i].real());
+            // mcmc_info->L_contribution[band_i] = like_share_after - like_share_before;
+        }
+        __syncthreads();
     }
     __syncthreads();
 
@@ -3755,6 +3995,8 @@ void setup_single_bands(SingleBand *bands, BandPackage *band_info, GalacticBinar
             band_info->band_num_bins[band_i],
             band_info->band_start_data_ind[band_i],
             band_info->band_data_lengths[band_i],
+            band_info->band_interest_start_data_ind[band_i],
+            band_info->band_interest_data_lengths[band_i],
             band_info->max_data_store_size,
             band_info->fmin_allow[band_i],
             band_info->fmax_allow[band_i],
@@ -3844,7 +4086,7 @@ void make_new_move_wrap(InputInfo inputs)
     cudaFuncAttributes attr;
     CUDA_CHECK_AND_EXIT(cudaFuncGetAttributes(&attr, make_new_move<FFT>));
 
-    std::cout << "limit " << attr.maxDynamicSharedSizeBytes << std::endl;
+    // std::cout << "limit " << attr.maxDynamicSharedSizeBytes << std::endl;
 
     size_t global_memory_size_per_block, total_global_memory_size, shared_memory_size_mine;
     int num_blocks_per_sm, num_sm; 
@@ -3862,7 +4104,7 @@ void make_new_move_wrap(InputInfo inputs)
         CUDA_CHECK_AND_EXIT(
             cudaDeviceGetAttribute(&num_sm, cudaDevAttrMultiProcessorCount, inputs.device)
         );
-        std::cout << "check sm " << num_blocks_per_sm << " " << num_sm << std::endl;
+        // std::cout << "check sm " << num_blocks_per_sm << " " << num_sm << std::endl;
         
         global_memory_size_per_block = 2 * inputs.band_info->max_data_store_size * sizeof(cmplx);
         total_global_memory_size = num_blocks_per_sm * num_sm * global_memory_size_per_block;
@@ -3907,7 +4149,7 @@ void make_new_move_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaMemcpy(prior_info_d, inputs.prior_info, sizeof(PriorPackage), cudaMemcpyHostToDevice));
     
     int nblocks_curand_setup = std::ceil((num_blocks_run + 32 - 1) / 32);
-    std::cout << "check " << 32 << std::endl; 
+    // std::cout << "check " << 32 << std::endl; 
     CUDA_CHECK_AND_EXIT(cudaMalloc(&(inputs.stretch_info->curand_states), num_blocks_run * sizeof(curandState)));
     
     // setup the random in-kernel generator
@@ -3934,11 +4176,11 @@ void make_new_move_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    std::cout << "before real kernel " << num_blocks_run << std::endl; 
+    // std::cout << "before real kernel " << num_blocks_run << std::endl; 
     
-    
+    // if (inputs.mcmc_info->is_rj) num_blocks_run = 1;
     //  Invokes kernel with FFT::block_dim threads in CUDA block
-    make_new_move<FFT><<<num_blocks_run, FFT::block_dim, shared_memory_size_mine>>>(
+    make_new_move<FFT><<<1, FFT::block_dim, shared_memory_size_mine>>>(
         data_d,
         band_info_d,
         params_curr_d,
@@ -3954,7 +4196,7 @@ void make_new_move_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    std::cout << "after real kernel " << 32 << std::endl; 
+    // std::cout << "after real kernel " << 32 << std::endl; 
     
     // if (inputs.do_synchronize)
     // {
@@ -4530,7 +4772,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     cudaFuncAttributes attr;
     CUDA_CHECK_AND_EXIT(cudaFuncGetAttributes(&attr, make_tempering_swap<FFT>));
 
-    std::cout << "limit " << attr.maxDynamicSharedSizeBytes << std::endl;
+    // std::cout << "limit " << attr.maxDynamicSharedSizeBytes << std::endl;
 
     size_t global_memory_size_per_block, total_global_memory_size, shared_memory_size_mine;
     int num_blocks_per_sm, num_sm; 
@@ -4548,7 +4790,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
         CUDA_CHECK_AND_EXIT(
             cudaDeviceGetAttribute(&num_sm, cudaDevAttrMultiProcessorCount, inputs.device)
         );
-        std::cout << "check sm " << num_blocks_per_sm << " " << num_sm << std::endl;
+        // std::cout << "check sm " << num_blocks_per_sm << " " << num_sm << std::endl;
         
         global_memory_size_per_block = 2 * inputs.band_info->max_data_store_size * sizeof(cmplx);
         total_global_memory_size = num_blocks_per_sm * num_sm * global_memory_size_per_block;
@@ -4593,7 +4835,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaMemcpy(prior_info_d, inputs.prior_info, sizeof(PriorPackage), cudaMemcpyHostToDevice));
     
     int nblocks_curand_setup = std::ceil((num_blocks_run + 32 - 1) / 32);
-    std::cout << "check " << 32 << std::endl; 
+    // std::cout << "check " << 32 << std::endl; 
     CUDA_CHECK_AND_EXIT(cudaMalloc(&(inputs.stretch_info->curand_states), num_blocks_run * sizeof(curandState)));
     
     // setup the random in-kernel generator
@@ -4601,8 +4843,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    std::cout << "check middle" << 32 << std::endl; 
-    
+    // std::cout << "check middle" << 32 << std::endl; 
 
     StretchProposalPackage *stretch_info_d;
     CUDA_CHECK_AND_EXIT(cudaMalloc(&stretch_info_d, sizeof(StretchProposalPackage)));
@@ -4615,7 +4856,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     SingleBand *bands;
     CUDA_CHECK_AND_EXIT(cudaMalloc(&bands, (inputs.band_info)->num_bands * sizeof(SingleBand)));
 
-    std::cout << "before setup kernel " << num_blocks_run << std::endl; 
+    // std::cout << "before setup kernel " << num_blocks_run << std::endl; 
     int num_blocks_band_setup = std::ceil(((inputs.band_info)->num_bands + 32 - 1) / 32);
     setup_single_bands<<<num_blocks_band_setup, 32>>>(
         bands, band_info_d, params_curr_d, mcmc_info_d
@@ -4623,7 +4864,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    std::cout << "before real kernel " << num_blocks_run << std::endl; 
+    // std::cout << "before real kernel " << num_blocks_run << std::endl; 
     
     //  Invokes kernel with FFT::block_dim threads in CUDA block
     make_tempering_swap<FFT><<<num_blocks_run, FFT::block_dim, shared_memory_size_mine>>>(
@@ -4645,7 +4886,7 @@ void make_tempering_swap_wrap(InputInfo inputs)
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    std::cout << "after real kernel " << 32 << std::endl; 
+    // std::cout << "after real kernel " << 32 << std::endl; 
 
     extract_single_bands<<<num_blocks_band_setup, 32>>>(
         bands, band_info_d, params_curr_d, mcmc_info_d, true
@@ -5196,6 +5437,8 @@ GalacticBinaryParams::GalacticBinaryParams(
 DataPackage::DataPackage(
     cmplx* data_A_,
     cmplx* data_E_,
+    cmplx* base_data_A_,
+    cmplx* base_data_E_,
     double* psd_A_,
     double* psd_E_,
     double df_,
@@ -5206,6 +5449,8 @@ DataPackage::DataPackage(
 {
     data_A = data_A_;
     data_E = data_E_;
+    base_data_A = base_data_A_;
+    base_data_E = base_data_E_;
     psd_A = psd_A_;
     psd_E = psd_E_;
     df = df_;
@@ -5222,6 +5467,8 @@ BandPackage::BandPackage(
     int *band_num_bins_,
     int *band_start_data_ind_,
     int *band_data_lengths_,
+    int *band_interest_start_data_ind_,
+    int *band_interest_data_lengths_,
     int num_bands_,
     int max_data_store_size_,
     double *fmin_allow_,
@@ -5242,6 +5489,8 @@ BandPackage::BandPackage(
     band_num_bins = band_num_bins_;
     band_start_data_ind = band_start_data_ind_;
     band_data_lengths = band_data_lengths_;
+    band_interest_start_data_ind = band_interest_start_data_ind_;
+    band_interest_data_lengths = band_interest_data_lengths_;
     num_bands = num_bands_;
     max_data_store_size = max_data_store_size_;
     fmin_allow = fmin_allow_;
@@ -5311,18 +5560,28 @@ PriorPackage::PriorPackage(
 
 CUDA_HOSTDEV
 double PriorPackage::get_prior_val(
-    const SingleGalacticBinary gb
+    const SingleGalacticBinary gb,
+    int num_func
 )
 {
     double prior_val_out = 0.0;
-    prior_val_out += get_snr_prior(gb.snr);
-    prior_val_out += get_f0_prior(gb.f0_ms);
-    prior_val_out += get_fdot_prior(gb.fdot);
-    prior_val_out += get_phi0_prior(gb.phi0);
-    prior_val_out += get_cosinc_prior(gb.cosinc);
-    prior_val_out += get_psi_prior(gb.psi);
-    prior_val_out += get_lam_prior(gb.lam);
-    prior_val_out += get_sinbeta_prior(gb.sinbeta);
+
+    if ((num_func < 0) || (num_func > 7) || (num_func == 0))
+        prior_val_out += get_snr_prior(gb.snr);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 1))
+        prior_val_out += get_f0_prior(gb.f0_ms);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 2))
+        prior_val_out += get_fdot_prior(gb.fdot);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 3))
+        prior_val_out += get_phi0_prior(gb.phi0);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 4))
+        prior_val_out += get_cosinc_prior(gb.cosinc);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 5))
+        prior_val_out += get_psi_prior(gb.psi);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 6))
+        prior_val_out += get_lam_prior(gb.lam);
+    if ((num_func < 0) || (num_func > 7) || (num_func == 7))
+        prior_val_out += get_sinbeta_prior(gb.sinbeta);
 
     return prior_val_out;
 }
@@ -5381,6 +5640,56 @@ CUDA_HOSTDEV double PriorPackage::get_lam_prior(const double lam)
 CUDA_HOSTDEV double PriorPackage::get_sinbeta_prior(const double sinbeta)
 {
     return uniform_dist_logpdf(sinbeta, sinbeta_min, sinbeta_max);
+}
+
+#define NUM_THREADS_PRIOR_CHECK 32
+__global__ void check_prior_vals(double* prior_out, PriorPackage *prior_info, GalacticBinaryParams *gb_params, int num_func)
+{
+    for (int bin_i = threadIdx.x + blockIdx.x * blockDim.x; bin_i < gb_params->num_bin_all; bin_i += gridDim.x * blockDim.x)
+    {
+        SingleGalacticBinary gb(
+            gb_params->N,
+            gb_params->T,
+            gb_params->Soms_d,
+            gb_params->Sa_a,
+            gb_params->Amp,
+            gb_params->alpha,
+            gb_params->sl1,
+            gb_params->kn,
+            gb_params->sl2
+        );
+        
+        gb.snr = gb_params->snr[bin_i];
+        gb.f0_ms = gb_params->f0_ms[bin_i];
+        gb.fdot = gb_params->fdot0[bin_i];
+        gb.phi0 = gb_params->phi0[bin_i];
+        gb.cosinc = gb_params->cosinc[bin_i];
+        gb.psi = gb_params->psi[bin_i];
+        gb.lam = gb_params->lam[bin_i];
+        gb.sinbeta = gb_params->sinbeta[bin_i];
+
+        prior_out[bin_i] = prior_info->get_prior_val(gb, num_func);
+    }
+}
+
+void check_prior_vals_wrap(double* prior_out, PriorPackage *prior_info, GalacticBinaryParams *gb_params, int num_func)
+{
+    GalacticBinaryParams *gb_params_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&gb_params_d, sizeof(GalacticBinaryParams)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(gb_params_d, gb_params, sizeof(GalacticBinaryParams), cudaMemcpyHostToDevice));
+
+    PriorPackage *prior_info_d;
+    CUDA_CHECK_AND_EXIT(cudaMalloc(&prior_info_d, sizeof(PriorPackage)));
+    CUDA_CHECK_AND_EXIT(cudaMemcpy(prior_info_d, prior_info, sizeof(PriorPackage), cudaMemcpyHostToDevice));
+    
+    int nblocks = std::ceil((gb_params->num_bin_all + NUM_THREADS_PRIOR_CHECK - 1) / NUM_THREADS_PRIOR_CHECK);
+
+    check_prior_vals<<<nblocks, NUM_THREADS_PRIOR_CHECK>>>(prior_out, prior_info_d, gb_params_d, num_func);
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+
+    CUDA_CHECK_AND_EXIT(cudaFree(gb_params_d));
+    CUDA_CHECK_AND_EXIT(cudaFree(prior_info_d));
 }
 
 PeriodicPackage::PeriodicPackage(
@@ -5651,6 +5960,8 @@ void SingleBand::setup(
     int band_num_bins_,
     int band_start_data_ind_,
     int band_data_lengths_,
+    int band_interest_start_data_ind_,
+    int band_interest_data_lengths_,
     int max_data_store_size_,
     double fmin_allow_,
     double fmax_allow_,
@@ -5669,6 +5980,8 @@ void SingleBand::setup(
     band_num_bins = band_num_bins_;
     band_start_data_ind = band_start_data_ind_;
     band_data_lengths = band_data_lengths_;
+    band_interest_start_data_ind = band_interest_start_data_ind_;
+    band_interest_data_lengths = band_interest_data_lengths_;
     max_data_store_size = max_data_store_size_;
     fmin_allow = fmin_allow_;
     fmax_allow = fmax_allow_;
