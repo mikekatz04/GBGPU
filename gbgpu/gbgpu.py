@@ -97,6 +97,7 @@ class GBGPU(object):
             self.swap_ll_diff_func = swap_ll_diff_gpu
             self.gpus = gpus
             self.specialty_piece_wise_likelihoods = specialty_piece_wise_likelihoods
+            self.SharedMemoryMakeMove_wrap = SharedMemoryMakeMove_wrap
 
         else:
             self.xp = np
@@ -668,6 +669,7 @@ class GBGPU(object):
         oversample=1,
         data_splits=None,
         data_length=None,
+        return_cupy=False,
         **kwargs,
     ):
         """Get batched log likelihood
@@ -711,6 +713,7 @@ class GBGPU(object):
                 PSD to use for each source.
                 If ``None``, this will be filled with zeros and only analyzed with the first
                 PSD given. Default is ``None``.
+            return_cupy (bool, optional): If ``True``, return CuPy array. Default is ``False``.
             **kwargs (dict, optional): Passes keyword arguments to the :func:`run_wave` method.
 
         Raises:
@@ -1042,6 +1045,9 @@ class GBGPU(object):
 
         # compute Likelihood
         like_out = -1.0 / 2.0 * (self.d_d + h_h - 2 * d_h).real
+
+        if return_cupy:
+            return like_out
 
         # back to CPU if on GPU
         try:

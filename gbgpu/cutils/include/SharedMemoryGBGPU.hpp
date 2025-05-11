@@ -71,6 +71,22 @@ typedef struct InputInfoTag{
     int device;
     bool do_synchronize;
     double* factors;
+    cmplx *L_contribution;
+    cmplx *p_contribution;
+    double *params_curr;
+    double *params_prop;
+    double *prior_all_curr;
+    double *prior_all_prop;
+    double *factors_all;
+    double *random_val_all;
+    int *band_start_bin_ind;
+    int *band_num_bins;
+    int *band_start_data_ind;
+    int *band_data_lengths;
+    double *band_inv_temperatures_all;
+    bool *accepted_out;
+    int num_bands;
+    int max_data_store_size;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -181,6 +197,39 @@ void specialty_piece_wise_likelihoods_wrap(
     int num_parts,
     int start_freq_ind,
     int data_length,
+    bool do_synchronize
+);
+
+void SharedMemoryMakeMove(
+    cmplx *L_contribution,
+    cmplx *p_contribution,
+    cmplx *data_A,
+    cmplx *data_E,
+    double *noise_A,
+    double *noise_E,
+    int *data_index,
+    int *noise_index,
+    double *params_curr,
+    double *params_prop,
+    double *prior_all_curr,
+    double *prior_all_prop,
+    double *factors_all,
+    double *random_val_all,
+    int *band_start_bin_ind,
+    int *band_num_bins,
+    int *band_start_data_ind,
+    int *band_data_lengths,
+    double *band_inv_temperatures_all,
+    bool *accepted_out,
+    double T,
+    double dt,
+    int N,
+    int num_bin_all,
+    int start_freq_ind,
+    int data_length,
+    int num_bands,
+    int max_data_store_size,
+    int device,
     bool do_synchronize
 );
 
