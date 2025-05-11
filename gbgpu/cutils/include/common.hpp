@@ -8,9 +8,9 @@
 #    define CUDA_CHECK_AND_EXIT(error)                                                                      \
         {                                                                                                   \
             auto status = static_cast<cudaError_t>(error);                                                  \
-            if (status != cudaSuccess) {                                                                    \
-                std::cout << cudaGetErrorString(status) << " " << __FILE__ << ":" << __LINE__ << std::endl; \
-                std::exit(status);                                                                          \
+            if (status != cudaSuccess) {                                                    throw std::invalid_argument(cudaGetErrorString(status) );                \
+                /*std::cout << cudaGetErrorString(status) << " " << __FILE__ << ":" << __LINE__ << std::endl; \
+                std::exit(status);*/                                                                          \
             }                                                                                               \
         }
 #endif // CUDA_CHECK_AND_EXIT
@@ -58,11 +58,11 @@ namespace example {
 
         switch (cuda_device_arch) {
             // All SM supported by cuFFTDx
-            case 700: Functor<700, N>()(inputs); return 0;
-            case 720: Functor<720, N>()(inputs); return 0;
-            case 750: Functor<750, N>()(inputs); return 0;
+            ///case 700: Functor<700, N>()(inputs); return 0;
+            //case 720: Functor<720, N>()(inputs); return 0;
+            //case 750: Functor<750, N>()(inputs); return 0;
             case 800: Functor<800, N>()(inputs); return 0;
-            case 860: Functor<860, N>()(inputs); return 0;
+            //case 860: Functor<860, N>()(inputs); return 0;
             default: {
                 if (cuda_device_arch > 800) {
                     Functor<800, N>()(inputs);

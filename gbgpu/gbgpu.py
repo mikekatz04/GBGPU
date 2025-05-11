@@ -76,7 +76,11 @@ class GBGPU(object):
 
     """
 
+<<<<<<< HEAD
     def __init__(self, orbits: Orbits = None, use_gpu=False):
+=======
+    def __init__(self, use_gpu=False, gpus=None):
+>>>>>>> 10846de (started adding multigpu capability)
 
         self.use_gpu = use_gpu
 
@@ -87,6 +91,7 @@ class GBGPU(object):
             self.fill_global_func = fill_global_gpu
             self.global_get_ll_func = direct_like_wrap_gpu
             self.swap_ll_diff_func = swap_ll_diff_gpu
+            self.gpus = gpus
 
         else:
             self.xp = np
@@ -158,6 +163,7 @@ class GBGPU(object):
         dt=10.0,
         oversample=1,
         tdi2=False,
+        use_c_implementation=False,
     ):
         """Create waveforms in batches.
 
@@ -249,7 +255,7 @@ class GBGPU(object):
                 N_temp = self.special_get_N(amp, f0, T, *args, oversample=oversample)
             else:
                 N_temp = get_N(amp, f0, T, oversample=oversample)
-            N = N_temp.max()
+            N = N_temp.max().item()
 
         # number of binaries is determined from length of amp array
         self.num_bin = num_bin = len(amp)
@@ -286,6 +292,20 @@ class GBGPU(object):
 
         # transfer frequency
         fstar = Clight / (self.orbits.armlength * 2 * np.pi)
+
+        if use_c_implementation:
+            #breakpoint()
+            #AET_out = self.xp.zeros((N * self.num_bin * 3), dtype=complex)
+            AET_out = self.xp.zeros((self.num_bin * 3 * N,), dtype=complex)
+  
+            SharedMemoryWaveComp_wrap(AET_out, amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N, num_bin)
+
+            AET_out = AET_out.reshape(self.num_bin, 3, N)
+
+            # setup waveforms for efficient GPU likelihood or global template building
+            self.A_out = AET_out[:, 0].flatten().copy()
+            self.E_out = AET_out[:, 1].flatten().copy()
+            self.X_out = AET_out[:, 2].flatten().copy()
 
         cosps, sinps = self.xp.cos(2.0 * psi), self.xp.sin(2.0 * psi)
 
@@ -633,6 +653,10 @@ class GBGPU(object):
         start_freq_ind=0,
         data_index=None,
         noise_index=None,
+        use_c_implementation=False,
+        N=None,
+        T=4 * YEAR,
+        dt=10.0,
         **kwargs,
     ):
         """Get batched log likelihood
@@ -686,15 +710,18 @@ class GBGPU(object):
 
         """
 
+        # get number of observation points and adjust T accordingly
+        N_obs = int(T / dt)
+        T = N_obs * dt
+
+        self.num_bin = num_bin = params.shape[1]
+
         if self.d_d is None:
             raise ValueError(
                 "self.d_d attribute must be set before computing log-Likelihood. This attribute is the data with data inner product (<d|d>)."
             )
 
-        # produce TDI templates
-        self.run_wave(*params, **kwargs)
-
-        df = self.df
+        df = self.df = 1. / T
 
         # check if arrays are of same type
         if isinstance(data[0], self.xp.ndarray) is False:
@@ -736,27 +763,58 @@ class GBGPU(object):
         d_h = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
         h_h = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
 
-        # shift start inds based on the starting index of the data stream
-        start_inds_temp = (self.start_inds - start_freq_ind).astype(self.xp.int32)
+        if use_c_implementation:
+            # TODO: make more adjustable
+            if N is None:
+                raise ValueError("If use_c_implementation is True, N must be provided.")
 
-        # get ll through C/CUDA
-        self.get_ll_func(
-            d_h,
-            h_h,
-            self.A_out,
-            self.E_out,
-            data[0],
-            data[1],
-            psd[0],
-            psd[1],
-            df,
-            start_inds_temp,
-            self.N,
-            self.num_bin,
-            data_index,
-            noise_index,
-            data_length,
-        )
+            amp, f0, fdot, fddot, phi0, iota, psi, lam, beta = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params]
+            self.num_bin = num_bin = len(amp)
+
+            theta = np.pi / 2 - beta
+
+            SharedMemoryLikeComp_wrap(
+                d_h,
+                h_h,
+                data[0],
+                data[1],
+                psd[0],
+                psd[1],
+                data_index,
+                noise_index,
+                amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N, num_bin, start_freq_ind, data_length
+            )
+
+        else:  
+            # add kwargs
+            kwargs["T"] = T
+            kwargs["dt"] = dt
+            kwargs["N"] = N
+
+            # produce TDI templates
+            self.run_wave(*params, **kwargs)
+
+            # shift start inds based on the starting index of the data stream
+            start_inds_temp = (self.start_inds - start_freq_ind).astype(self.xp.int32)
+
+            # get ll through C/CUDA
+            self.get_ll_func(
+                d_h,
+                h_h,
+                self.A_out,
+                self.E_out,
+                data[0],
+                data[1],
+                psd[0],
+                psd[1],
+                df,
+                start_inds_temp,
+                self.N,
+                self.num_bin,
+                data_index,
+                noise_index,
+                data_length,
+            )
 
         if phase_marginalize:
             self.non_marg_d_h = d_h.copy()
@@ -824,7 +882,7 @@ class GBGPU(object):
         # get shape of information
         total_groups, nchannels, data_length = templates.shape
         group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
-        num_bin = len(group_index)
+        self.num_bin = num_bin = len(group_index)
 
         if nchannels < 2:
             raise ValueError("Calculates for A and E channels.")
@@ -889,6 +947,11 @@ class GBGPU(object):
         group_index,
         templates,
         start_freq_ind=0,
+        use_c_implementation=False,
+        N=None,
+        T=4 * YEAR,
+        dt=10.0,
+        batch_size=None,
         **kwargs,
     ):
         """Generate global templates from binary parameters
@@ -910,18 +973,74 @@ class GBGPU(object):
             **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
 
         """
+        self.num_bin = num_bin = num_here = params.shape[0]
 
-        # produce TDI templates
-        self.run_wave(*params.T, **kwargs)
-        self.fill_global_template(
-            group_index,
-            templates,
-            self.A_out,
-            self.E_out,
-            self.start_inds,
-            self.N,
-            start_freq_ind=start_freq_ind,
-        )
+        if use_c_implementation:
+            amp, f0, fdot, fddot, phi0, iota, psi, lam, beta = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params.T]
+            self.num_bin = num_bin = len(amp)
+
+            theta = np.pi / 2 - beta
+
+            # get shape of information
+            total_groups, nchannels, data_length = templates.shape
+            group_index = self.xp.asarray(group_index, dtype=self.xp.int32)
+
+            if nchannels < 2:
+                raise ValueError("Calculates for A and E channels.")
+            elif nchannels > 2:
+                warnings.warn("Only calculating A and E channels here currently.")
+
+            # check if arrays are of same type
+            if isinstance(templates, self.xp.ndarray) is False:
+                raise TypeError(
+                    "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
+                )
+
+            # prepare temporary buffers for C/CUDA
+            # These are required to ensure the python memory order
+            # is read properly in C/CUDA
+            template_A = self.xp.zeros_like(
+                templates[:, 0], dtype=self.xp.complex128
+            ).flatten()
+            template_E = self.xp.zeros_like(
+                templates[:, 1], dtype=self.xp.complex128
+            ).flatten()
+            
+            SharedMemoryGenerateGlobal_wrap(
+                template_A,
+                template_E,
+                group_index,
+                amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N, num_bin, start_freq_ind, data_length
+            )
+
+            templates[:, 0] += template_A.reshape(total_groups, data_length)
+            templates[:, 1] += template_E.reshape(total_groups, data_length)
+
+        else:
+            kwargs["T"] = T
+            kwargs["dt"] = dt
+            kwargs["N"] = N
+            # batch if needed
+            if batch_size is None:
+                batch_size = num_here
+
+            inds_batch = np.arange(batch_size, num_here, batch_size)
+            batches = np.split(np.arange(num_here), inds_batch)
+
+            for batch in batches: 
+                group_index_in = group_index[batch]
+                params_in = params[batch]
+                # produce TDI templates
+                self.run_wave(*params_in.T, **kwargs)
+                self.fill_global_template(
+                    group_index_in,
+                    templates,
+                    self.A_out,
+                    self.E_out,
+                    self.start_inds,
+                    self.N,
+                    start_freq_ind=start_freq_ind,
+                )
         return
         
     def swap_likelihood_difference(
@@ -934,6 +1053,10 @@ class GBGPU(object):
         data_index=None,
         noise_index=None,
         adjust_inplace=False,
+        use_c_implementation=False,
+        N=None,
+        T=4 * YEAR,
+        dt=10.0,
         **kwargs,
     ):
         """Generate global templates from binary parameters
@@ -958,21 +1081,9 @@ class GBGPU(object):
 
         assert params_add.shape == params_remove.shape
 
-        # produce TDI templates
-        self.run_wave(*params_remove.T, **kwargs)
-        A_remove, E_remove, start_inds_remove = self.A_out.copy(), self.E_out.copy(), self.start_inds.copy()
-
-        # produce TDI templates
-        self.run_wave(*params_add.T, **kwargs)
-        A_add, E_add, start_inds_add = self.A_out.copy(), self.E_out.copy(), self.start_inds.copy()
-
-        assert A_remove.shape == A_add.shape
-        assert E_remove.shape == E_add.shape
-        assert start_inds_remove.shape == start_inds_add.shape
-
         # get shape of information
         num_data, nchannels, data_length = data_minus_template.shape
-        num_bin = params_remove.shape[0]
+        self.num_bin = num_bin = params_remove.shape[0]
         if nchannels < 2:
             raise ValueError("Calculates for A and E channels.")
         elif nchannels > 2:
@@ -984,8 +1095,8 @@ class GBGPU(object):
                 "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
             )
 
-        df = self.df
-
+        df = self.df  = 1. / T
+ 
         # check if arrays are of same type
         if isinstance(data_minus_template[0], self.xp.ndarray) is False:
             raise TypeError(
@@ -1035,34 +1146,175 @@ class GBGPU(object):
         remove_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
         add_add = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
 
-        # shift start inds based on the starting index of the data stream
-        start_inds_temp_add = (start_inds_add - start_freq_ind).astype(self.xp.int32)
-        start_inds_temp_remove = (start_inds_remove - start_freq_ind).astype(self.xp.int32)
+        if use_c_implementation:
+            if N is None:
+                raise ValueError("If use_c_implementation is True, N must be provided.")
+            if not self.use_gpu:
+                raise ValueError("use_c_implementation is only for GPU usage.")
+            if self.gpus is not None:
+                do_synchronize = False
+                gpus = self.gpus
+                num_gpus = len(gpus)
+                params_add = self.xp.asarray(params_add)
+                params_remove = self.xp.asarray(params_remove)
+                inputs_in = [_ for _ in gpus]
+                splits = self.xp.array_split(self.xp.arange(num_bin), num_gpus)
+                params_add = self.xp.asarray(params_add)
+                params_remove = self.xp.asarray(params_remove)
+                return_to_main_device = self.xp.cuda.runtime.getDevice()
+                for gpu_i, (gpu, split) in enumerate(zip(gpus, splits)):
+                    with self.xp.cuda.Device(gpu):
+                        split_add = params_add[split]
+                        split_remove = params_remove[split]
+                        num_split_here = split_add.shape[0]
+                        assert split_add.shape == split_remove.shape
+                        params_add_in = self.xp.asarray(split_add)
+                        params_remove_in = self.xp.asarray(split_remove)
+                        
+                        # theta_add = np.pi / 2 - beta_add
+                        params_add_in[:, 8] = np.pi / 2 - params_add_in[:, 8]
+                        # theta_remove = np.pi / 2 - beta_remove
+                        params_remove_in[:, 8] = np.pi / 2 - params_remove_in[:, 8]
+                    
 
-        # get ll through C/CUDA
-        self.swap_ll_diff_func(
-            d_h_remove,
-            d_h_add,
-            add_remove,
-            remove_remove,
-            add_add,
-            A_remove,
-            E_remove,
-            start_inds_temp_remove,
-            A_add, 
-            E_add,
-            start_inds_temp_add,
-            data_minus_template[0],
-            data_minus_template[1],
-            psd[0],
-            psd[1],
-            df,
-            self.N,
-            self.num_bin,
-            data_index,
-            noise_index,
-            data_length,
-        )
+                        params_add_tuple = tuple([pars_tmp.copy()for pars_tmp in params_add_in.T])
+
+                        params_remove_tuple = tuple([pars_tmp.copy()for pars_tmp in params_remove_in.T])
+
+                        # initialize Likelihood terms <d|h> and <h|h>
+                        d_h_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                        d_h_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                        add_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                        remove_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+                        add_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
+
+                        data_minus_template_in = [self.xp.asarray(tmp_data) for tmp_data in data_minus_template]
+                        psd_in = [self.xp.asarray(tmp_psd) for tmp_psd in psd]
+
+                        noise_index_in = self.xp.asarray(noise_index[split])
+                        data_index_in = self.xp.asarray(data_index[split])
+                        
+                        tuple_in = (
+                        ( d_h_remove_temp,
+                            d_h_add_temp,
+                            remove_remove_temp,
+                            add_add_temp,
+                            add_remove_temp,
+                            data_minus_template_in[0],
+                            data_minus_template_in[1],
+                            psd_in[0],
+                            psd_in[1],
+                            data_index_in,
+                            noise_index_in,)
+                            + params_add_tuple
+                            + params_remove_tuple
+                            + (T, dt, N, num_split_here, start_freq_ind, data_length, gpu, do_synchronize)
+                        )    
+                        inputs_in[gpu_i] = tuple_in
+
+                for gpu_i, (gpu, inputs) in enumerate(zip(gpus, inputs_in)):
+                    with self.xp.cuda.Device(gpu):
+                        SharedMemorySwapLikeComp_wrap(*inputs)
+                
+                for gpu_i, (gpu, inputs) in enumerate(zip(gpus, inputs_in)):
+                    with self.xp.cuda.Device(gpu):
+                        self.xp.cuda.runtime.deviceSynchronize()
+                
+                for gpu_i, (gpu, split) in enumerate(zip(gpus, splits)):
+                    d_h_remove[split] = inputs_in[gpu_i][0][:]
+                    d_h_add[split] = inputs_in[gpu_i][1][:]
+                    remove_remove[split] = inputs_in[gpu_i][2][:]
+                    add_add[split] = inputs_in[gpu_i][3][:]
+                    add_remove[split] = inputs_in[gpu_i][4][:]
+
+                self.xp.cuda.runtime.setDevice(return_to_main_device)
+                
+            else:
+                amp_add, f0_add, fdot_add, fddot_add, phi0_add, iota_add, psi_add, lam_add, beta_add = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_add.T]
+
+                amp_remove, f0_remove, fdot_remove, fddot_remove, phi0_remove, iota_remove, psi_remove, lam_remove, beta_remove = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_remove.T]
+
+                self.num_bin = num_bin = len(amp_add)
+
+                theta_add = np.pi / 2 - beta_add
+                theta_remove = np.pi / 2 - beta_remove
+                do_synchronize = True
+
+                # no need to set it
+                gpu_here = -1
+
+                SharedMemorySwapLikeComp_wrap(
+                    d_h_remove,
+                    d_h_add,
+                    remove_remove,
+                    add_add,
+                    add_remove,
+                    data_minus_template[0],
+                    data_minus_template[1],
+                    psd[0],
+                    psd[1],
+                    data_index,
+                    noise_index,
+                    amp_add, f0_add, fdot_add, fddot_add, phi0_add, iota_add, psi_add, lam_add, theta_add,
+                    amp_remove, f0_remove, fdot_remove, fddot_remove, phi0_remove, iota_remove, psi_remove, lam_remove, theta_remove, T, dt, N, num_bin, start_freq_ind, data_length, gpu_here, do_synchronize
+                )
+                self.xp.cuda.runtime.deviceSynchronize()
+
+        else:  
+            # add kwargs
+            kwargs["T"] = T
+            kwargs["dt"] = dt
+            kwargs["N"] = N
+
+            # produce TDI templates
+            self.run_wave(*params_remove.T, **kwargs)
+            A_remove, E_remove, start_inds_remove = self.A_out.copy(), self.E_out.copy(), self.start_inds.copy()
+
+            # produce TDI templates
+            self.run_wave(*params_add.T, **kwargs)
+            A_add, E_add, start_inds_add = self.A_out.copy(), self.E_out.copy(), self.start_inds.copy()
+
+            assert A_remove.shape == A_add.shape
+            assert E_remove.shape == E_add.shape
+            assert start_inds_remove.shape == start_inds_add.shape
+
+
+            # shift start inds based on the starting index of the data stream
+            start_inds_temp_add = (start_inds_add - start_freq_ind).astype(self.xp.int32)
+            start_inds_temp_remove = (start_inds_remove - start_freq_ind).astype(self.xp.int32)
+
+            # get ll through C/CUDA
+            self.swap_ll_diff_func(
+                d_h_remove,
+                d_h_add,
+                add_remove,
+                remove_remove,
+                add_add,
+                A_remove,
+                E_remove,
+                start_inds_temp_remove,
+                A_add, 
+                E_add,
+                start_inds_temp_add,
+                data_minus_template[0],
+                data_minus_template[1],
+                psd[0],
+                psd[1],
+                df,
+                self.N,
+                self.num_bin,
+                data_index,
+                noise_index,
+                data_length,
+            )
+
+            self.A_remove = A_remove.reshape(-1, num_bin).T
+            self.E_remove = E_remove.reshape(-1, num_bin).T
+            self.start_inds_remove = start_inds_remove
+
+            self.A_add = A_add.reshape(-1, num_bin).T
+            self.E_add = E_add.reshape(-1, num_bin).T
+            self.start_inds_add = start_inds_add
 
         # store these likelihood terms for later if needed
         self.d_h_remove = d_h_remove
@@ -1070,14 +1322,6 @@ class GBGPU(object):
         self.add_remove = add_remove
         self.remove_remove = remove_remove
         self.add_add = add_add
-
-        self.A_remove = A_remove.reshape(-1, num_bin).T
-        self.E_remove = E_remove.reshape(-1, num_bin).T
-        self.start_inds_remove = start_inds_remove
-
-        self.A_add = A_add.reshape(-1, num_bin).T
-        self.E_add = E_add.reshape(-1, num_bin).T
-        self.start_inds_add = start_inds_add
 
         # compute Likelihood
         ll_diff = -1 / 2 * (-2 * d_h_add + 2 * d_h_remove - 2 * add_remove + add_add + remove_remove).real

@@ -618,13 +618,13 @@ void SharedMemoryWaveComp(
     
     switch (N) {
             // All SM supported by cuFFTDx
-            case 32: example::sm_runner<simple_block_fft_functor, 32>(inputs); return;
-            case 64: example::sm_runner<simple_block_fft_functor, 64>(inputs); return;
-            case 128: example::sm_runner<simple_block_fft_functor, 128>(inputs); return;
+            // case 32:example::sm_runner<simple_block_fft_functor, 32>(inputs); return;
+            // case 64:example::sm_runner<simple_block_fft_functor, 64>(inputs); return;
+            // case 128:example::sm_runner<simple_block_fft_functor, 128>(inputs); return;
             case 256: example::sm_runner<simple_block_fft_functor, 256>(inputs); return;
-            case 512: example::sm_runner<simple_block_fft_functor, 512>(inputs); return;
-            case 1024: example::sm_runner<simple_block_fft_functor, 1024>(inputs); return;
-            case 2048: example::sm_runner<simple_block_fft_functor, 2048>(inputs); return;
+            // case 512:example::sm_runner<simple_block_fft_functor, 512>(inputs); return;
+            // case 1024:example::sm_runner<simple_block_fft_functor, 1024>(inputs); return;
+            // case 2048:example::sm_runner<simple_block_fft_functor, 2048>(inputs); return;
 
             default: {
                 throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
@@ -656,6 +656,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     cmplx* data_E,
     double* noise_A,
     double* noise_E,
+    int* data_index,
+    int* noise_index,
     double* amp, 
     double* f0, 
     double* fdot0, 
@@ -669,7 +671,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind
+    int start_freq_ind,
+    int data_length
 ) 
 {
     using complex_type = cmplx;
@@ -690,6 +693,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     cmplx *d_h_temp = &wave[3 * N];
     cmplx *h_h_temp = &d_h_temp[FFT::block_dim.x];
     cmplx tmp1, tmp2;
+    int data_ind,  noise_ind;
 
     int jj = 0;
     //example::io<FFT>::load_to_smem(this_block_data, shared_mem);
@@ -697,7 +701,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
     cmplx d_A, d_E, h_A, h_E, n_A, n_E;
     for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
     {
-        
+    
+        data_ind = data_index[bin_i];
+        noise_ind = noise_index[bin_i];
+
         build_single_waveform<FFT>(
             wave,
             &start_ind,
@@ -722,13 +729,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
         for (int i = threadIdx.x; i < N; i += blockDim.x)
         {
             jj = i + start_ind - start_freq_ind;
-            d_A = data_A[jj];
-            d_E = data_E[jj];
-            n_A = noise_E[jj];
-            n_E = noise_A[jj];
+            d_A = data_A[data_ind * data_length + jj];
+            d_E = data_E[data_ind * data_length + jj];
+            n_A = noise_A[noise_ind * data_length + jj];
+            n_E = noise_E[noise_ind * data_length + jj];
 
-            
-            
             h_A = A[i];
             h_E = E[i];
 
@@ -806,7 +811,7 @@ void get_ll_wrap(InputInfo inputs) {
 
     // Increase max shared memory if needed
     CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
-        get_waveform<FFT>,
+        get_ll<FFT>,
         cudaFuncAttributeMaxDynamicSharedMemorySize,
         shared_memory_size_mine));
 
@@ -819,6 +824,8 @@ void get_ll_wrap(InputInfo inputs) {
         inputs.data_E,
         inputs.noise_A,
         inputs.noise_E,
+        inputs.data_index,
+        inputs.noise_index,
         inputs.amp,
         inputs.f0,
         inputs.fdot0,
@@ -832,7 +839,8 @@ void get_ll_wrap(InputInfo inputs) {
         inputs.dt, 
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind
+        inputs.start_freq_ind,
+        inputs.data_length
     );
 
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -861,6 +869,8 @@ void SharedMemoryLikeComp(
     cmplx* data_E,
     double* noise_A,
     double* noise_E,
+    int* data_index,
+    int* noise_index,
     double* amp, 
     double* f0, 
     double* fdot0, 
@@ -874,7 +884,8 @@ void SharedMemoryLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind
+    int start_freq_ind,
+    int data_length
 ) 
 {
 
@@ -884,7 +895,9 @@ void SharedMemoryLikeComp(
     inputs.data_A = data_A;
     inputs.data_E = data_E;
     inputs.noise_A = noise_A;
-    inputs.noise_E = noise_E;
+    inputs.noise_E = noise_E;;
+    inputs.data_index = data_index;
+    inputs.noise_index = noise_index;
     inputs.amp = amp;
     inputs.f0 = f0;
     inputs.fdot0 = fdot0;
@@ -899,16 +912,17 @@ void SharedMemoryLikeComp(
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
     inputs.start_freq_ind = start_freq_ind;
+    inputs.data_length = data_length;
     
     switch (N) {
             // All SM supported by cuFFTDx
-            case 32: example::sm_runner<get_ll_wrap_functor, 32>(inputs); return;
-            case 64: example::sm_runner<get_ll_wrap_functor, 64>(inputs); return;
-            case 128: example::sm_runner<get_ll_wrap_functor, 128>(inputs); return;
+            // case 32:example::sm_runner<get_ll_wrap_functor, 32>(inputs); return;
+            // case 64:example::sm_runner<get_ll_wrap_functor, 64>(inputs); return;
+            // case 128:example::sm_runner<get_ll_wrap_functor, 128>(inputs); return;
             case 256: example::sm_runner<get_ll_wrap_functor, 256>(inputs); return;
-            case 512: example::sm_runner<get_ll_wrap_functor, 512>(inputs); return;
-            case 1024: example::sm_runner<get_ll_wrap_functor, 1024>(inputs); return;
-            case 2048: example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
+            // case 512:example::sm_runner<get_ll_wrap_functor, 512>(inputs); return;
+            // case 1024:example::sm_runner<get_ll_wrap_functor, 1024>(inputs); return;
+            // case 2048:example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
 
             default: {
                 throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
@@ -918,3 +932,880 @@ void SharedMemoryLikeComp(
     //const unsigned int arch = example::get_cuda_device_arch();
     //simple_block_fft<800>(x);
 }
+
+
+
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+
+
+
+
+template<class FFT>
+__launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
+    cmplx* d_h_remove,
+    cmplx* d_h_add,
+    cmplx* remove_remove,
+    cmplx* add_add,
+    cmplx* add_remove,
+    cmplx* data_A,
+    cmplx* data_E,
+    double* noise_A,
+    double* noise_E,
+    int* data_index,
+    int* noise_index,
+    double* amp_add, 
+    double* f0_add, 
+    double* fdot0_add, 
+    double* fddot0_add, 
+    double* phi0_add, 
+    double* iota_add,
+    double* psi_add, 
+    double* lam_add,
+    double* theta_add,
+    double* amp_remove, 
+    double* f0_remove, 
+    double* fdot0_remove, 
+    double* fddot0_remove, 
+    double* phi0_remove, 
+    double* iota_remove,
+    double* psi_remove, 
+    double* lam_remove,
+    double* theta_remove,
+    double T, 
+    double dt,
+    int N,
+    int num_bin_all,
+    int start_freq_ind,
+    int data_length
+) 
+{
+    using complex_type = cmplx;
+
+    unsigned int start_ind_add = 0;
+    unsigned int start_ind_remove = 0;
+
+    extern __shared__  unsigned char shared_mem[];
+
+    //auto this_block_data = tdi_out
+ //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
+
+    double df = 1. / T;
+    int tid = threadIdx.x;
+    cmplx *wave_add = (cmplx*)shared_mem;
+    cmplx *A_add = &wave_add[0];
+    cmplx *E_add = &wave_add[N];
+
+    cmplx *wave_remove = &wave_add[3 * N];
+    cmplx *A_remove = &wave_remove[0];
+    cmplx *E_remove = &wave_remove[N];
+    
+    cmplx *d_h_remove_arr = &wave_remove[3 * N];
+    cmplx *d_h_add_arr = &d_h_remove_arr[FFT::block_dim.x];;
+    cmplx *remove_remove_arr = &d_h_add_arr[FFT::block_dim.x];;
+    cmplx *add_add_arr = &remove_remove_arr[FFT::block_dim.x];;
+    cmplx *add_remove_arr = &add_add_arr[FFT::block_dim.x];
+
+    cmplx d_h_remove_temp = 0.0;
+    cmplx d_h_add_temp = 0.0;
+    cmplx remove_remove_temp = 0.0;
+    cmplx add_add_temp = 0.0;
+    cmplx add_remove_temp = 0.0;
+
+    int data_ind,  noise_ind;
+
+    int lower_start_ind, upper_start_ind, lower_end_ind, upper_end_ind;
+    bool is_add_lower;
+    int total_i_vals;
+
+    cmplx h_A, h_E, h_A_add, h_E_add, h_A_remove, h_E_remove;
+    int real_ind, real_ind_add, real_ind_remove; 
+    
+    int jj = 0;
+    int j = 0;
+    //example::io<FFT>::load_to_smem(this_block_data, shared_mem);
+
+    cmplx d_A, d_E;
+    double n_A, n_E;
+    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+    {
+    
+        data_ind = data_index[bin_i];
+        noise_ind = noise_index[bin_i];
+
+        build_single_waveform<FFT>(
+            wave_add,
+            &start_ind_add,
+            amp_add[bin_i],
+            f0_add[bin_i],
+            fdot0_add[bin_i],
+            fddot0_add[bin_i],
+            phi0_add[bin_i],
+            iota_add[bin_i],
+            psi_add[bin_i],
+            lam_add[bin_i],
+            theta_add[bin_i],
+            T,
+            dt,
+            N,
+            bin_i
+        );
+        __syncthreads();
+        build_single_waveform<FFT>(
+            wave_remove,
+            &start_ind_remove,
+            amp_remove[bin_i],
+            f0_remove[bin_i],
+            fdot0_remove[bin_i],
+            fddot0_remove[bin_i],
+            phi0_remove[bin_i],
+            iota_remove[bin_i],
+            psi_remove[bin_i],
+            lam_remove[bin_i],
+            theta_remove[bin_i],
+            T,
+            dt,
+            N,
+            bin_i
+        );
+        __syncthreads();
+
+        // subtract start_freq_ind to find index into subarray
+        if (start_ind_remove <= start_ind_add)
+        {
+            lower_start_ind = start_ind_remove - start_freq_ind;
+            upper_end_ind = start_ind_add - start_freq_ind + N;
+
+            upper_start_ind = start_ind_add - start_freq_ind;
+            lower_end_ind = start_ind_remove - start_freq_ind + N;
+
+            is_add_lower = false;
+        }
+        else
+        {
+            lower_start_ind = start_ind_add - start_freq_ind;
+            upper_end_ind = start_ind_remove - start_freq_ind + N;
+
+            upper_start_ind = start_ind_remove - start_freq_ind;
+            lower_end_ind = start_ind_add - start_freq_ind + N;
+
+            is_add_lower = true;
+        } 
+        total_i_vals = upper_end_ind - lower_start_ind;
+        //ECK %d \n", total_i_vals);
+        __syncthreads();
+        if (total_i_vals < 2 * N)
+        {
+            for (int i = threadIdx.x;
+                    i < total_i_vals;
+                    i += blockDim.x)
+            {
+                
+                j = lower_start_ind + i;
+
+                n_A = noise_A[noise_ind * data_length + j];
+                n_E = noise_E[noise_ind * data_length + j];
+
+                d_A = data_A[data_ind * data_length + j];
+                d_E = data_E[data_ind * data_length + j];
+
+                //if ((bin_i == 0)){
+                //printf("%d %d %d %d %d %d %d %e %e %e %e %e %e\n", i, j, noise_ind, data_ind, noise_ind * data_length + j, data_ind * data_length + j, data_length, d_A.real(), d_A.imag(), d_E.real(), d_E.imag(), n_A, n_E);
+                //}
+
+                //if ((bin_i == 0)) printf("%d %e %e %e %e %e %e %e %e %e %e %e %e \n", tid, d_h_remove_temp.real(), d_h_remove_temp.imag(), d_h_add_temp.real(), d_h_add_temp.imag(), add_add_temp.real(), add_add_temp.imag(), remove_remove_temp.real(), remove_remove_temp.imag(), add_remove_temp.real(), add_remove_temp.imag());
+
+                if (j < upper_start_ind)
+                {
+                    real_ind = i;
+                    if (is_add_lower)
+                    {
+                        
+                        h_A = A_add[real_ind];
+                        h_E = E_add[real_ind];
+
+                        // get <d|h> term
+                        d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
+                        d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
+
+                        // <h|h>
+                        add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
+                        add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+                    }
+                    else
+                    {
+                        h_A = A_remove[real_ind];
+                        h_E = E_remove[real_ind];
+
+                        // get <d|h> term
+                        d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
+                        d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
+
+                        // <h|h>
+                        remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
+                        remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+
+                        //if ((bin_i == 0)) printf("%d %d %d \n", i, j, upper_start_ind);
+                    }
+                }
+                else if (j >= lower_end_ind)
+                {
+                    real_ind = j - upper_start_ind;
+                    if (!is_add_lower)
+                    {
+
+                        h_A_add = A_add[real_ind];
+                        h_E_add = E_add[real_ind];
+
+                        // get <d|h> term
+                        d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
+                        d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
+
+                        // <h|h>
+                        add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
+                        add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
+                    }
+                    else
+                    {
+                        h_A_remove = A_remove[real_ind];
+                        h_E_remove = E_remove[real_ind];
+
+                        // get <d|h> term
+                        d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
+                        d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
+
+                        // <h|h>
+                        remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
+                        remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
+                    }
+                }
+                else // this is where the signals overlap
+                {
+                    if (is_add_lower)
+                    {
+                        real_ind_add = i;
+                    }
+                    else
+                    {
+                        real_ind_add = j - upper_start_ind;
+                    }
+
+                    h_A_add = A_add[real_ind_add];
+                    h_E_add = E_add[real_ind_add];
+
+                    // get <d|h> term
+                    d_h_add_temp += gcmplx::conj(d_A) * h_A_add / n_A;
+                    d_h_add_temp += gcmplx::conj(d_E) * h_E_add / n_E;
+
+                    // <h|h>
+                    add_add_temp += gcmplx::conj(h_A_add) * h_A_add / n_A;
+                    add_add_temp += gcmplx::conj(h_E_add) * h_E_add / n_E;
+
+                    if (!is_add_lower)
+                    {
+                        real_ind_remove = i;
+                    }
+                    else
+                    {
+                        real_ind_remove = j - upper_start_ind;
+                    }
+                    
+                    h_A_remove = A_remove[real_ind_remove];
+                    h_E_remove = E_remove[real_ind_remove];
+
+                    // get <d|h> term
+                    d_h_remove_temp += gcmplx::conj(d_A) * h_A_remove / n_A;
+                    d_h_remove_temp += gcmplx::conj(d_E) * h_E_remove / n_E;
+
+                    // <h|h>
+                    remove_remove_temp += gcmplx::conj(h_A_remove) * h_A_remove / n_A;
+                    remove_remove_temp += gcmplx::conj(h_E_remove) * h_E_remove / n_E;
+
+                    add_remove_temp += gcmplx::conj(h_A_add) * h_A_remove / n_A;
+                    add_remove_temp += gcmplx::conj(h_E_add) * h_E_remove / n_E;
+                }
+            }
+        }
+        else
+        {
+            for (int i = threadIdx.x;
+                    i < N;
+                    i += blockDim.x)
+            {
+                
+                j = start_ind_remove + i - start_freq_ind;
+
+                
+                n_A = noise_A[noise_ind * data_length + j];
+                n_E = noise_E[noise_ind * data_length + j];
+
+                d_A = data_A[data_ind * data_length + j];
+                d_E = data_E[data_ind * data_length + j];
+
+                //if ((bin_i == num_bin - 1))printf("CHECK remove: %d %e %e  \n", i, n_A, d_A.real());
+                // calculate h term
+                h_A = A_remove[i];
+                h_E = E_remove[i];
+
+                // get <d|h> term
+                d_h_remove_temp += gcmplx::conj(d_A) * h_A / n_A;
+                d_h_remove_temp += gcmplx::conj(d_E) * h_E / n_E;
+
+                // <h|h>
+                remove_remove_temp += gcmplx::conj(h_A) * h_A / n_A;
+                remove_remove_temp += gcmplx::conj(h_E) * h_E / n_E;
+                
+            }
+
+            for (int i = threadIdx.x;
+                    i < N;
+                    i += blockDim.x)
+            {
+                
+                j = start_ind_add + i - start_freq_ind;
+
+                n_A = noise_A[noise_ind * data_length + j];
+                n_E = noise_E[noise_ind * data_length + j];
+
+                d_A = data_A[data_ind * data_length + j];
+                d_E = data_E[data_ind * data_length + j];
+
+                //if ((bin_i == 0))printf("CHECK add: %d %d %e %e %e %e  \n", i, j, n_A, d_A.real(), n_E, d_E.real());
+                // calculate h term
+                h_A = A_add[i];
+                h_E = E_add[i];
+
+                // get <d|h> term
+                d_h_add_temp += gcmplx::conj(d_A) * h_A / n_A;
+                d_h_add_temp += gcmplx::conj(d_E) * h_E / n_E;
+
+                // <h|h>
+                add_add_temp += gcmplx::conj(h_A) * h_A / n_A;
+                add_add_temp += gcmplx::conj(h_E) * h_E / n_E;
+                
+            }
+        }
+       
+        __syncthreads();
+        d_h_remove_arr[tid] = d_h_remove_temp;
+
+        
+        d_h_add_arr[tid] = d_h_add_temp;
+        add_add_arr[tid] = add_add_temp;
+        remove_remove_arr[tid] = remove_remove_temp;
+        add_remove_arr[tid] = add_remove_temp;
+        __syncthreads();
+
+        for (unsigned int s = 1; s < blockDim.x; s *= 2)
+        {
+            if (tid % (2 * s) == 0)
+            {
+                d_h_remove_arr[tid] += d_h_remove_arr[tid + s];
+                d_h_add_arr[tid] += d_h_add_arr[tid + s];
+                add_add_arr[tid] += add_add_arr[tid + s];
+                remove_remove_arr[tid] += remove_remove_arr[tid + s];
+                add_remove_arr[tid] += add_remove_arr[tid + s];
+                //if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
+                //printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
+            }
+            __syncthreads();
+        }
+        __syncthreads();
+        
+        if (tid == 0)
+        {
+            d_h_remove[bin_i] = 4.0 * df * d_h_remove_arr[0];
+            d_h_add[bin_i] = 4.0 * df * d_h_add_arr[0];
+            add_add[bin_i] = 4.0 * df * add_add_arr[0];
+            remove_remove[bin_i] = 4.0 * df * remove_remove_arr[0];
+            add_remove[bin_i] = 4.0 * df * add_remove_arr[0];
+        }
+        __syncthreads();
+        
+        //example::io<FFT>::store_from_smem(shared_mem, this_block_data);
+    }
+    //
+}
+
+
+// In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
+//
+// One block is run, it calculates two 128-point C2C double precision FFTs.
+// Data is generated on host, copied to device buffer, and then results are copied back to host.
+template<unsigned int Arch, unsigned int N>
+void get_swap_ll_diff_wrap(InputInfo inputs) {
+    using namespace cufftdx;
+
+    if (inputs.device >= 0)
+    {
+        // set the device
+        CUDA_CHECK_AND_EXIT(cudaSetDevice(inputs.device));
+    }
+    
+    // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
+    // will be executed on block level. Shared memory is required for co-operation between threads.
+    // Additionally,
+ 
+    using FFT          = decltype(Block() + Size<N>() + Type<fft_type::c2c>() + Direction<fft_direction::forward>() +
+                         Precision<double>() + ElementsPerThread<8>() + FFTsPerBlock<1>() + SM<Arch>());
+    using complex_type = cmplx;
+
+    // Allocate managed memory for input/output
+    auto          size       = FFT::ffts_per_block * cufftdx::size_of<FFT>::value;
+    auto          size_bytes = size * sizeof(cmplx);
+
+    // Shared memory must fit input data and must be big enough to run FFT
+    auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
+
+    // first is waveforms, second is d_h_temp and h_h_temp
+    auto shared_memory_size_mine = 3 * N * sizeof(cmplx) +  3 * N * sizeof(cmplx) + 5 * FFT::block_dim.x * sizeof(cmplx);
+    //std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
+    //for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //    std::cout << data[i].x << " " << data[i].y << std::endl;
+    //}
+
+    // Increase max shared memory if needed
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
+        get_swap_ll_diff<FFT>,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        shared_memory_size_mine));
+
+    //std::cout << (int) FFT::block_dim.x << std::endl;
+    // Invokes kernel with FFT::block_dim threads in CUDA block
+    get_swap_ll_diff<FFT><<<inputs.num_bin_all, FFT::block_dim, shared_memory_size_mine>>>(
+        inputs.d_h_remove,
+        inputs.d_h_add,
+        inputs.remove_remove,
+        inputs.add_add,
+        inputs.add_remove,
+        inputs.data_A,
+        inputs.data_E,
+        inputs.noise_A,
+        inputs.noise_E,
+        inputs.data_index,
+        inputs.noise_index,
+        inputs.amp_add,
+        inputs.f0_add,
+        inputs.fdot0_add,
+        inputs.fddot0_add,
+        inputs.phi0_add,
+        inputs.iota_add,
+        inputs.psi_add,
+        inputs.lam_add,
+        inputs.theta_add,
+        inputs.amp_remove,
+        inputs.f0_remove,
+        inputs.fdot0_remove,
+        inputs.fddot0_remove,
+        inputs.phi0_remove,
+        inputs.iota_remove,
+        inputs.psi_remove,
+        inputs.lam_remove,
+        inputs.theta_remove,
+        inputs.T,
+        inputs.dt, 
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_ind,
+        inputs.data_length
+    );
+
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    if (inputs.do_synchronize)
+    {
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
+    
+    //std::cout << "output [1st FFT]:\n";
+    //for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //    std::cout << data[i].x << " " << data[i].y << std::endl;
+    //}
+
+    //std::cout << shared_memory_size << std::endl;
+    //std::cout << "Success" <<  std::endl;
+
+}
+
+template<unsigned int Arch, unsigned int N>
+struct get_swap_ll_diff_wrap_functor {
+    void operator()(InputInfo inputs) { return get_swap_ll_diff_wrap<Arch, N>(inputs); }
+};
+
+
+void SharedMemorySwapLikeComp(
+    cmplx* d_h_remove,
+    cmplx* d_h_add,
+    cmplx* remove_remove,
+    cmplx* add_add,
+    cmplx* add_remove,
+    cmplx* data_A,
+    cmplx* data_E,
+    double* noise_A,
+    double* noise_E,
+    int* data_index,
+    int* noise_index,
+    double* amp_add, 
+    double* f0_add, 
+    double* fdot0_add, 
+    double* fddot0_add, 
+    double* phi0_add, 
+    double* iota_add,
+    double* psi_add, 
+    double* lam_add,
+    double* theta_add,
+    double* amp_remove, 
+    double* f0_remove, 
+    double* fdot0_remove, 
+    double* fddot0_remove, 
+    double* phi0_remove, 
+    double* iota_remove,
+    double* psi_remove, 
+    double* lam_remove,
+    double* theta_remove,
+    double T, 
+    double dt,
+    int N,
+    int num_bin_all,
+    int start_freq_ind,
+    int data_length,
+    int device,
+    bool do_synchronize
+) 
+{
+
+    InputInfo inputs;
+    inputs.d_h_remove = d_h_remove;
+    inputs.d_h_add = d_h_add;
+    inputs.remove_remove = remove_remove;
+    inputs.add_add = add_add;
+    inputs.add_remove = add_remove;
+    inputs.data_A = data_A;
+    inputs.data_E = data_E;
+    inputs.noise_A = noise_A;
+    inputs.noise_E = noise_E;;
+    inputs.data_index = data_index;
+    inputs.noise_index = noise_index;
+    inputs.amp_add = amp_add;
+    inputs.f0_add = f0_add;
+    inputs.fdot0_add = fdot0_add;
+    inputs.fddot0_add = fddot0_add;
+    inputs.phi0_add = phi0_add;
+    inputs.iota_add = iota_add;
+    inputs.psi_add = psi_add;
+    inputs.lam_add = lam_add;
+    inputs.theta_add = theta_add;
+    inputs.amp_remove = amp_remove;
+    inputs.f0_remove = f0_remove;
+    inputs.fdot0_remove = fdot0_remove;
+    inputs.fddot0_remove = fddot0_remove;
+    inputs.phi0_remove = phi0_remove;
+    inputs.iota_remove = iota_remove;
+    inputs.psi_remove = psi_remove;
+    inputs.lam_remove = lam_remove;
+    inputs.theta_remove = theta_remove;
+    inputs.T = T;
+    inputs.dt = dt;
+    inputs.N = N;
+    inputs.num_bin_all = num_bin_all;
+    inputs.start_freq_ind = start_freq_ind;
+    inputs.data_length = data_length;
+    inputs.device = device;
+    inputs.do_synchronize = do_synchronize;
+    
+    switch (N) {
+            // All SM supported by cuFFTDx
+            // case 32:example::sm_runner<get_swap_ll_diff_wrap_functor, 32>(inputs); return;
+            // case 64:example::sm_runner<get_swap_ll_diff_wrap_functor, 64>(inputs); return;
+            // case 128:example::sm_runner<get_swap_ll_diff_wrap_functor, 128>(inputs); return;
+            case 256: example::sm_runner<get_swap_ll_diff_wrap_functor, 256>(inputs); return;
+            // case 512:example::sm_runner<get_swap_ll_diff_wrap_functor, 512>(inputs); return;
+            // case 1024:example::sm_runner<get_swap_ll_diff_wrap_functor, 1024>(inputs); return;
+            // case 2048:example::sm_runner<get_swap_ll_diff_wrap_functor, 2048>(inputs); return;
+
+            default: {
+                throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
+            }
+        }
+   
+    //const unsigned int arch = example::get_cuda_device_arch();
+    //simple_block_fft<800>(x);
+}
+
+
+
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+
+
+// Add functionality for proper summation in the kernel
+#ifdef __CUDACC__
+CUDA_DEVICE
+double atomicAddDouble(double* address, double val)
+{
+    unsigned long long* address_as_ull =
+                              (unsigned long long*)address;
+    unsigned long long old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(val +
+                               __longlong_as_double(assumed)));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
+
+// Add functionality for proper summation in the kernel
+CUDA_DEVICE
+void atomicAddComplex(cmplx* a, cmplx b){
+  //transform the addresses of real and imag. parts to double pointers
+  double *x = (double*)a;
+  double *y = x+1;
+  //use atomicAdd for double variables
+
+  #ifdef __CUDACC__
+  atomicAddDouble(x, b.real());
+  atomicAddDouble(y, b.imag());
+  #else
+  #pragma omp atomic
+  *x += b.real();
+  #pragma omp atomic
+  *y += b.imag();
+  #endif
+}
+
+
+
+template<class FFT>
+__launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_template(
+    cmplx* template_A,
+    cmplx* template_E,
+    int* template_index,
+    double* amp, 
+    double* f0, 
+    double* fdot0, 
+    double* fddot0, 
+    double* phi0, 
+    double* iota,
+    double* psi, 
+    double* lam,
+    double* theta,
+    double T, 
+    double dt,
+    int N,
+    int num_bin_all,
+    int start_freq_ind,
+    int data_length
+) 
+{
+    using complex_type = cmplx;
+
+    unsigned int start_ind = 0;
+
+    extern __shared__  unsigned char shared_mem[];
+
+    //auto this_block_data = tdi_out
+ //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
+
+    int tid = threadIdx.x;
+    cmplx *wave = (cmplx*)shared_mem;
+    cmplx *A = &wave[0];
+    cmplx *E = &wave[N];
+
+    int template_ind;
+
+    int jj = 0;
+    //example::io<FFT>::load_to_smem(this_block_data, shared_mem);
+    
+    cmplx d_A, d_E, h_A, h_E, n_A, n_E;
+    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+    {
+    
+        template_ind = template_index[bin_i];
+
+        build_single_waveform<FFT>(
+            wave,
+            &start_ind,
+            amp[bin_i],
+            f0[bin_i],
+            fdot0[bin_i],
+            fddot0[bin_i],
+            phi0[bin_i],
+            iota[bin_i],
+            psi[bin_i],
+            lam[bin_i],
+            theta[bin_i],
+            T,
+            dt,
+            N,
+            bin_i
+        );
+
+        __syncthreads();
+
+        for (int i = threadIdx.x; i < N; i += blockDim.x)
+        {
+            jj = i + start_ind - start_freq_ind;
+            atomicAddComplex(&template_A[template_ind * data_length + jj], A[i]);
+            atomicAddComplex(&template_E[template_ind * data_length + jj], E[i]);
+        }
+        __syncthreads();
+    }
+}
+
+
+// In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
+//
+// One block is run, it calculates two 128-point C2C double precision FFTs.
+// Data is generated on host, copied to device buffer, and then results are copied back to host.
+template<unsigned int Arch, unsigned int N>
+void generate_global_template_wrap(InputInfo inputs) {
+    using namespace cufftdx;
+
+    // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
+    // will be executed on block level. Shared memory is required for co-operation between threads.
+    // Additionally,
+ 
+    using FFT          = decltype(Block() + Size<N>() + Type<fft_type::c2c>() + Direction<fft_direction::forward>() +
+                         Precision<double>() + ElementsPerThread<8>() + FFTsPerBlock<1>() + SM<Arch>());
+    using complex_type = cmplx;
+
+    // Allocate managed memory for input/output
+    auto          size       = FFT::ffts_per_block * cufftdx::size_of<FFT>::value;
+    auto          size_bytes = size * sizeof(cmplx);
+
+    // Shared memory must fit input data and must be big enough to run FFT
+    auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
+
+    // first is waveforms, second is d_h_temp and h_h_temp
+    auto shared_memory_size_mine = 3 * N * sizeof(cmplx);
+    //std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
+    //for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //    std::cout << data[i].x << " " << data[i].y << std::endl;
+    //}
+
+    // Increase max shared memory if needed
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
+        generate_global_template<FFT>,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        shared_memory_size_mine));
+
+    //std::cout << (int) FFT::block_dim.x << std::endl;
+    // Invokes kernel with FFT::block_dim threads in CUDA block
+    generate_global_template<FFT><<<inputs.num_bin_all, FFT::block_dim, shared_memory_size_mine>>>(
+        inputs.data_A,
+        inputs.data_E,
+        inputs.data_index,
+        inputs.amp,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.phi0,
+        inputs.iota,
+        inputs.psi,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt, 
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_ind,
+        inputs.data_length
+    );
+
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+
+    //std::cout << "output [1st FFT]:\n";
+    //for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //    std::cout << data[i].x << " " << data[i].y << std::endl;
+    //}
+
+    //std::cout << shared_memory_size << std::endl;
+    //std::cout << "Success" <<  std::endl;
+
+}
+
+template<unsigned int Arch, unsigned int N>
+struct generate_global_template_wrap_functor {
+    void operator()(InputInfo inputs) { return generate_global_template_wrap<Arch, N>(inputs); }
+};
+
+
+void SharedMemoryGenerateGlobal(
+    cmplx* data_A,
+    cmplx* data_E,
+    int* data_index,
+    double* amp, 
+    double* f0, 
+    double* fdot0, 
+    double* fddot0, 
+    double* phi0, 
+    double* iota,
+    double* psi, 
+    double* lam,
+    double* theta,
+    double T, 
+    double dt,
+    int N,
+    int num_bin_all,
+    int start_freq_ind,
+    int data_length
+) 
+{
+
+    InputInfo inputs;
+    inputs.data_A = data_A;
+    inputs.data_E = data_E;
+    inputs.data_index = data_index;
+    inputs.amp = amp;
+    inputs.f0 = f0;
+    inputs.fdot0 = fdot0;
+    inputs.fddot0 = fddot0;
+    inputs.phi0 = phi0;
+    inputs.iota = iota;
+    inputs.psi = psi;
+    inputs.lam = lam;
+    inputs.theta = theta;
+    inputs.T = T;
+    inputs.dt = dt;
+    inputs.N = N;
+    inputs.num_bin_all = num_bin_all;
+    inputs.start_freq_ind = start_freq_ind;
+    inputs.data_length = data_length;
+    
+    switch (N) {
+            // All SM supported by cuFFTDx
+            // case 32:example::sm_runner<generate_global_template_wrap_functor, 32>(inputs); return;
+            // case 64:example::sm_runner<generate_global_template_wrap_functor, 64>(inputs); return;
+            // case 128:example::sm_runner<generate_global_template_wrap_functor, 128>(inputs); return;
+            case 256: example::sm_runner<generate_global_template_wrap_functor, 256>(inputs); return;
+            // case 512:example::sm_runner<generate_global_template_wrap_functor, 512>(inputs); return;
+            // case 1024:example::sm_runner<generate_global_template_wrap_functor, 1024>(inputs); return;
+            // case 2048:example::sm_runner<get_ll_wrap_functor, 2048>(inputs); return;
+
+            default: {
+                throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
+            }
+        }
+   
+    //const unsigned int arch = example::get_cuda_device_arch();
+    //simple_block_fft<800>(x);
+}
+
