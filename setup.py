@@ -149,7 +149,7 @@ if run_cuda_install:
                 "'-fPIC'",
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "cufftdx/include"],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/nvidia-mathdx-25.01.1/nvidia/mathdx/25.01/include", "cufftdx/include"],
     )
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
 
@@ -180,12 +180,11 @@ if run_cuda_install:
                 "--compiler-options",
                 "'-fPIC'",
                 # "-lineinfo",
-                "-Xcompiler",
-                "-fopenmp",
-                "-std=c++17"
+                "-std=c++17",
+                "-DCUFFTDX_DISABLE_CUTLASS_DEPENDENCY"
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/cufftdx/include"],
+        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/nvidia-mathdx-25.01.1/nvidia/mathdx/25.01/include"],
     )
     ext_gpu2 = Extension("gbgpu.cutils.sharedmem", **ext_gpu_dict_2)
 
