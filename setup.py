@@ -121,14 +121,14 @@ except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
 
-lib_gsl_dir = "/opt/local/lib"
-include_gsl_dir = "/opt/local/include"
-
 if run_cuda_install:
     ext_gpu_dict = dict(
-        sources=["src/gbgpu/cutils/src/gbgpu_utils.cu", "src/gbgpu/cutils/src/GBGPU.pyx"],
-        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
-        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas"],
+        sources=[
+            "src/gbgpu/cutils/src/gbgpu_utils.cu",
+            "src/gbgpu/cutils/src/GBGPU.pyx",
+        ],
+        library_dirs=[CUDA["lib64"]],
+        libraries=["cudart", "cublas", "cufft"],
         language="c++",
         runtime_library_dirs=[CUDA["lib64"]],
         # This syntax is specific to this build system
@@ -154,7 +154,6 @@ if run_cuda_install:
         },
         include_dirs=[
             numpy_include,
-            include_gsl_dir,
             CUDA["include"],
             "src/gbgpucutils/include",
         ],
@@ -162,14 +161,17 @@ if run_cuda_install:
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
 
 ext_cpu_dict = dict(
-    sources=["src/gbgpu/cutils/src/gbgpu_utils.cpp", "src/gbgpu/cutils/src/GBGPU_cpu.pyx"],
-    library_dirs=[lib_gsl_dir],
-    libraries=["gsl", "gslcblas"],
+    sources=[
+        "src/gbgpu/cutils/src/gbgpu_utils.cpp",
+        "src/gbgpu/cutils/src/GBGPU_cpu.pyx",
+    ],
+    library_dirs=[],
+    libraries=[],
     language="c++",
     extra_compile_args={
         "gcc": [],  # "-std=c++11"
     },  # '-g'],
-    include_dirs=[numpy_include, include_gsl_dir, "src/gbgpu/cutils/include"],
+    include_dirs=[numpy_include, "src/gbgpu/cutils/include"],
 )
 ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
@@ -183,9 +185,7 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
-    package_dir = {
-        'gbgpu': 'src/gbgpu/'
-    },
+    package_dir={"gbgpu": "src/gbgpu/"},
     packages=[
         "gbgpu",
         "gbgpu.utils",
