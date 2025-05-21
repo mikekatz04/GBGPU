@@ -44,6 +44,5 @@ jobs:
       - name: Run module tests & show coverage results
         # Tests must be run in gbgpu/tests
         run: |
-          cd gbgpu/tests
           coverage run --source=gbgpu -m unittest discover
           coverage report -m

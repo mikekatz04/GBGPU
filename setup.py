@@ -126,7 +126,7 @@ include_gsl_dir = "/opt/local/include"
 
 if run_cuda_install:
     ext_gpu_dict = dict(
-        sources=["gbgpu/cutils/src/gbgpu_utils.cu", "gbgpu/cutils/src/GBGPU.pyx"],
+        sources=["src/gbgpu/cutils/src/gbgpu_utils.cu", "src/gbgpu/cutils/src/GBGPU.pyx"],
         library_dirs=[lib_gsl_dir, CUDA["lib64"]],
         libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas"],
         language="c++",
@@ -156,20 +156,20 @@ if run_cuda_install:
             numpy_include,
             include_gsl_dir,
             CUDA["include"],
-            "gbgpu/cutils/include",
+            "src/gbgpucutils/include",
         ],
     )
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
 
 ext_cpu_dict = dict(
-    sources=["gbgpu/cutils/src/gbgpu_utils.cpp", "gbgpu/cutils/src/GBGPU_cpu.pyx"],
+    sources=["src/gbgpu/cutils/src/gbgpu_utils.cpp", "src/gbgpu/cutils/src/GBGPU_cpu.pyx"],
     library_dirs=[lib_gsl_dir],
     libraries=["gsl", "gslcblas"],
     language="c++",
     extra_compile_args={
         "gcc": [],  # "-std=c++11"
     },  # '-g'],
-    include_dirs=[numpy_include, include_gsl_dir, "gbgpu/cutils/include"],
+    include_dirs=[numpy_include, include_gsl_dir, "src/gbgpu/cutils/include"],
 )
 ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
@@ -183,6 +183,9 @@ setup(
     name="gbgpu",
     # Random metadata. there's more you can supply
     author="Michael Katz",
+    package_dir = {
+        'gbgpu': 'src/gbgpu/'
+    },
     packages=[
         "gbgpu",
         "gbgpu.utils",
