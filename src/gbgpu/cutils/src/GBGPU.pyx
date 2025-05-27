@@ -17,11 +17,6 @@ cdef extern from "../include/gbgpu_utils.hh":
                    double* A_psd, double* E_psd, double df,
                    int* start_ind, int M, int num_bin, int* data_index, int* noise_index, int data_length);
 
-    void direct_like(cmplx* d_h, cmplx* h_h,
-                    cmplx* A_template, cmplx* E_template,
-                    cmplx* A_data, cmplx* E_data,
-                    int data_length, int start_freq_ind, int nwalkers);
-
     void swap_ll_diff_wrap(cmplx* d_h_remove, cmplx* d_h_add, cmplx* add_remove, cmplx* remove_remove, cmplx* add_add, cmplx* A_remove, cmplx* E_remove, int* start_ind_all_remove, cmplx* A_add, cmplx* E_add, int* start_ind_all_add, cmplx* A_data, cmplx* E_data, double* A_psd, double* E_psd, double df, int M, int num_bin, int* data_index, int* noise_index, int data_length);
 
     
@@ -65,24 +60,6 @@ def fill_global(A_glob, E_glob,
     fill_global_wrap(<cmplx*> A_glob_in, <cmplx*> E_glob_in,
             <cmplx*> A_template_in, <cmplx*> E_template_in,
             <int*> start_ind_in, M, num_bin, <int*>group_index_in, data_length);
-
-@pointer_adjust
-def direct_like_wrap(d_h, h_h,
-                 A_template, E_template,
-                 A_data, E_data,
-                 data_length, start_freq_ind, nwalkers):
-
-    cdef size_t d_h_in = d_h
-    cdef size_t h_h_in = h_h
-    cdef size_t A_template_in = A_template
-    cdef size_t E_template_in = E_template
-    cdef size_t A_data_in = A_data
-    cdef size_t E_data_in = E_data
-
-    direct_like(<cmplx*> d_h_in, <cmplx*> h_h_in,
-                  <cmplx*> A_template_in, <cmplx*> E_template_in,
-                  <cmplx*> A_data_in, <cmplx*> E_data_in,
-                  data_length, start_freq_ind, nwalkers)
 
 @pointer_adjust
 def swap_ll_diff(d_h_remove, d_h_add, add_remove, remove_remove, add_add, A_remove, E_remove, start_ind_all_remove, A_add, E_add, start_ind_all_add, A_data, E_data, A_psd, E_psd, df, M, num_bin, data_index, noise_index, data_length):

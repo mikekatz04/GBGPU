@@ -5,8 +5,8 @@ import warnings
 import numpy as np
 
 # import constants
-from gbgpu.utils.constants import *
-from gbgpu.utils.citation import *
+from .utils.constants import *
+from .utils.citation import *
 
 # import for GPU if available
 try:
@@ -15,8 +15,8 @@ try:
 except (ModuleNotFoundError, ImportError):
     import numpy as cp
 
-from gbgpu.gbgpu import InheritGBGPU
-from gbgpu.utils.utility import *
+from .gbgpu import InheritGBGPU
+from .utils.utility import *
 
 
 class GBGPUThirdBody(InheritGBGPU):

@@ -15,7 +15,6 @@ from .utils.citation import *
 # import Cython classes
 from .cutils.gbgpu_utils_cpu import get_ll as get_ll_cpu
 from .cutils.gbgpu_utils_cpu import fill_global as fill_global_cpu
-from .cutils.gbgpu_utils_cpu import direct_like_wrap as direct_like_wrap_cpu
 
 try:
     from lisatools.sensitivity import A1TDISens
@@ -31,10 +30,10 @@ try:
     import cupy as cp
     from .cutils.gbgpu_utils import get_ll as get_ll_gpu
     from .cutils.gbgpu_utils import fill_global as fill_global_gpu
-    from .cutils.gbgpu_utils import direct_like_wrap as direct_like_wrap_gpu
     from .cutils.sharedmem import SharedMemoryWaveComp_wrap, SharedMemoryLikeComp_wrap,SharedMemorySwapLikeComp_wrap, SharedMemoryGenerateGlobal_wrap, specialty_piece_wise_likelihoods, SharedMemoryMakeMove_wrap, psd_likelihood, compute_logpdf
     from .cutils.sharedmem import get_psd_val, get_lisasens_val, SharedMemoryChiSquaredComp_wrap
     
+
 except (ModuleNotFoundError, ImportError):
     pass
 
@@ -109,11 +108,6 @@ class GBGPU(object):
     def fill_global_func(self):
         """fill_global c func."""
         return fill_global_cpu if not self.use_gpu else fill_global_gpu
-
-    @property
-    def global_get_ll_func(self):
-        """global_get_ll_func c func."""
-        return direct_like_wrap_cpu if not self.use_gpu else direct_like_wrap_gpu
 
     @property
     def orbits(self) -> Orbits:
