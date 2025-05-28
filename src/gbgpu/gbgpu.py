@@ -83,12 +83,14 @@ class GBGPU(object):
 
     def __init__(self, orbits: Orbits = None, use_gpu=False, gpus=None):
 
-        self.use_gpu = use_gpu
-        self.gpus = gpus
-        
         # setup Cython/C++/CUDA calls based on if using GPU
-        if not use_gpu:
-            self.gpus = None
+        if use_gpu and gpus is None:
+            gpus = [0]
+        elif gpus is not None and not use_gpu:
+            use_gpu = True
+        
+        self.gpus = gpus
+        self.use_gpu = use_gpu
             
         self.d_d = None
         self.orbits = orbits
@@ -1564,8 +1566,7 @@ class GBGPU(object):
                 )
         return
 
-    
-    def new_swap_likelihood_difference(
+    def swap_likelihood_difference(
         self,
         params_remove,
         params_add,
@@ -1586,9 +1587,13 @@ class GBGPU(object):
         num_per_gpu=None,
         **kwargs,
     ):
+        if num_per_gpu is not None:
+            raise NotImplementedError("Need to check this.")
+
         if self.gpus is not None:
             # set first index gpu device to control main operations
-            self.xp.cuda.runtime.setDevice(self.gpus[0])
+            return_to_main_device = self.gpus[0]
+            self.xp.cuda.runtime.setDevice(return_to_main_device)
 
         self.num_bin = num_bin = params_add.shape[0]
 
@@ -1596,7 +1601,7 @@ class GBGPU(object):
             # TODO: G
             N = get_N(self.xp.asarray(params_add[:, 0]), self.xp.asarray(params_add[:, 1]), T, oversample=oversample)
             if self.xp.any(N == 0):
-                breakpoint()
+                raise ValueError("N contains zeros.")
         else:
             if isinstance(N, self.xp.ndarray):
                 assert params_add.shape[0] == N.shape[0]
@@ -1716,7 +1721,7 @@ class GBGPU(object):
                 
             if num_per_gpu is None:
                 assert len(self.gpus) == 1
-                num_per_gpu = int(10000000)
+                num_per_gpu = int(1e15)
                 # make really high so just keeps
 
             inputs_in = []
@@ -1807,371 +1812,6 @@ class GBGPU(object):
             self.xp.cuda.runtime.setDevice(main_device)
             self.xp.cuda.runtime.deviceSynchronize()
 
-        if phase_marginalize:
-            self.phase_angle = self.xp.arctan2(d_h_add.imag + add_remove.imag, d_h_add.real + add_remove.real)  
-            self.non_marg_d_h_add = d_h_add.copy()
-            self.non_marg_add_remove = add_remove.copy()
-            try:
-                self.non_marg_d_h_add = self.non_marg_d_h_add.get()
-                self.non_marg_add_remove = self.non_marg_add_remove.get()
-            except AttributeError:
-                pass
-
-            d_h_add *= self.xp.exp(-1j * self.phase_angle)
-            add_remove *= self.xp.exp(-1j * self.phase_angle)
-            
-        self.d_h_remove = d_h_remove
-        self.d_h_add = d_h_add
-        self.add_remove = add_remove
-        self.remove_remove = remove_remove
-        self.add_add = add_add
-        
-        # compute Likelihood
-        ll_diff = -1 / 2 * (-2 * d_h_add + 2 * d_h_remove - 2 * add_remove + add_add + remove_remove).real
-        # back to CPU if on GPU
-        try:
-            return ll_diff.get()
-
-        except AttributeError:
-            return ll_diff
-
-    def swap_likelihood_difference(
-        self,
-        params_remove,
-        params_add,
-        data_minus_template,
-        psd,
-        start_freq_ind=0,
-        data_index=None,
-        noise_index=None,
-        adjust_inplace=False,
-        use_c_implementation=False,
-        N=None,
-        T=4 * YEAR,
-        dt=10.0,
-        data_length=None,
-        data_splits=None,
-        phase_marginalize=False,
-        **kwargs,
-    ):
-        """Generate global templates from binary parameters
-
-        Generate waveforms in batches and then combine them into
-        global fit templates. This method wraps :func:`fill_global_template`
-        by building the waveforms first.
-
-        Args:
-            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
-                The shape is ``(number of parameters, number of binaries)``.
-            group_index (1D double int32 xp.ndarray): Index indicating to which template each individual binary belongs.
-            templates (3D complex128 xp.ndarray): Buffer array for template output to filled in place.
-                The shape is ``(number of templates, 2, data_length)``. The ``2`` is
-                for the ``A`` and ``E`` TDI channels in that order.
-            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
-                for the first entry of ``templates``. This is used if a subset of a full data stream
-                is presented for the computation.
-            **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
-
-        """
-
-        if self.gpus is not None:
-            # set first index gpu device to control main operations
-            self.xp.cuda.runtime.setDevice(self.gpus[0])
-
-        assert params_add.shape == params_remove.shape
-
-        self.num_bin = num_bin = params_remove.shape[0]
-        # get shape of information
-        if isinstance(data_minus_template, self.xp.ndarray):
-            num_data, nchannels, data_length = data_minus_template.shape
-            
-            if nchannels < 2:
-                raise ValueError("Calculates for A and E channels.")
-            elif nchannels > 2:
-                warnings.warn("Only calculating A and E channels here currently.")
-
-        # check if arrays are of same type
-        if isinstance(data_minus_template, self.xp.ndarray) is False:
-            raise_it = True
-            if isinstance(data_minus_template, list):
-                if isinstance(data_minus_template[0], self.xp.ndarray) is True:
-                    raise_it = False
-
-                elif isinstance(data_minus_template[0], list):
-                    if isinstance(data_minus_template[0][0], self.xp.ndarray) is True:
-                        raise_it = False
-
-            if raise_it:
-                raise TypeError(
-                    "Make sure the data arrays are the same type as template arrays (cupy vs numpy)."
-                )
-
-        df = self.df  = 1. / T
-
-        # make sure index information if provided properly
-        if (isinstance(data_minus_template[0], self.xp.ndarray) and data_minus_template[0].ndim == 1) or (isinstance(data_minus_template[0][0], self.xp.ndarray) and data_minus_template[0][0].ndim == 1):
-            if data_length is None:
-                if data_index is not None:
-                    raise ValueError("If inputing 1D data, cannot use data_index kwarg if data_length kwarg is not set.")
-                if noise_index is not None:
-                    raise ValueError("If inputing 1D data, cannot use noise_index kwarg if data_length kwarg is not set.")
-
-                if isinstance(data_minus_template[0], self.xp.ndarray):
-                    data_length = data_minus_template[0].shape[0]
-                elif isinstance(data_minus_template[0][0], self.xp.ndarray):
-                    data_length = data_minus_template[0][0].shape[0]
-
-        elif data_minus_template[0].ndim == 2:
-            data_length = data_minus_template[0].shape[1]
-            data_minus_template = [dat.copy().flatten() for dat in data_minus_template.transpose(1, 0, 2)]
-
-        elif data_minus_template[0].ndim == 2:
-            data_length = data_minus_template[0].shape[1]
-            data_minus_template = [dat.copy().flatten() for dat in data_minus_template]
-
-        if not isinstance(psd, list):
-            if psd[0].ndim == 2:
-                psd = [psd_i.copy().flatten() for psd_i in psd.transpose(1, 0, 2)]
-
-        # fill index values if not given
-        if data_index is None:
-            data_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
-        if noise_index is None:
-            noise_index = self.xp.zeros(self.num_bin, dtype=self.xp.int32)
-
-        # check that index values are ready for computation
-        assert len(data_index) == self.num_bin
-        assert len(data_index) == len(noise_index)
-        assert data_index.dtype == self.xp.int32
-        assert noise_index.dtype == self.xp.int32
-
-        if isinstance(data_minus_template[0], self.xp.ndarray):
-            comparison_length = len(data_minus_template[0])
-
-        elif isinstance(data_minus_template[0], list):
-            comparison_length = 0
-            for tmp in data_minus_template[0]:
-                comparison_length += len(tmp)
-
-        assert data_index.max() * data_length <= comparison_length
-        assert noise_index.max() * data_length <= comparison_length
-
-        # initialize Likelihood terms <d|h> and <h|h>
-        d_h_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-        d_h_add = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-        add_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-        remove_remove = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-        add_add = self.xp.zeros(self.num_bin, dtype=self.xp.complex128)
-
-        if use_c_implementation:
-            if N is None:
-                raise ValueError("If use_c_implementation is True, N must be provided.")
-            if not self.use_gpu:
-                raise ValueError("use_c_implementation is only for GPU usage.")
-
-            if isinstance(N, int):
-                N = self.xp.full(num_bin, N)
-
-            elif not isinstance(N, self.xp.ndarray) or len(N) != num_bin:
-                raise ValueError("N must be an integer or xp.ndarray with the same length as the number of binaries.")
-
-            unique_Ns = self.xp.unique(N)
-
-            if self.gpus is not None:
-                do_synchronize = False
-                gpus = self.gpus
-                num_gpus = len(gpus)
-                params_add = self.xp.asarray(params_add)
-                params_remove = self.xp.asarray(params_remove)
-
-                if data_splits is None:
-                    raise NotImplementedError
-                    splits = self.xp.array_split(self.xp.arange(num_bin), num_gpus)
-                else:
-                    splits = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
-                    split_Ns = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
-                    split_gpus = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
-                    inputs_in = [[None for _ in range(len(unique_Ns))] for _ in range(len(data_splits))]
-                    for gpu_i, split in enumerate(data_splits):
-                        max_split = split.max().item()
-                        min_split = split.min().item()
-                        for N_i, N_now in enumerate(unique_Ns):
-                            keep = self.xp.where(
-                                (data_index <= max_split) & (data_index >= min_split)
-                                & (N == N_now)
-                            )[0]
-                            if len(keep) > 0:
-                                splits[gpu_i][N_i] = keep
-                                split_Ns[gpu_i][N_i] = N_now
-                                split_gpus[gpu_i][N_i] = gpu_i
-
-                params_add = self.xp.asarray(params_add)
-                params_remove = self.xp.asarray(params_remove)
-                return_to_main_device = self.xp.cuda.runtime.getDevice()
-
-                self.xp.cuda.runtime.deviceSynchronize()
-                for gpu_i, (gpu_splits, gpu_split_Ns) in enumerate(zip(splits, split_Ns)):
-                    gpu = gpus[gpu_i]
-                    if len(gpu_splits) == 0:
-                        continue
-
-                    with self.xp.cuda.Device(gpu):
-                        self.xp.cuda.runtime.deviceSynchronize()
-                        if data_splits is None:
-                            raise NotImplementedError
-                            data_minus_template_in = [self.xp.asarray(tmp_data[gpu_i]) for tmp_data in data_minus_template]
-                            psd_in = [self.xp.asarray(tmp_psd[gpu_i]) for tmp_psd in psd]
-                            min_split = 0
-                        else:
-                            data_minus_template_in = [tmp[gpu_i] for tmp in data_minus_template]
-                            psd_in = [tmp[gpu_i] for tmp in psd]
-                            min_split = data_splits[gpu_i].min().item()
-                            max_split = data_splits[gpu_i].max().item()
-                            assert (max_split - min_split + 1) * data_length <= data_minus_template_in[0].shape[0]
-
-                        for N_i, (split, N_now) in enumerate(zip(gpu_splits, gpu_split_Ns)):
-                            if split is None or len(split) == 0:
-                                continue
-
-                            try:
-                                N_now = N_now.item()
-                            except AttributeError:
-                                pass
-
-                            split_add = params_add[split]
-                            split_remove = params_remove[split]
-                            num_split_here = split_add.shape[0]
-                            assert split_add.shape == split_remove.shape
-                            params_add_in = self.xp.asarray(split_add)
-                            params_remove_in = self.xp.asarray(split_remove)
-                            
-                            # theta_add = np.pi / 2 - beta_add
-                            params_add_in[:, 8] = np.pi / 2 - params_add_in[:, 8]
-                            # theta_remove = np.pi / 2 - beta_remove
-                            params_remove_in[:, 8] = np.pi / 2 - params_remove_in[:, 8]
-                        
-
-                            params_add_tuple = tuple([pars_tmp.copy()for pars_tmp in params_add_in.T])
-
-                            params_remove_tuple = tuple([pars_tmp.copy()for pars_tmp in params_remove_in.T])
-
-                            # initialize Likelihood terms <d|h> and <h|h>
-                            d_h_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                            d_h_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                            add_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                            remove_remove_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-                            add_add_temp = self.xp.zeros(num_split_here, dtype=self.xp.complex128)
-
-                            noise_index_in = self.xp.asarray(noise_index[split]) - min_split
-                            data_index_in = self.xp.asarray(data_index[split]) - min_split
-                        
-                            tuple_in = (
-                            ( d_h_remove_temp,
-                                d_h_add_temp,
-                                remove_remove_temp,
-                                add_add_temp,
-                                add_remove_temp,
-                                data_minus_template_in[0],
-                                data_minus_template_in[1],
-                                psd_in[0],
-                                psd_in[1],
-                                data_index_in,
-                                noise_index_in,)
-                                + params_add_tuple
-                                + params_remove_tuple
-                                + (T, dt, N_now, num_split_here, start_freq_ind, data_length, gpu, do_synchronize, num_data[0], num_psd[0])
-                            )    
-                            # self.xp.cuda.runtime.deviceSynchronize()
-                            SharedMemorySwapLikeComp_wrap(*tuple_in)
-                            # self.xp.cuda.runtime.deviceSynchronize()
-                            inputs_in[gpu_i][N_i] = tuple_in
-
-                for gpu_i, (gpu_splits, gpu_split_Ns) in enumerate(zip(splits, split_Ns)):
-                    gpu = gpus[gpu_i]
-                    if len(gpu_splits) == 0:
-                        continue
-
-                    with self.xp.cuda.Device(gpu):
-                        self.xp.cuda.runtime.deviceSynchronize()
-                    with self.xp.cuda.Device(return_to_main_device):
-                        self.xp.cuda.runtime.deviceSynchronize()
-                        for N_i, (split, N_now) in enumerate(zip(gpu_splits, gpu_split_Ns)):
-                            if split is None or len(split) == 0:
-                                continue
-                            d_h_remove[split] = inputs_in[gpu_i][N_i][0][:]
-                            d_h_add[split] = inputs_in[gpu_i][N_i][1][:]
-                            remove_remove[split] = inputs_in[gpu_i][N_i][2][:]
-                            add_add[split] = inputs_in[gpu_i][N_i][3][:]
-                            add_remove[split] = inputs_in[gpu_i][N_i][4][:]
-                            
-
-                self.xp.cuda.runtime.setDevice(return_to_main_device)
-                self.xp.cuda.runtime.deviceSynchronize()
-
-            else:
-                raise NotImplementedError("Need to check this code. Not ready for use.")
-                amp_add, f0_add, fdot_add, fddot_add, phi0_add, iota_add, psi_add, lam_add, beta_add = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_add.T]
-
-                amp_remove, f0_remove, fdot_remove, fddot_remove, phi0_remove, iota_remove, psi_remove, lam_remove, beta_remove = [self.xp.atleast_1d(self.xp.asarray(pars_tmp.copy()))for pars_tmp in params_remove.T]
-
-                self.num_bin = num_bin = len(amp_add)
-
-                theta_add = np.pi / 2 - beta_add
-                theta_remove = np.pi / 2 - beta_remove
-                do_synchronize = True
-
-                # no need to set it
-                gpu_here = -1
-
-                for i, N_i in enumerate(unique_Ns):
-
-                    try:
-                        N_i = N_i.item()
-                    except AttributeError:
-                        pass
-
-                    inds_here = self.xp.where(N == N_i)[0]
-                    num_bin_here = len(inds_here)
-
-                    if N_i == 0 or len(inds_here) == 0:
-                        continue
-
-                    d_h_remove_tmp = self.xp.zeros(num_bin_here, dtype=complex)
-                    d_h_add_tmp = self.xp.zeros(num_bin_here, dtype=complex)
-                    remove_remove_tmp = self.xp.zeros(num_bin_here, dtype=complex)
-                    add_add_tmp = self.xp.zeros(num_bin_here, dtype=complex)
-                    add_remove_tmp = self.xp.zeros(num_bin_here, dtype=complex)
-
-                    amp_add_in, f0_add_in, fdot_add_in, fddot_add_in, phi0_add_in, iota_add_in, psi_add_in, lam_add_in, theta_add_in = (amp_add[inds_here], f0_add[inds_here], fdot_add[inds_here], fddot_add[inds_here], phi0_add[inds_here], iota_add[inds_here], psi_add[inds_here], lam_add[inds_here], theta_add[inds_here])
-                    amp_remove_in, f0_remove_in, fdot_remove_in, fddot_remove_in, phi0_remove_in, iota_remove_in, psi_remove_in, lam_remove_in, theta_remove_in = (amp_remove[inds_here], f0_remove[inds_here], fdot_remove[inds_here], fddot_remove[inds_here], phi0_remove[inds_here], iota_remove[inds_here], psi_remove[inds_here], lam_remove[inds_here], theta_remove[inds_here])
-                    
-                    data_index_in = data_index[inds_here].astype(np.int32)
-                    noise_index_in = noise_index[inds_here].astype(np.int32)
-
-                    SharedMemorySwapLikeComp_wrap(
-                        d_h_remove_tmp,
-                        d_h_add_tmp,
-                        remove_remove_tmp,
-                        add_add_tmp,
-                        add_remove_tmp,
-                        data_minus_template[0],
-                        data_minus_template[1],
-                        psd[0],
-                        psd[1],
-                        data_index_in,
-                        noise_index_in,
-                        amp_add_in, f0_add_in, fdot_add_in, fddot_add_in, phi0_add_in, iota_add_in, psi_add_in, lam_add_in, theta_add_in,
-                        amp_remove_in, f0_remove_in, fdot_remove_in, fddot_remove_in, phi0_remove_in, iota_remove_in, psi_remove_in, lam_remove_in, theta_remove_in, T, dt, N_i, num_bin_here, start_freq_ind, data_length, gpu_here, do_synchronize, num_data[0], num_psd[0]
-                    )
-                    self.xp.cuda.runtime.deviceSynchronize()
-
-                    d_h_remove[inds_here] = d_h_remove_tmp
-                    d_h_add[inds_here] = d_h_add_tmp
-                    remove_remove[inds_here] = remove_remove_tmp
-                    add_add[inds_here] = add_add_tmp
-                    add_remove[inds_here] = add_remove_tmp
-                    self.xp.cuda.runtime.deviceSynchronize()
-
         else:  
             # add kwargs
             kwargs["T"] = T
@@ -2227,8 +1867,6 @@ class GBGPU(object):
             self.A_add = A_add.reshape(-1, num_bin).T
             self.E_add = E_add.reshape(-1, num_bin).T
             self.start_inds_add = start_inds_add
-
-        # store these likelihood terms for later if needed
 
         if phase_marginalize:
             self.phase_angle = self.xp.arctan2(d_h_add.imag + add_remove.imag, d_h_add.real + add_remove.real)  

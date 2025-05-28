@@ -2,19 +2,60 @@
 #include <iostream>
 #include <vector>
 
+#ifdef __CUDACC__
 #include <cuda_runtime_api.h>
 #include <cufftdx.hpp>
 #include <curand_kernel.h>
-
 #include "block_io.hpp"
 #include "common.hpp"
+#endif
 
 #include "SharedMemoryGBGPU.hpp"
 #include "LISA.h"
 #include "global.h"
 #include "math.h"
 
-__device__ void spacecraft(double P1[3], double P2[3], double P3[3], double t)
+#include <iostream>
+#include <vector>
+#include <complex>
+#include <cmath>
+
+using namespace std;
+
+// Recursive FFT function
+vector<cmplx> fft(const vector<cmplx>& x) {
+    int N = x.size();
+
+    // Base case: if the input size is 1, return the input as is
+    if (N <= 1) {
+        return x;
+    }
+
+    // Divide the input into even and odd indexed elements
+    vector<cmplx> even(N / 2);
+    vector<cmplx> odd(N / 2);
+    for (int i = 0; i < N / 2; ++i) {
+        even[i] = x[2 * i];
+        odd[i] = x[2 * i + 1];
+    }
+
+    // Recursively compute the FFT of even and odd indexed elements
+    vector<cmplx> q = fft(even);
+    vector<cmplx> r = fft(odd);
+
+    // Combine the results
+    vector<cmplx> y(N);
+    for (int i = 0; i < N / 2; ++i) {
+        double angle = -2 * M_PI * i / N;
+        cmplx w(cos(angle), sin(angle));
+        y[i] = q[i] + w * r[i];
+        y[i + N / 2] = q[i] - w * r[i];
+    }
+    return y;
+}
+
+CUDA_DEVICE
+void spacecraft(double P1[3], double P2[3], double P3[3], double t)
 {
     // """Compute space craft positions as a function of time"""
     // # kappa and lambda are constants determined in the Constants.h file
@@ -52,7 +93,8 @@ __device__ void spacecraft(double P1[3], double P2[3], double P3[3], double t)
     P3[2] = -SQ3 * AU * ec * (ca * cb + sa * sb);
 }
 
-__inline__ __device__ void get_eplus(double eplus[], double u[], double v[])
+CUDA_DEVICE
+__inline__ void get_eplus(double eplus[], double u[], double v[])
 {
     double outer_val_v, outer_val_u;
     for (int i = 0; i < 3; i += 1)
@@ -66,7 +108,8 @@ __inline__ __device__ void get_eplus(double eplus[], double u[], double v[])
     }
 }
 
-__inline__ __device__ void get_ecross(double ecross[], double u[], double v[])
+CUDA_DEVICE
+__inline__ void get_ecross(double ecross[], double u[], double v[])
 {
     double outer_val_1, outer_val_2;
 #pragma unroll
@@ -82,7 +125,8 @@ __inline__ __device__ void get_ecross(double ecross[], double u[], double v[])
     }
 }
 
-__inline__ __device__ void AET_from_XYZ_swap(cmplx *X_in, cmplx *Y_in, cmplx *Z_in)
+CUDA_DEVICE
+__inline__ void AET_from_XYZ_swap(cmplx *X_in, cmplx *Y_in, cmplx *Z_in)
 {
     cmplx X = *X_in;
     cmplx Y = *Y_in;
@@ -98,8 +142,12 @@ __inline__ __device__ void AET_from_XYZ_swap(cmplx *X_in, cmplx *Y_in, cmplx *Z_
     *Z_in = (X + Y + Z) / sqrt(3.0);
 }
 
+#ifdef __CUDACC__
 template <class FFT>
-__device__ void build_single_waveform(
+ 
+#endif
+CUDA_DEVICE
+void build_single_waveform(
     cmplx *wave,
     unsigned int *start_ind,
     double amp,
@@ -207,8 +255,15 @@ __device__ void build_single_waveform(
     double delta_t_slow = T / (double)N;
     double t, xi_tmp;
 
+#ifdef __CUDACC__
+    int start1 = threadIdx.x;
+    int incr1 = blockDim.x;
+#else
+    int start1 = 0;
+    int incr1 = 1;
+#endif
     // construct slow part
-    for (int i = threadIdx.x; i < N; i += blockDim.x)
+    for (int i = start1; i < N; i += incr1)
     {
         t = i * delta_t_slow;
         spacecraft(P1, P2, P3, t);
@@ -333,22 +388,38 @@ __device__ void build_single_waveform(
         Z[i] = tmp_Z;
     }
 
-    __syncthreads();
+    CUDA_SYNCTHREADS;
 
+    #ifdef __CUDACC__
     FFT().execute(reinterpret_cast<void *>(X));
     FFT().execute(reinterpret_cast<void *>(Y));
     FFT().execute(reinterpret_cast<void *>(Z));
+    #else
+    std::vector<cmplx> vecX(X, X + N);
+    std::vector<cmplx> vecY(Y, Y + N);
+    std::vector<cmplx> vecZ(Z, Z + N);
+    std::vector<cmplx> vecX_fft = fft(vecX);
+    std::vector<cmplx> vecY_fft = fft(vecY);
+    std::vector<cmplx> vecZ_fft = fft(vecZ);
 
-    __syncthreads();
+    for (int i = 0; i < N; i += 1)
+    {
+        X[i] = vecX_fft[i];
+        Y[i] = vecY_fft[i];
+        Z[i] = vecZ_fft[i];
+    }
+    #endif
 
-    for (int i = threadIdx.x; i < N; i += blockDim.x)
+    CUDA_SYNCTHREADS;
+
+    for (int i = start1; i < N; i += incr1)
     {
         X[i] *= amp;
         Y[i] *= amp;
         Z[i] *= amp;
     }
 
-    __syncthreads();
+    CUDA_SYNCTHREADS;
 
     cmplx tmp_switch;
     cmplx tmp1_switch;
@@ -365,7 +436,7 @@ __device__ void build_single_waveform(
     // }
 
     // fftshift in numpy and multiply by fctr3
-    for (int i = threadIdx.x; i < N_over_2; i += blockDim.x)
+    for (int i = start1; i < N_over_2; i += incr1)
     {
         // X
         tmp1_switch = X[i];
@@ -392,13 +463,13 @@ __device__ void build_single_waveform(
     // convert to A, E, T (they sit in X,Y,Z)
     if ((tdi_channel_setup == TDI_CHANNEL_SETUP_AET) || (tdi_channel_setup == TDI_CHANNEL_SETUP_AE))
     {
-        for (int i = threadIdx.x; i < N; i += blockDim.x)
+        for (int i = start1; i < N; i += incr1)
         {
             AET_from_XYZ_swap(&X[i], &Y[i], &Z[i]);
         }
     }
 
-    __syncthreads();
+    CUDA_SYNCTHREADS;
 
     double fmin = (q - ((double)N) / 2.) / T;
     *start_ind = (int)rint(fmin * T);
@@ -406,9 +477,12 @@ __device__ void build_single_waveform(
     return;
 }
 
-
+#ifdef __CUDACC__
 template <class FFT>
-__launch_bounds__(FFT::max_threads_per_block) __global__ void get_waveform(
+__launch_bounds__(FFT::max_threads_per_block) 
+__global__
+#endif
+void get_waveform(
     cmplx *tdi_out,
     double *amp,
     double *f0,
@@ -433,18 +507,30 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_waveform(
 
     unsigned int start_ind = 0;
 
+#ifdef __CUDACC__
     extern __shared__ unsigned char shared_mem[];
-
-    // auto this_block_data = tdi_out
-    //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
-
-    // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
     cmplx *wave = (cmplx *)shared_mem;
+#else
+    cmplx wave_tmp[3 * N];
+    cmplx *wave = &wave_tmp[0];
+#endif
 
-    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+#ifdef __CUDACC__
+    int start1 = blockIdx.x;
+    int incr1 = gridDim.x;
+#else
+    int start1 = 0;
+    int incr1 = 1;
+#endif
+
+    for (int bin_i = start1; bin_i < num_bin_all; bin_i += incr1)
     {
 
+#ifdef __CUDACC__
         build_single_waveform<FFT>(
+#else
+        build_single_waveform(
+#endif
             wave,
             &start_ind,
             amp[bin_i],
@@ -462,7 +548,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_waveform(
             bin_i,
             tdi_channel_setup);
 
-        for (int i = threadIdx.x; i < N; i += blockDim.x)
+#ifdef __CUDACC__
+        int start2 = threadIdx.x;
+        int incr2 = blockDim.x;
+#else
+        int start2 = 0;
+        int incr2 = 1;
+#endif
+        for (int i = start2; i < N; i += incr2)
         {
             for (int j = 0; j < nchannels; j += 1)
             {
@@ -470,13 +563,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_waveform(
             }
         }
 
-        __syncthreads();
-
-        // example::io<FFT>::store_from_smem(shared_mem, this_block_data);
+        CUDA_SYNCTHREADS;
     }
     //
 }
 
+#ifdef __CUDACC__
 // In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
 //
 // One block is run, it calculates two 128-point C2C double precision FFTs.
@@ -548,6 +640,8 @@ struct get_waveform_wrap_functor
 {
     void operator()(InputInfo inputs) { return get_waveform_wrap<Arch, N>(inputs); }
 };
+#endif
+
 void SharedMemoryWaveComp(
     cmplx *tdi_out,
     double *amp,
@@ -583,6 +677,7 @@ void SharedMemoryWaveComp(
     inputs.num_bin_all = num_bin_all;
     inputs.tdi_channel_setup = tdi_channel_setup;
 
+#ifdef __CUDACC__
     switch (N)
     {
     // All SM supported by cuFFTDx
@@ -616,6 +711,24 @@ void SharedMemoryWaveComp(
 
     // const unsigned int arch = example::get_cuda_device_arch();
     // simple_block_fft<800>(x);
+#else
+    get_waveform(
+        inputs.tdi_out,
+        inputs.amp,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.phi0,
+        inputs.iota,
+        inputs.psi,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.tdi_channel_setup);
+#endif
 }
 
 //////////////////
@@ -791,8 +904,11 @@ void add_inner_product_contribution(
     }
 }
 
+#ifdef __CUDACC__
 template <class FFT>
-__launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
+__launch_bounds__(FFT::max_threads_per_block) __global__ 
+#endif
+void get_ll(
     cmplx *d_h,
     cmplx *h_h,
     cmplx *data,
@@ -822,36 +938,60 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
 
     unsigned int start_ind = 0;
 
+#ifdef __CUDACC__
     extern __shared__ unsigned char shared_mem[];
-
-    // auto this_block_data = tdi_out
-    //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
+    cmplx *wave = (cmplx *)shared_mem;
+    cmplx *d_h_temp = &wave[3 * N];
+    cmplx *h_h_temp = &d_h_temp[FFT::block_dim.x];
+#else
+    cmplx wave_tmp[3 * N];
+    cmplx *wave = &wave_tmp[0];
+    cmplx _d_h_temp[1];
+    cmplx *d_h_temp = &_d_h_temp[0];
+    cmplx _h_h_temp[1];
+    cmplx *h_h_temp = &_d_h_temp[0];
+#endif
     int nchannels = 3;
     if (tdi_channel_setup == TDI_CHANNEL_SETUP_AE)
         nchannels = 2;
 
     double df = 1. / T;
+
+#ifdef __CUDACC__
     int tid = threadIdx.x;
-    cmplx *wave = (cmplx *)shared_mem;
-    cmplx _ignore_this = 0.0;
-    cmplx _ignore_this_2 = 0.0;
-    cmplx *d_h_temp = &wave[3 * N];
-    cmplx *h_h_temp = &d_h_temp[FFT::block_dim.x];
+#else
+    int tid = 0;
+#endif
+
     cmplx tmp1, tmp2;
     int data_ind, noise_ind;
+    cmplx _ignore_this = 0.0;
+    cmplx _ignore_this_2 = 0.0;
     double multi_factor = 1.0;
     int jj = 0;
     // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
 
     cmplx d, h;
     double n;
-    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+
+#ifdef __CUDACC__
+    int start1 = blockIdx.x;
+    int incr1 = gridDim.x;
+#else
+    int start1 = 0;
+    int incr1 = 1;
+#endif
+    for (int bin_i = start1; bin_i < num_bin_all; bin_i += incr1)
     {
 
         data_ind = data_index[bin_i];
         noise_ind = noise_index[bin_i];
 
+#ifdef __CUDACC__
         build_single_waveform<FFT>(
+#else
+        build_single_waveform(
+#endif
             wave,
             &start_ind,
             amp[bin_i],
@@ -869,11 +1009,19 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
             bin_i,
             tdi_channel_setup);
 
-        __syncthreads();
+        CUDA_SYNCTHREADS;
         tmp1 = 0.0;
         tmp2 = 0.0;
         multi_factor = 1.0;
-        for (int i = threadIdx.x; i < N; i += blockDim.x)
+
+#ifdef __CUDACC__
+        int start2 = threadIdx.x;
+        int incr2 = blockDim.x;
+#else
+        int start2 = 0;
+        int incr2 = 1;
+#endif
+        for (int i = start2; i < N; i += incr2)
         {
             jj = i + start_ind - start_freq_ind;
             add_inner_product_contribution(
@@ -886,12 +1034,13 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
                 num_data, num_noise
             );
         }
-        __syncthreads();
+        CUDA_SYNCTHREADS;
 
         d_h_temp[tid] = tmp1;
         h_h_temp[tid] = tmp2;
         // if (((bin_i == 10) || (bin_i == 400))) printf("%d %d  %e %e %e %e \n", bin_i, tid, d_h_temp[tid].real(), d_h_temp[tid].imag(), h_h_temp[tid].real(), h_h_temp[tid].imag());
-        __syncthreads();
+        CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
         for (unsigned int s = 1; s < blockDim.x; s *= 2)
         {
             if (tid % (2 * s) == 0)
@@ -901,22 +1050,20 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_ll(
                 // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
                 // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
             }
-            __syncthreads();
+            CUDA_SYNCTHREADS;
         }
-        __syncthreads();
-
+        CUDA_SYNCTHREADS;
+#endif
         if (tid == 0)
         {
             d_h[bin_i] = 4.0 * df * d_h_temp[0];
             h_h[bin_i] = 4.0 * df * h_h_temp[0];
         }
-        __syncthreads();
-
-        // example::io<FFT>::store_from_smem(shared_mem, this_block_data);
+        CUDA_SYNCTHREADS;
     }
-    //
 }
 
+#ifdef __CUDACC__
 // In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
 //
 // One block is run, it calculates two 128-point C2C double precision FFTs.
@@ -1008,6 +1155,7 @@ struct get_ll_wrap_functor
 {
     void operator()(InputInfo inputs) { return get_ll_wrap<Arch, N>(inputs); }
 };
+#endif
 
 void SharedMemoryLikeComp(
     cmplx *d_h,
@@ -1066,6 +1214,7 @@ void SharedMemoryLikeComp(
     inputs.num_data = num_data;
     inputs.num_noise = num_noise;
 
+#ifdef __CUDACC__
     switch (N)
     {
     // All SM supported by cuFFTDx
@@ -1096,7 +1245,34 @@ void SharedMemoryLikeComp(
         throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
     }
     }
+#else
+    get_ll(
+        inputs.d_h,
+        inputs.h_h,
+        inputs.data_arr,
+        inputs.noise,
+        inputs.data_index,
+        inputs.noise_index,
+        inputs.amp,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.phi0,
+        inputs.iota,
+        inputs.psi,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_ind,
+        inputs.data_length,
+        inputs.tdi_channel_setup, 
+        inputs.num_data,
+        inputs.num_noise);
 
+#endif
     // const unsigned int arch = example::get_cuda_device_arch();
     // simple_block_fft<800>(x);
 }
@@ -1110,8 +1286,11 @@ void SharedMemoryLikeComp(
 //////////////////
 //////////////////
 
+#ifdef __CUDACC__
 template <class FFT>
-__launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
+__launch_bounds__(FFT::max_threads_per_block) __global__ 
+#endif
+void get_swap_ll_diff(
     cmplx *d_h_remove,
     cmplx *d_h_add,
     cmplx *remove_remove,
@@ -1154,8 +1333,33 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
     unsigned int start_ind_add = 0;
     unsigned int start_ind_remove = 0;
 
+#ifdef __CUDACC__
     extern __shared__ unsigned char shared_mem[];
+    cmplx *wave_add = (cmplx *)shared_mem;
+    cmplx *wave_remove = &wave_add[3 * N];
 
+    cmplx *d_h_remove_arr = &wave_remove[3 * N];
+    cmplx *d_h_add_arr = &d_h_remove_arr[FFT::block_dim.x];
+    cmplx *remove_remove_arr = &d_h_add_arr[FFT::block_dim.x];
+    cmplx *add_add_arr = &remove_remove_arr[FFT::block_dim.x];
+    cmplx *add_remove_arr = &add_add_arr[FFT::block_dim.x];
+
+#else
+    cmplx _wave_add[3 * N];
+    cmplx *wave_add = &_wave_add[0];
+    cmplx _wave_remove[3 * N];
+    cmplx *wave_remove = &_wave_remove[0];
+    cmplx _d_h_remove_arr[1];
+    cmplx *d_h_remove_arr = &_d_h_remove_arr[0];
+    cmplx _d_h_add_arr[1];
+    cmplx *d_h_add_arr = &_d_h_add_arr[0];
+    cmplx _remove_remove_arr[1];
+    cmplx *remove_remove_arr = &_remove_remove_arr[0];
+    cmplx _add_add_arr[1];
+    cmplx *add_add_arr = &_add_add_arr[0];
+    cmplx _add_remove_arr[1];
+    cmplx *add_remove_arr = &_add_remove_arr[0];
+#endif
     // auto this_block_data = tdi_out
     //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
     int nchannels = 3;
@@ -1163,20 +1367,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
         nchannels = 2;
 
     double df = 1. / T;
+#ifdef __CUDACC__
     int tid = threadIdx.x;
-    cmplx *wave_add = (cmplx *)shared_mem;
-
-    cmplx *wave_remove = &wave_add[3 * N];
-
-    cmplx *d_h_remove_arr = &wave_remove[3 * N];
-    cmplx *d_h_add_arr = &d_h_remove_arr[FFT::block_dim.x];
-    ;
-    cmplx *remove_remove_arr = &d_h_add_arr[FFT::block_dim.x];
-    ;
-    cmplx *add_add_arr = &remove_remove_arr[FFT::block_dim.x];
-    ;
-    cmplx *add_remove_arr = &add_add_arr[FFT::block_dim.x];
-
+#else
+    int tid = 0;
+#endif
     cmplx d_h_remove_temp = 0.0;
     cmplx d_h_add_temp = 0.0;
     cmplx remove_remove_temp = 0.0;
@@ -1200,7 +1395,15 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
 
     cmplx d_A, d_E;
     double n_A, n_E;
-    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+
+#ifdef __CUDACC__
+    int start1 = blockIdx.x;
+    int incr1 = gridDim.x;
+#else
+    int start1 = 0;
+    int incr1 = 1;
+#endif
+    for (int bin_i = start1; bin_i < num_bin_all; bin_i += incr1)
     {
 
         data_ind = data_index[bin_i];
@@ -1213,7 +1416,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
         add_add_temp = 0.0;
         add_remove_temp = 0.0;
 
+#ifdef __CUDACC__
         build_single_waveform<FFT>(
+#else
+        build_single_waveform(
+#endif
             wave_add,
             &start_ind_add,
             amp_add[bin_i],
@@ -1230,8 +1437,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
             N,
             bin_i,
             tdi_channel_setup);
-        __syncthreads();
+        CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
         build_single_waveform<FFT>(
+#else
+        build_single_waveform(
+#endif
             wave_remove,
             &start_ind_remove,
             amp_remove[bin_i],
@@ -1248,7 +1459,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
             N,
             bin_i,
             tdi_channel_setup);
-        __syncthreads();
+        CUDA_SYNCTHREADS;
 
         // subtract start_freq_ind to find index into subarray
         if (start_ind_remove <= start_ind_add)
@@ -1273,12 +1484,20 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
         }
         total_i_vals = upper_end_ind - lower_start_ind;
         // printf("ECK %d %d \n", total_i_vals, 2 * N);
-        __syncthreads();
+        CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
+        int start2 = threadIdx.x;
+        int incr2 = blockDim.x;
+#else
+        int start2 = 0;
+        int incr2 = 1;
+#endif
         if (total_i_vals < 2 * N)
         {
-            for (int i = threadIdx.x;
+
+            for (int i = start2;
                  i < total_i_vals;
-                 i += blockDim.x)
+                 i += incr2)
             {
 
                 j = lower_start_ind + i; 
@@ -1466,9 +1685,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
         }
         else
         {
-            for (int i = threadIdx.x;
+            for (int i = start2;
                  i < N;
-                 i += blockDim.x)
+                 i += incr2)
             {
 
                 j = start_ind_remove + i - start_freq_ind;
@@ -1503,9 +1722,9 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
                         );
             }
 
-            for (int i = threadIdx.x;
+            for (int i = start2;
                  i < N;
-                 i += blockDim.x)
+                 i += incr2)
             {
 
                 j = start_ind_add + i - start_freq_ind;
@@ -1542,15 +1761,15 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
             }
         }
 
-        __syncthreads();
+        CUDA_SYNCTHREADS;
         d_h_remove_arr[tid] = d_h_remove_temp;
 
         d_h_add_arr[tid] = d_h_add_temp;
         add_add_arr[tid] = add_add_temp;
         remove_remove_arr[tid] = remove_remove_temp;
         add_remove_arr[tid] = add_remove_temp;
-        __syncthreads();
-
+        CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
         for (unsigned int s = 1; s < blockDim.x; s *= 2)
         {
             if (tid % (2 * s) == 0)
@@ -1563,10 +1782,10 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
                 // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
                 // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
             }
-            __syncthreads();
+            CUDA_SYNCTHREADS;
         }
-        __syncthreads();
-
+        CUDA_SYNCTHREADS;
+#endif
         if (tid == 0)
         {
             d_h_remove[bin_i] = 4.0 * df * d_h_remove_arr[0];
@@ -1575,13 +1794,14 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_swap_ll_diff(
             remove_remove[bin_i] = 4.0 * df * remove_remove_arr[0];
             add_remove[bin_i] = 4.0 * df * add_remove_arr[0];
         }
-        __syncthreads();
+        CUDA_SYNCTHREADS;
 
         // example::io<FFT>::store_from_smem(shared_mem, this_block_data);
     }
     //
 }
 
+#ifdef __CUDACC__
 // In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
 //
 // One block is run, it calculates two 128-point C2C double precision FFTs.
@@ -1685,6 +1905,7 @@ struct get_swap_ll_diff_wrap_functor
 {
     void operator()(InputInfo inputs) { return get_swap_ll_diff_wrap<Arch, N>(inputs); }
 };
+#endif
 
 void SharedMemorySwapLikeComp(
     cmplx *d_h_remove,
@@ -1767,6 +1988,7 @@ void SharedMemorySwapLikeComp(
     inputs.num_data = num_data;
     inputs.num_noise = num_noise;
 
+#ifdef __CUDACC__
     switch (N)
     {
     // All SM supported by cuFFTDx
@@ -1797,7 +2019,46 @@ void SharedMemorySwapLikeComp(
         throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
     }
     }
+#else
+    get_swap_ll_diff(
+        inputs.d_h_remove,
+        inputs.d_h_add,
+        inputs.remove_remove,
+        inputs.add_add,
+        inputs.add_remove,
+        inputs.data_arr,
+        inputs.noise,
+        inputs.data_index,
+        inputs.noise_index,
+        inputs.amp_add,
+        inputs.f0_add,
+        inputs.fdot0_add,
+        inputs.fddot0_add,
+        inputs.phi0_add,
+        inputs.iota_add,
+        inputs.psi_add,
+        inputs.lam_add,
+        inputs.theta_add,
+        inputs.amp_remove,
+        inputs.f0_remove,
+        inputs.fdot0_remove,
+        inputs.fddot0_remove,
+        inputs.phi0_remove,
+        inputs.iota_remove,
+        inputs.psi_remove,
+        inputs.lam_remove,
+        inputs.theta_remove,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_inds,
+        inputs.data_length,
+        inputs.tdi_channel_setup,
+        inputs.num_data,
+        inputs.num_noise);
 
+#endif
     // const unsigned int arch = example::get_cuda_device_arch();
     // simple_block_fft<800>(x);
 }
@@ -1810,9 +2071,11 @@ void SharedMemorySwapLikeComp(
 //////////////////
 //////////////////
 //////////////////
-
+#ifdef __CUDACC__
 template <class FFT>
-__launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
+__launch_bounds__(FFT::max_threads_per_block) __global__ 
+#endif
+void get_chi_squared(
     cmplx *h1_h1,
     cmplx *h2_h2,
     cmplx *h1_h2,
@@ -1842,23 +2105,36 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
     unsigned int start_ind_1 = 0;
     unsigned int start_ind_2 = 0;
 
+    
+#ifdef __CUDACC__
     extern __shared__ unsigned char shared_mem[];
+    cmplx *wave_1 = (cmplx *)shared_mem;
+    cmplx *wave_2 = &wave_1[3 * N];
+    cmplx *h1_h1_arr = &wave_2[3 * N];
+    cmplx *h2_h2_arr = &h1_h1_arr[FFT::block_dim.x];
+    cmplx *h1_h2_arr = &h2_h2_arr[FFT::block_dim.x];
 
+#else
+    cmplx _wave_1[3 * N];
+    cmplx *wave_1 = &_wave_1[0];
+    cmplx _wave_2[3 * N];
+    cmplx *wave_2 = &_wave_2[0];
+    cmplx _h1_h1_arr[1];
+    cmplx *h1_h1_arr = &_h1_h1_arr[0];
+    cmplx _h2_h2_arr[1];
+    cmplx *h2_h2_arr = &h2_h2_arr[0];
+    cmplx _h1_h2_arr[1];
+    cmplx *h1_h2_arr = &h1_h2_arr[0];
+#endif
     // auto this_block_data = tdi_out
     //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
 
     double df = 1. / T;
+#ifdef __CUDACC__
     int tid = threadIdx.x;
-    cmplx *wave_1 = (cmplx *)shared_mem;
-
-    cmplx *wave_2 = &wave_1[3 * N];
-
-    cmplx *h1_h1_arr = &wave_2[3 * N];
-    ;
-    cmplx *h2_h2_arr = &h1_h1_arr[FFT::block_dim.x];
-    ;
-    cmplx *h1_h2_arr = &h2_h2_arr[FFT::block_dim.x];
-
+#else       
+    int tid = 0;
+#endif
     cmplx h1_h1_tmp = 0.0;
     cmplx h2_h2_tmp = 0.0;
     cmplx h1_h2_tmp = 0.0;
@@ -1880,9 +2156,22 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
     cmplx _ignore_this_2 = 0.0;
     // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
     double n;
-    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+#ifdef __CUDACC__
+    int start1 = blockIdx.x;
+    int incr1 = gridDim.x;
+
+    int start2 = blockIdx.y;
+    int incr2 = gridDim.y;    
+#else
+    int start1 = 0;
+    int incr1 = 1;
+
+    int start2 = 0;
+    int incr2 = 1;
+#endif
+    for (int bin_i = start1; bin_i < num_bin_all; bin_i += incr1)
     {
-        for (int bin_j = blockIdx.y + bin_i + 1; bin_j < num_bin_all; bin_j += gridDim.y)
+        for (int bin_j = start2 + bin_i + 1; bin_j < num_bin_all; bin_j += incr2)
         {
             h1_h1_tmp = 0.0;
             h1_h2_tmp = 0.0;
@@ -1894,7 +2183,11 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
             output_ind = num_bin_all * bin_i + bin_j - int(((bin_i + 2) * (bin_i + 1)) / 2);
             // output_ind2 = last_row_end + bin_j; // INDEX SO DOES NOT HAVE +1 
 
+#ifdef __CUDACC__
             build_single_waveform<FFT>(
+#else
+            build_single_waveform(
+#endif
                 wave_1,
                 &start_ind_1,
                 amp[bin_i],
@@ -1910,8 +2203,12 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
                 dt,
                 N,
                 bin_i, tdi_channel_setup);
-            __syncthreads();
+            CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
             build_single_waveform<FFT>(
+#else
+            build_single_waveform(
+#endif
                 wave_2,
                 &start_ind_2,
                 amp[bin_j],
@@ -1927,7 +2224,7 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
                 dt,
                 N,
                 bin_i, tdi_channel_setup);
-            __syncthreads();
+            CUDA_SYNCTHREADS;
 
             // subtract start_freq_ind to find index into subarray
             if (start_ind_2 <= start_ind_1)
@@ -1952,12 +2249,19 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
             }
             total_i_vals = upper_end_ind - lower_start_ind;
 
-            __syncthreads();
+#ifdef __CUDACC__
+            int start3 = threadIdx.x;
+            int incr3 = blockDim.x;
+#else
+            int start3 = 0;
+            int incr3 = 1;
+#endif
+            CUDA_SYNCTHREADS;
             if (total_i_vals < 2 * N)
             {
-                for (int i = threadIdx.x;
+                for (int i = start3;
                     i < total_i_vals;
-                    i += blockDim.x)
+                    i += incr3)
                 {
 
                     j = lower_start_ind + i;
@@ -2106,16 +2410,17 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
                     h1_h1[output_ind] = 1e9;
                     h1_h2[output_ind] = 0.0;
                 }
-                __syncthreads();
+                CUDA_SYNCTHREADS;
                 continue;
             }
 
-            __syncthreads();
+            CUDA_SYNCTHREADS;
             h2_h2_arr[tid] = h2_h2_tmp;
             h1_h1_arr[tid] = h1_h1_tmp;
             h1_h2_arr[tid] = h1_h2_tmp;
-            __syncthreads();
+            CUDA_SYNCTHREADS;
 
+#ifdef __CUDACC__
             for (unsigned int s = 1; s < blockDim.x; s *= 2)
             {
                 if (tid % (2 * s) == 0)
@@ -2126,17 +2431,17 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
                     // if ((bin_i == 1) && (blockIdx.x == 0) && (channel_i == 0) && (s == 1))
                     // printf("%d %d %d %d %.18e %.18e %.18e %.18e %.18e %.18e %d\n", bin_i, channel_i, s, tid, sdata[tid].real(), sdata[tid].imag(), tmp.real(), tmp.imag(), sdata[tid + s].real(), sdata[tid + s].imag(), s + tid);
                 }
-                __syncthreads();
+                CUDA_SYNCTHREADS;
             }
-            __syncthreads();
-
+            CUDA_SYNCTHREADS;
+#endif
             if (tid == 0)
             {
                 h2_h2[output_ind] = 4.0 * df * h2_h2_arr[0];
                 h1_h1[output_ind] = 4.0 * df * h1_h1_arr[0];
                 h1_h2[output_ind] = 4.0 * df * h1_h2_arr[0];
             }
-            __syncthreads();
+            CUDA_SYNCTHREADS;
 
         }
         // example::io<FFT>::store_from_smem(shared_mem, this_block_data);
@@ -2144,6 +2449,8 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void get_chi_squared(
     //
 }
 
+
+#ifdef __CUDACC__ 
 // In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
 //
 // One block is run, it calculates two 128-point C2C double precision FFTs.
@@ -2247,6 +2554,7 @@ struct get_chi_squared_wrap_functor
 {
     void operator()(InputInfo inputs) { return get_chi_squared_wrap<Arch, N>(inputs); }
 };
+#endif
 
 void SharedMemoryChiSquaredComp(
     cmplx *h1_h1,
@@ -2304,6 +2612,7 @@ void SharedMemoryChiSquaredComp(
     inputs.num_data = num_data;
     inputs.num_noise = num_noise;
 
+#ifdef __CUDACC__
     switch (N)
     {
     // All SM supported by cuFFTDx
@@ -2334,7 +2643,32 @@ void SharedMemoryChiSquaredComp(
         throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
     }
     }
-
+#else
+    get_chi_squared(
+        inputs.h1_h1,
+        inputs.h2_h2,
+        inputs.h1_h2,
+        inputs.noise,
+        inputs.noise_index,
+        inputs.amp,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.phi0,
+        inputs.iota,
+        inputs.psi,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_ind,
+        inputs.data_length,
+        inputs.tdi_channel_setup,
+        inputs.num_data, 
+        inputs.num_noise);
+#endif
     // const unsigned int arch = example::get_cuda_device_arch();
     // simple_block_fft<800>(x);
 }
@@ -2391,8 +2725,11 @@ void atomicAddComplex(cmplx *a, cmplx b)
 #endif
 }
 
+#ifdef __CUDACC__
 template <class FFT>
-__launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_template(
+__launch_bounds__(FFT::max_threads_per_block) __global__ 
+#endif
+void generate_global_template(
     cmplx *tmplt, 
     int *template_index,
     double *factors,
@@ -2421,25 +2758,49 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
     if (tdi_channel_setup == TDI_CHANNEL_SETUP_AE)
         nchannels = 2;
 
+#ifdef __CUDACC__
     extern __shared__ unsigned char shared_mem[];
+    cmplx *wave = (cmplx *)shared_mem; // N * nchannels length
 
+#else
+    cmplx _wave[3 * N];
+    cmplx *wave = &_wave[0];
+    
+#endif
     // auto this_block_data = tdi_out
     //+ cufftdx::size_of<FFT>::value * FFT::ffts_per_block * blockIdx.x;
 
+#ifdef __CUDACC__
     int tid = threadIdx.x;
-    cmplx *wave = (cmplx *)shared_mem; // N * nchannels length
-
+#else
+    int tid = 0;
+#endif
+    
     int template_ind;
     double factor;
     int start_freq_ind;
     int jj = 0;
-    for (int bin_i = blockIdx.x; bin_i < num_bin_all; bin_i += gridDim.x)
+#ifdef __CUDACC__
+    int start1 = blockIdx.x;
+    int incr1 = gridDim.x;
+#else
+    int start1 = 0;
+    int incr1 = 1;
+#endif
+    for (int bin_i = start1; bin_i < num_bin_all; bin_i += incr1)
     {
 
         template_ind = template_index[bin_i];
         factor = factors[bin_i];
         start_freq_ind = start_freq_inds[template_ind];
+        
+        printf("%d %d %d \n", template_ind, start_freq_ind, bin_i);
+        
+#ifdef __CUDACC__
         build_single_waveform<FFT>(
+#else
+        build_single_waveform(
+#endif
             wave,
             &start_ind,
             amp[bin_i],
@@ -2457,20 +2818,32 @@ __launch_bounds__(FFT::max_threads_per_block) __global__ void generate_global_te
             bin_i,
             tdi_channel_setup);
 
-        __syncthreads();
-
+        CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
+        int start2 = threadIdx.x;
+        int incr2 = blockDim.x;
+#else
+        int start2 = 0;
+        int incr2 = 1;
+#endif
         for (int chan = 0; chan < nchannels; chan += 1)
         {
-            for (int i = threadIdx.x; i < N; i += blockDim.x)
+            for (int i = start2; i < N; i += incr2)
             {
                 jj = i + start_ind - start_freq_ind;
+#ifdef __CUDACC__
                 atomicAddComplex(&tmplt[(template_ind * nchannels + chan) * data_length + jj], factor * wave[chan * N + i]);
+#else           
+                tmplt[(template_ind * nchannels + chan) * data_length + jj] = factor * wave[chan * N + i];
+#endif
             }
         }
-        __syncthreads();
+        CUDA_SYNCTHREADS;
     }
 }
 
+
+#ifdef __CUDACC__
 // In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
 //
 // One block is run, it calculates two 128-point C2C double precision FFTs.
@@ -2557,6 +2930,7 @@ struct generate_global_template_wrap_functor
 {
     void operator()(InputInfo inputs) { return generate_global_template_wrap<Arch, N>(inputs); }
 };
+#endif
 
 void SharedMemoryGenerateGlobal(
     cmplx *data,
@@ -2605,6 +2979,7 @@ void SharedMemoryGenerateGlobal(
     inputs.do_synchronize = do_synchronize;
     inputs.tdi_channel_setup = tdi_channel_setup;
 
+#ifdef __CUDACC__
     switch (N)
     {
     // All SM supported by cuFFTDx
@@ -2635,7 +3010,29 @@ void SharedMemoryGenerateGlobal(
         throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
     }
     }
+#else
+    generate_global_template(
+        inputs.data_arr,
+        inputs.data_index,
+        inputs.factors,
+        inputs.amp,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.phi0,
+        inputs.iota,
+        inputs.psi,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_inds,
+        inputs.data_length,
+        inputs.tdi_channel_setup);
 
+#endif
     // const unsigned int arch = example::get_cuda_device_arch();
     // simple_block_fft<800>(x);
 }

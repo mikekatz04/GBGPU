@@ -20,8 +20,8 @@ with open(fp_out_name, "w") as fp_out:
                         continue
 
 
-cu_files = ["gbgpu_utils"]
-pyx_files = ["GBGPU"]
+cu_files = ["gbgpu_utils", "SharedMemoryGBGPU"]
+pyx_files = ["GBGPU", "sharedmemgbgpu"]
 for fp in cu_files:
     shutil.copy("src/gbgpu/cutils/src/" + fp + ".cu", "src/gbgpu/cutils/src/" + fp + ".cpp")
 

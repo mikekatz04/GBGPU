@@ -149,22 +149,14 @@ if run_cuda_install:
                 "'-fPIC'",
             ],  # ,"-G", "-g"] # for debugging
         },
-<<<<<<< HEAD
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/nvidia-mathdx-25.01.1/nvidia/mathdx/25.01/include", "cufftdx/include"],
-=======
-        include_dirs=[
-            numpy_include,
-            CUDA["include"],
-            "src/gbgpucutils/include",
-        ],
->>>>>>> master
+        include_dirs=[numpy_include, CUDA["include"], "src/gbgpu/cutils/include", "src/gbgpu/cutils/nvidia-mathdx-25.01.1/nvidia/mathdx/25.01/include", "cufftdx/include"],
     )
     ext_gpu = Extension("gbgpu.cutils.gbgpu_utils", **ext_gpu_dict)
 
     ext_gpu_dict_2 = dict(
-        sources=["gbgpu/cutils/src/SharedMemoryGBGPU.cu", "gbgpu/cutils/src/sharedmemgbgpu.pyx"],
-        library_dirs=[lib_gsl_dir, CUDA["lib64"]],
-        libraries=["cudart", "cublas", "cufft", "gsl", "gslcblas", "gomp"],
+        sources=["src/gbgpu/cutils/src/SharedMemoryGBGPU.cu", "src/gbgpu/cutils/src/sharedmemgbgpu.pyx"],
+        library_dirs=[CUDA["lib64"]],
+        libraries=["cudart", "cublas", "cufft"],
         language="c++",
         runtime_library_dirs=[CUDA["lib64"]],
         # This syntax is specific to this build system
@@ -192,17 +184,25 @@ if run_cuda_install:
                 "-DCUFFTDX_DISABLE_CUTLASS_DEPENDENCY"
             ],  # ,"-G", "-g"] # for debugging
         },
-        include_dirs=[numpy_include, include_gsl_dir, CUDA["include"], "gbgpu/cutils/include", "gbgpu/cutils/nvidia-mathdx-25.01.1/nvidia/mathdx/25.01/include"],
+        include_dirs=[numpy_include, CUDA["include"], "src/gbgpu/cutils/include", "src/gbgpu/cutils/nvidia-mathdx-25.01.1/nvidia/mathdx/25.01/include"],
     )
     ext_gpu2 = Extension("gbgpu.cutils.sharedmem", **ext_gpu_dict_2)
 
-cu_files = ["gbgpu_utils"]
-pyx_files = ["GBGPU"]
-for fp in cu_files:
-    shutil.copy("gbgpu/cutils/src/" + fp + ".cu", "gbgpu/cutils/src/" + fp + ".cpp")
+ext_cpu_dict2 = dict(
+    sources=[
+        "src/gbgpu/cutils/src/SharedMemoryGBGPU.cpp",
+        "src/gbgpu/cutils/src/sharedmemgbgpu_cpu.pyx",
+    ],
+    library_dirs=[],
+    libraries=[],
+    language="c++",
+    extra_compile_args={
+        "gcc": [],  # "-std=c++11"
+    },  # '-g'],
+    include_dirs=[numpy_include, "src/gbgpu/cutils/include"],
+)
+ext_cpu2 = Extension("gbgpu.cutils.sharedmem_cpu", **ext_cpu_dict2)
 
-for fp in pyx_files:
-    shutil.copy("gbgpu/cutils/src/" + fp + ".pyx", "gbgpu/cutils/src/" + fp + "_cpu.pyx")
 
 ext_cpu_dict = dict(
     sources=[
@@ -220,10 +220,10 @@ ext_cpu_dict = dict(
 ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
-    extensions = [ext_gpu2, ext_gpu, ext_cpu]
+    extensions = [ext_gpu2, ext_gpu, ext_cpu, ext_cpu2]  # , ext_cpu_2]
 
 else:
-    extensions = [ext_cpu]
+    extensions = [ext_cpu, ext_cpu2]
 
 setup(
     name="gbgpu",
