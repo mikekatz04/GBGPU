@@ -46,7 +46,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind, 
+        int *start_freq_inds, 
         int data_length,
         int tdi_channel_setup,
         int device,
@@ -115,7 +115,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         double dt,
         int N,
         int num_bin_all,
-        int start_freq_ind,
+        int *start_freq_inds,
         int data_length,
         int tdi_channel_setup,
         int device,
@@ -146,6 +146,31 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int tdi_channel_setup,
         int device,
         bool do_synchronize
+    ) except+
+
+    void SharedMemoryFstatLikeComp(
+        cmplx* M_mat,
+        cmplx* N_arr,
+        cmplx* data,
+        double* noise,
+        int* data_index,
+        int* noise_index,
+        double* f0, 
+        double* fdot0, 
+        double* fddot0, 
+        double* lam,
+        double* theta,
+        double T, 
+        double dt,
+        int N,
+        int num_bin_all,
+        int *start_freq_inds, 
+        int data_length,
+        int tdi_channel_setup,
+        int device,
+        bool do_synchronize,
+        int num_data,
+        int num_noise
     ) except+
 
 @pointer_adjust
@@ -217,7 +242,7 @@ def SharedMemoryLikeComp_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_inds,
         data_length,
         tdi_channel_setup,
         device,
@@ -241,6 +266,7 @@ def SharedMemoryLikeComp_wrap(
     cdef size_t psi_in = psi
     cdef size_t lam_in = lam
     cdef size_t theta_in = theta
+    cdef size_t start_freq_inds_in = start_freq_inds
 
     SharedMemoryLikeComp(
         <cmplx *> d_h_in,
@@ -262,7 +288,7 @@ def SharedMemoryLikeComp_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*>start_freq_inds_in,
         data_length,
         tdi_channel_setup,
         device,
@@ -406,7 +432,7 @@ def SharedMemoryChiSquaredComp_wrap(
         dt, 
         N,
         num_bin_all,
-        start_freq_ind,
+        start_freq_inds,
         data_length,
         tdi_channel_setup,
         device,
@@ -429,6 +455,7 @@ def SharedMemoryChiSquaredComp_wrap(
     cdef size_t psi_in = psi
     cdef size_t lam_in = lam
     cdef size_t theta_in = theta
+    cdef size_t start_freq_inds_in = start_freq_inds
 
     SharedMemoryChiSquaredComp(
         <cmplx *> h1_h1_in,
@@ -449,7 +476,7 @@ def SharedMemoryChiSquaredComp_wrap(
         dt,
         N,
         num_bin_all,
-        start_freq_ind,
+        <int*> start_freq_inds_in,
         data_length,
         tdi_channel_setup,
         device,
@@ -520,4 +547,69 @@ def SharedMemoryGenerateGlobal_wrap(
         tdi_channel_setup,
         device,
         do_synchronize
+    )
+
+
+@pointer_adjust
+def SharedMemoryFstatLikeComp_wrap(
+        M_mat,
+        N_arr,
+        data,
+        noise,
+        data_index, 
+        noise_index,
+        f0, 
+        fdot0, 
+        fddot0, 
+        lam, 
+        theta,
+        T,
+        dt, 
+        N,
+        num_bin_all,
+        start_freq_inds,
+        data_length,
+        tdi_channel_setup,
+        device,
+        do_synchronize,
+        num_data,
+        num_noise
+    ):
+
+    cdef size_t M_mat_in = M_mat
+    cdef size_t N_arr_in = N_arr
+    cdef size_t data_in = data
+    cdef size_t noise_in = noise
+    cdef size_t data_index_in = data_index
+    cdef size_t noise_index_in = noise_index
+    cdef size_t f0_in = f0
+    cdef size_t fdot0_in = fdot0
+    cdef size_t fddot0_in = fddot0
+    cdef size_t lam_in = lam
+    cdef size_t theta_in = theta
+    cdef size_t start_freq_inds_in = start_freq_inds
+
+    SharedMemoryFstatLikeComp(
+        <cmplx *> M_mat_in,
+        <cmplx *> N_arr_in,
+        <cmplx *> data_in,
+        <double *> noise_in,
+        <int*> data_index_in,
+        <int*> noise_index_in,
+        <double *>f0_in, 
+        <double *>fdot0_in, 
+        <double *>fddot0_in, 
+        <double *>lam_in,
+        <double *>theta_in,
+        T, 
+        dt,
+        N,
+        num_bin_all,
+        <int*> start_freq_inds_in,
+        data_length,
+        tdi_channel_setup,
+        device,
+        do_synchronize,
+        num_data,
+        num_noise
     )

@@ -112,6 +112,8 @@ typedef struct InputInfoTag{
     int tdi_channel_setup;
     int num_data; 
     int num_noise;
+    cmplx* M_mat;
+    cmplx* N_arr;
 } InputInfo; 
 
 void SharedMemoryLikeComp(
@@ -134,7 +136,7 @@ void SharedMemoryLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
     int tdi_channel_setup,
     int device,
@@ -204,7 +206,7 @@ void SharedMemoryChiSquaredComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
     int tdi_channel_setup,
     int device,
@@ -236,6 +238,32 @@ void SharedMemoryGenerateGlobal(
     int tdi_channel_setup,
     int device,
     bool do_synchronize
+);
+
+
+void SharedMemoryFstatLikeComp(
+    cmplx *M_mat,
+    cmplx *N_arr,
+    cmplx *data,
+    double *noise,
+    int *data_index,
+    int *noise_index,
+    double *f0,
+    double *fdot0,
+    double *fddot0,
+    double *lam,
+    double *theta,
+    double T,
+    double dt,
+    int N,
+    int num_bin_all,
+    int *start_freq_inds,
+    int data_length,
+    int tdi_channel_setup,
+    int device,
+    bool do_synchronize,
+    int num_data,
+    int num_noise
 );
 
 #endif // __SHAREDMEMORY_GBGPU_HPP__

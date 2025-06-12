@@ -780,7 +780,7 @@ void add_inner_product_contribution(
                 printf("Above full noise range.%d, %d, %d, %d\n", noise_ind_now, nchannels * data_length * num_noise, noise_i, data_length);
                 continue;
             }
-            n = noise[noise_ind];
+            n = noise[noise_ind_now];
 
             if (array_type_1 == ARRAY_TYPE_DATA)
             {
@@ -928,7 +928,7 @@ void get_ll(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
     int tdi_channel_setup,
     int num_data, 
@@ -973,6 +973,7 @@ void get_ll(
 
     cmplx d, h;
     double n;
+    int start_freq_ind;
 
 #ifdef __CUDACC__
     int start1 = blockIdx.x;
@@ -986,6 +987,7 @@ void get_ll(
 
         data_ind = data_index[bin_i];
         noise_ind = noise_index[bin_i];
+        start_freq_ind = start_freq_inds[data_ind];
 
 #ifdef __CUDACC__
         build_single_waveform<FFT>(
@@ -1033,6 +1035,7 @@ void get_ll(
                 data_ind, tdi_channel_setup, data_length, N,
                 num_data, num_noise
             );
+            
         }
         CUDA_SYNCTHREADS;
 
@@ -1129,7 +1132,7 @@ void get_ll_wrap(InputInfo inputs)
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_inds,
         inputs.data_length,
         inputs.tdi_channel_setup, 
         inputs.num_data,
@@ -1177,7 +1180,7 @@ void SharedMemoryLikeComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
     int tdi_channel_setup,
     int device,
@@ -1206,7 +1209,7 @@ void SharedMemoryLikeComp(
     inputs.dt = dt;
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_inds = start_freq_inds;
     inputs.data_length = data_length;
     inputs.tdi_channel_setup = tdi_channel_setup;
     inputs.device = device;
@@ -1500,7 +1503,7 @@ void get_swap_ll_diff(
                  i += incr2)
             {
 
-                j = lower_start_ind + i; 
+                j = lower_start_ind + i;                
                 // if ((bin_i == 0)){
                 // printf("%d %d %d %d %d %d %d %e %e %e %e %e %e\n", i, j, noise_ind, data_ind, noise_ind * data_length + j, data_ind * data_length + j, data_length, d_A.real(), d_A.imag(), d_E.real(), d_E.imag(), n_A, n_E);
                 // }
@@ -1691,7 +1694,6 @@ void get_swap_ll_diff(
             {
 
                 j = start_ind_remove + i - start_freq_ind;
-
                 // n_A = noise_A[noise_ind * data_length + j];
                 // n_E = noise_E[noise_ind * data_length + j];
 
@@ -2094,7 +2096,7 @@ void get_chi_squared(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
     int tdi_channel_setup,
     int num_data, 
@@ -2147,7 +2149,7 @@ void get_chi_squared(
 
     cmplx h, h_1, h_2;
     int real_ind, real_ind_1, real_ind_2;
-
+    int start_freq_ind;
     int jj = 0;
     int j = 0;
     int last_row_end;
@@ -2177,7 +2179,7 @@ void get_chi_squared(
             h1_h2_tmp = 0.0;
             h2_h2_tmp = 0.0;
             noise_ind = noise_index[bin_i]; // must be the same
-
+            start_freq_ind = start_freq_inds[noise_ind];
             // get index into upper triangular array (without diagonal)
             last_row_end = bin_i * (bin_i + 1) / 2;
             output_ind = num_bin_all * bin_i + bin_j - int(((bin_i + 2) * (bin_i + 1)) / 2);
@@ -2528,7 +2530,7 @@ void get_chi_squared_wrap(InputInfo inputs)
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_inds,
         inputs.data_length,
         inputs.tdi_channel_setup,
         inputs.num_data, 
@@ -2575,7 +2577,7 @@ void SharedMemoryChiSquaredComp(
     double dt,
     int N,
     int num_bin_all,
-    int start_freq_ind,
+    int *start_freq_inds,
     int data_length,
     int tdi_channel_setup,
     int device,
@@ -2604,7 +2606,7 @@ void SharedMemoryChiSquaredComp(
     inputs.dt = dt;
     inputs.N = N;
     inputs.num_bin_all = num_bin_all;
-    inputs.start_freq_ind = start_freq_ind;
+    inputs.start_freq_inds = start_freq_inds;
     inputs.data_length = data_length;
     inputs.tdi_channel_setup = tdi_channel_setup;
     inputs.device = device;
@@ -2663,7 +2665,7 @@ void SharedMemoryChiSquaredComp(
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_inds,
         inputs.data_length,
         inputs.tdi_channel_setup,
         inputs.num_data, 
@@ -2794,7 +2796,7 @@ void generate_global_template(
         factor = factors[bin_i];
         start_freq_ind = start_freq_inds[template_ind];
         
-        printf("%d %d %d \n", template_ind, start_freq_ind, bin_i);
+        // printf("%d %d %d \n", template_ind, start_freq_ind, bin_i);
         
 #ifdef __CUDACC__
         build_single_waveform<FFT>(
@@ -3031,6 +3033,444 @@ void SharedMemoryGenerateGlobal(
         inputs.start_freq_inds,
         inputs.data_length,
         inputs.tdi_channel_setup);
+
+#endif
+    // const unsigned int arch = example::get_cuda_device_arch();
+    // simple_block_fft<800>(x);
+}
+
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+//////////////////
+
+
+#ifdef __CUDACC__
+template <class FFT>
+__launch_bounds__(FFT::max_threads_per_block) __global__ 
+#endif
+void get_fstat_ll(
+    cmplx *M_mat,
+    cmplx *N_arr,
+    cmplx *data,
+    double *noise,
+    int *data_index,
+    int *noise_index,
+    double *f0,
+    double *fdot0,
+    double *fddot0,
+    double *lam,
+    double *theta,
+    double T,
+    double dt,
+    int N,
+    int num_bin_all,
+    int *start_freq_inds,
+    int data_length,
+    int tdi_channel_setup,
+    int num_data, 
+    int num_noise)
+{
+    using complex_type = cmplx;
+
+    unsigned int start_ind = 0;
+
+#ifdef __CUDACC__
+    extern __shared__ unsigned char shared_mem[];
+    // NEEDS to be 4 * 3 * N in length for 4 waveforms
+    cmplx *wave = (cmplx *)shared_mem;
+    cmplx *M_temp = &wave[4 * 3 * N];
+    cmplx *N_temp = &M_temp[FFT::block_dim.x];
+
+#else
+    cmplx wave_tmp[4 * 3 * N];
+    cmplx *wave = &wave_tmp[0];
+
+    cmplx _M_temp[1] = {0.0};
+    cmplx *M_temp = &_M_temp[0];
+    cmplx _N_temp[1] = {0.0};
+    cmplx *N_temp = &_N_temp[0];
+    
+#endif
+    int nchannels = 3;
+    if (tdi_channel_setup == TDI_CHANNEL_SETUP_AE)
+        nchannels = 2;
+
+    double df = 1. / T;
+#ifdef __CUDACC__
+    int tid = threadIdx.x;
+#else
+    int tid = 0;
+#endif
+
+    cmplx tmp1, tmp2;
+    int data_ind, noise_ind;
+    cmplx _ignore_this = 0.0;
+    cmplx _ignore_this_2 = 0.0;
+    double multi_factor = 1.0;
+    int jj = 0;
+    // example::io<FFT>::load_to_smem(this_block_data, shared_mem);
+
+    cmplx d, h;
+    double n;
+    int start_freq_ind;
+
+    double iota_arr[4] = {M_PI / 2.0, M_PI / 2.0, M_PI / 2.0, M_PI / 2.0};
+    double psi_arr[4] = {0.0, M_PI / 4.0, 0.0, M_PI/ 4.0};
+    double A_arr[4] = {2., 2., 2., 2.};
+    double phase_arr[4] = {0.0, M_PI, 3. * M_PI / 2., M_PI / 2.};
+
+    // Now need to calculate the Filters A^{i} (Cornish & Crowder '05)
+    // A^{1} -> iota = pi/2, psi = 0,    A = 2, phase = 0
+    // A^{2} -> iota = pi/2, psi = pi/4, A = 2, phase = pi
+    // A^{3} -> iota = pi/2, psi = 0,    A = 2, phase = 3*pi/2
+    // A^{4} -> iota = pi/2, psi = pi/4, A = 2, phase = pi/2
+
+    double psi_tmp, iota_tmp, phase_tmp, A_tmp; 
+
+#ifdef __CUDACC__
+    int start1 = blockIdx.x;
+    int incr1 = gridDim.x;
+#else
+    int start1 = 0;
+    int incr1 = 1;
+#endif
+    for (int bin_i = start1; bin_i < num_bin_all; bin_i += incr1)
+    {
+
+        data_ind = data_index[bin_i];
+        noise_ind = noise_index[bin_i];
+        start_freq_ind = start_freq_inds[data_ind];
+
+        for (int ii = 0; ii < 4; ii += 1)
+        {
+            CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
+            build_single_waveform<FFT>(
+#else
+            build_single_waveform(
+#endif
+                &wave[ii * 3 * N],
+                &start_ind,
+                A_arr[ii],
+                f0[bin_i],
+                fdot0[bin_i],
+                fddot0[bin_i],
+                phase_arr[ii],
+                iota_arr[ii],
+                psi_arr[ii],
+                lam[bin_i],
+                theta[bin_i],
+                T,
+                dt,
+                N,
+                bin_i,
+                tdi_channel_setup
+            );
+            CUDA_SYNCTHREADS;
+        }
+    
+
+#ifdef __CUDACC__
+        int start2 = threadIdx.x;
+        int incr2 = blockDim.x;
+#else
+        int start2 = 0;
+        int incr2 = 1;
+#endif
+        for (int ii = 0; ii < 4; ii += 1)
+        {
+            CUDA_SYNCTHREADS;
+            tmp2 = 0.0;
+
+            // if ((tid == 20) && (bin_i == 0))
+            //     printf("%d %d %e %e %e %e\n", ii, bin_i, wave[tid].real(), wave[tid].imag(), wave[N + tid].real(), wave[N + tid].imag(), wave[2 * N + tid].real(), wave[2 * N + tid].imag(), A_arr[ii], phase_arr[ii], iota_arr[ii], psi_arr[ii]);
+            
+            for (int i = start2; i < N; i += incr2)
+            {
+                jj = i + start_ind - start_freq_ind;
+                for (int chan = 0; chan < nchannels; chan += 1)
+                {
+                    
+                    add_inner_product_contribution(
+                        &tmp2, &_ignore_this, &_ignore_this_2, 
+                        data, &wave[(ii * 3 * N) + chan * N], 
+                        jj, i, 
+                        ARRAY_TYPE_DATA, ARRAY_TYPE_TEMPLATE,
+                        noise, noise_ind, jj,
+                        data_ind, tdi_channel_setup, data_length, N,
+                        num_data, num_noise
+                    );
+                }
+            }
+            CUDA_SYNCTHREADS;
+            N_temp[tid] = tmp2;
+
+#ifdef __CUDACC__
+            for (unsigned int s = 1; s < blockDim.x; s *= 2)
+            {
+                if (tid % (2 * s) == 0)
+                {
+                    N_temp[tid] += N_temp[tid + s];
+                }
+                CUDA_SYNCTHREADS;
+            }
+            CUDA_SYNCTHREADS;
+#endif
+            CUDA_SYNCTHREADS;
+            if (tid == 0)
+            {
+                N_arr[bin_i * 4 + ii] = 4.0 * df * N_temp[0];
+            }
+            CUDA_SYNCTHREADS;
+            for (int kk = ii; kk < 4; kk += 1)
+            {
+                CUDA_SYNCTHREADS;
+                tmp1 = 0.0;
+                multi_factor = 1.0;
+                
+                CUDA_SYNCTHREADS;
+                for (int i = start2; i < N; i += incr2)
+                {
+                    jj = i + start_ind - start_freq_ind;
+                    for (int chan = 0; chan < nchannels; chan += 1)
+                    {
+                        add_inner_product_contribution(
+                            &tmp1, &_ignore_this, &_ignore_this_2, 
+                            &wave[(ii * 3 * N) + chan * N], &wave[(kk * 3 * N) + chan * N], 
+                            i, i,
+                            ARRAY_TYPE_TEMPLATE, ARRAY_TYPE_TEMPLATE,
+                            noise, noise_ind, jj,
+                            data_ind, tdi_channel_setup, data_length, N,
+                            num_data, num_noise
+                        );
+                    }
+                }
+                
+                M_temp[tid] = tmp1;
+
+                        // if (((bin_i == 10) || (bin_i == 400))) printf("%d %d  %e %e %e %e \n", bin_i, tid, d_h_temp[tid].real(), d_h_temp[tid].imag(), h_h_temp[tid].real(), h_h_temp[tid].imag());
+                CUDA_SYNCTHREADS;
+#ifdef __CUDACC__
+                for (unsigned int s = 1; s < blockDim.x; s *= 2)
+                {
+                    if (tid % (2 * s) == 0)
+                    {
+                        M_temp[tid] += M_temp[tid + s];
+                    }
+                    CUDA_SYNCTHREADS;
+                }
+                CUDA_SYNCTHREADS;
+                if (tid == 0)
+                {
+                    M_mat[(bin_i * 4 + ii) * 4 + kk] = 4.0 * df * M_temp[0];
+                    M_mat[(bin_i * 4 + kk) * 4 + ii] = 4.0 * df * M_temp[0];
+                }
+                CUDA_SYNCTHREADS;
+#endif
+            }
+            CUDA_SYNCTHREADS;
+        }
+    }
+}
+
+#ifdef __CUDACC__
+// In this example a one-dimensional complex-to-complex transform is performed by a CUDA block.
+//
+// One block is run, it calculates two 128-point C2C double precision FFTs.
+// Data is generated on host, copied to device buffer, and then results are copied back to host.
+template <unsigned int Arch, unsigned int N>
+void get_fstat_ll_wrap(InputInfo inputs)
+{
+    using namespace cufftdx;
+
+    if (inputs.device >= 0)
+    {
+        // set the device
+        CUDA_CHECK_AND_EXIT(cudaSetDevice(inputs.device));
+    }
+
+    // FFT is defined, its: size, type, direction, precision. Block() operator informs that FFT
+    // will be executed on block level. Shared memory is required for co-operation between threads.
+    // Additionally,
+
+    using FFT = decltype(Block() + Size<N>() + Type<fft_type::c2c>() + Direction<fft_direction::forward>() +
+                         Precision<double>() + ElementsPerThread<8>() + FFTsPerBlock<1>() + SM<Arch>());
+    using complex_type = cmplx;
+
+    // Allocate managed memory for input/output
+    auto size = FFT::ffts_per_block * cufftdx::size_of<FFT>::value;
+    auto size_bytes = size * sizeof(cmplx);
+
+    // Shared memory must fit input data and must be big enough to run FFT
+    auto shared_memory_size = std::max((unsigned int)FFT::shared_memory_size, (unsigned int)size_bytes);
+
+    // first is 4 waveforms, second is M_temp and N_temp
+    auto shared_memory_size_mine = 4 * 3 * N * sizeof(cmplx) + 2 * FFT::block_dim.x * sizeof(cmplx);
+    // std::cout << "input [1st FFT]:\n" << size  << "  " << size_bytes << "  " << FFT::shared_memory_size << std::endl;
+    // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //     std::cout << data[i].x << " " << data[i].y << std::endl;
+    // }
+
+    // Increase max shared memory if needed
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(
+        get_fstat_ll<FFT>,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        shared_memory_size_mine));
+
+    // std::cout << (int) FFT::block_dim.x << std::endl;
+    //  Invokes kernel with FFT::block_dim threads in CUDA block
+    get_fstat_ll<FFT><<<inputs.num_bin_all, FFT::block_dim, shared_memory_size_mine>>>(
+        inputs.M_mat,
+        inputs.N_arr,
+        inputs.data_arr,
+        inputs.noise,
+        inputs.data_index,
+        inputs.noise_index,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_inds,
+        inputs.data_length,
+        inputs.tdi_channel_setup, 
+        inputs.num_data,
+        inputs.num_noise);
+
+    CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    if (inputs.do_synchronize)
+    {
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
+
+    // std::cout << "output [1st FFT]:\n";
+    // for (size_t i = 0; i < cufftdx::size_of<FFT>::value; i++) {
+    //     std::cout << data[i].x << " " << data[i].y << std::endl;
+    // }
+
+    // std::cout << shared_memory_size << std::endl;
+    // std::cout << "Success" <<  std::endl;
+}
+
+template <unsigned int Arch, unsigned int N>
+struct get_fstat_ll_wrap_functor
+{
+    void operator()(InputInfo inputs) { return get_fstat_ll_wrap<Arch, N>(inputs); }
+};
+#endif
+
+void SharedMemoryFstatLikeComp(
+    cmplx *M_mat,
+    cmplx *N_arr,
+    cmplx *data,
+    double *noise,
+    int *data_index,
+    int *noise_index,
+    double *f0,
+    double *fdot0,
+    double *fddot0,
+    double *lam,
+    double *theta,
+    double T,
+    double dt,
+    int N,
+    int num_bin_all,
+    int *start_freq_inds,
+    int data_length,
+    int tdi_channel_setup,
+    int device,
+    bool do_synchronize,
+    int num_data,
+    int num_noise)
+{
+
+    InputInfo inputs;
+    inputs.M_mat = M_mat;
+    inputs.N_arr = N_arr;
+    inputs.data_arr = data;
+    inputs.noise = noise;
+    inputs.data_index = data_index;
+    inputs.noise_index = noise_index;
+    inputs.f0 = f0;
+    inputs.fdot0 = fdot0;
+    inputs.fddot0 = fddot0;
+    inputs.lam = lam;
+    inputs.theta = theta;
+    inputs.T = T;
+    inputs.dt = dt;
+    inputs.N = N;
+    inputs.num_bin_all = num_bin_all;
+    inputs.start_freq_inds = start_freq_inds;
+    inputs.data_length = data_length;
+    inputs.tdi_channel_setup = tdi_channel_setup;
+    inputs.device = device;
+    inputs.do_synchronize = do_synchronize;
+    inputs.num_data = num_data;
+    inputs.num_noise = num_noise;
+
+#ifdef __CUDACC__
+    switch (N)
+    {
+    // All SM supported by cuFFTDx
+    case 32:
+        example::sm_runner<get_fstat_ll_wrap_functor, 32>(inputs);
+        return;
+    case 64:
+        example::sm_runner<get_fstat_ll_wrap_functor, 64>(inputs);
+        return;
+    case 128:
+        example::sm_runner<get_fstat_ll_wrap_functor, 128>(inputs);
+        return;
+    case 256:
+        example::sm_runner<get_fstat_ll_wrap_functor, 256>(inputs);
+        return;
+    case 512:
+        example::sm_runner<get_fstat_ll_wrap_functor, 512>(inputs);
+        return;
+    case 1024:
+        example::sm_runner<get_fstat_ll_wrap_functor, 1024>(inputs);
+        return;
+    case 2048:
+        example::sm_runner<get_fstat_ll_wrap_functor, 2048>(inputs);
+        return;
+
+    default:
+    {
+        printf("CHECKING\n");
+        throw std::invalid_argument("N must be a multiple of 2 between 32 and 2048.");
+    }
+    }
+#else
+    get_fstat_ll(
+        inputs.M_mat,
+        inputs.N_arr,
+        inputs.data_arr,
+        inputs.noise,
+        inputs.data_index,
+        inputs.noise_index,
+        inputs.f0,
+        inputs.fdot0,
+        inputs.fddot0,
+        inputs.lam,
+        inputs.theta,
+        inputs.T,
+        inputs.dt,
+        inputs.N,
+        inputs.num_bin_all,
+        inputs.start_freq_inds,
+        inputs.data_length,
+        inputs.tdi_channel_setup, 
+        inputs.num_data,
+        inputs.num_noise);
 
 #endif
     // const unsigned int arch = example::get_cuda_device_arch();

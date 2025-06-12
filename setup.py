@@ -220,10 +220,10 @@ ext_cpu_dict = dict(
 ext_cpu = Extension("gbgpu.cutils.gbgpu_utils_cpu", **ext_cpu_dict)
 
 if run_cuda_install:
-    extensions = [ext_gpu2, ext_gpu, ext_cpu, ext_cpu2]  # , ext_cpu_2]
+    extensions = [ext_gpu2, ext_gpu, ext_cpu]  # , ext_cpu2]
 
 else:
-    extensions = [ext_cpu, ext_cpu2]
+    extensions = [ext_cpu]  # , ext_cpu2]
 
 setup(
     name="gbgpu",
