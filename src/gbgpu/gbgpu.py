@@ -1311,7 +1311,7 @@ class GBGPU(object):
         gpu = self.xp.cuda.runtime.getDevice()
         do_synchronize = True
 
-        raise NotImplementedError
+        # raise NotImplementedError
         SharedMemoryChiSquaredComp_wrap(
             h1_h1,
             h2_h2,

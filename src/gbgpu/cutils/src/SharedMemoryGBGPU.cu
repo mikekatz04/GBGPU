@@ -1675,9 +1675,9 @@ void get_swap_ll_diff(
                     // add_remove_temp += gcmplx::conj(h_E_remove) * h_E_add / n_E;
 
                     add_inner_product_contribution(
-                        &add_remove_temp, &add_add_temp, &remove_remove_temp,
-                        wave_add, wave_remove, 
-                        real_ind_add, real_ind_remove, 
+                        &add_remove_temp, &remove_remove_temp, &add_add_temp,
+                        wave_remove, wave_add, 
+                        real_ind_remove, real_ind_add, 
                         ARRAY_TYPE_TEMPLATE, ARRAY_TYPE_TEMPLATE,
                         noise, noise_ind, j,
                         data_ind, tdi_channel_setup, data_length, N,
