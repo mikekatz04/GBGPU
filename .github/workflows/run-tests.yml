@@ -38,7 +38,6 @@ jobs:
         run: |
           python -m pip install coverage[toml]
       - name: Run module tests & show coverage results
-        # Tests must be run in gbgpu/tests
         run: |
           coverage run --source=gbgpu -m unittest discover
           coverage report -m
