@@ -131,7 +131,7 @@ class GBGPU(object):
         beta,
         *args,
         N=None,
-        T=4 * YEAR,
+        T=4 * YRSID_SI,
         dt=10.0,
         oversample=1,
         tdi2=False,
@@ -172,7 +172,7 @@ class GBGPU(object):
             N (int, optional): Number of points in waveform.
                 This should be determined by the initial frequency, ``f0``. Default is ``None``.
                 If ``None``, will use :func:`gbgpu.utils.utility.get_N` function to determine proper ``N``.
-            T (double, optional): Observation time in seconds. Default is ``4 * YEAR``.
+            T (double, optional): Observation time in seconds. Default is ``4 * YRSID_SI``.
             dt (double, optional): Observation cadence in seconds. Default is ``10.0`` seconds.
             oversample(int, optional): Oversampling factor compared to the determined ``N``
                 value. Final N will be ``oversample * N``. This is only used if N is
@@ -262,7 +262,7 @@ class GBGPU(object):
         cosiota = self.xp.cos(iota)
 
         # transfer frequency
-        fstar = Clight / (self.orbits.armlength * 2 * np.pi)
+        fstar = C_SI / (self.orbits.armlength * 2 * np.pi)
 
         cosps, sinps = self.xp.cos(2.0 * psi), self.xp.sin(2.0 * psi)
 
@@ -321,7 +321,7 @@ class GBGPU(object):
 
         # adjust for TDI2 if needed
         if tdi2:
-            omegaL = 2 * np.pi * f0 * (self.orbits.armlength / Clight)
+            omegaL = 2 * np.pi * f0 * (self.orbits.armlength / C_SI)
             tdi2_factor = 2.0j * self.xp.sin(2 * omegaL) * self.xp.exp(-2j * omegaL)
             fctr *= tdi2_factor
 
@@ -459,7 +459,7 @@ class GBGPU(object):
             [self.xp.dot(k, P1.T), self.xp.dot(k, P2.T), self.xp.dot(k, P3.T)]
         )[:, :, 0].transpose(1, 0, 2)
 
-        kdotP /= Clight
+        kdotP /= C_SI
 
         Nt = len(tm)
 
@@ -901,7 +901,7 @@ class GBGPU(object):
         )
         return
 
-    def inject_signal(self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, **kwargs):
+    def inject_signal(self, *args, fmax=None, T=4.0 * YRSID_SI, dt=10.0, **kwargs):
         """Inject a single signal
 
         Provides the injection of a single signal into a data stream with frequencies
@@ -913,7 +913,7 @@ class GBGPU(object):
             fmax (double, optional): Maximum frequency to use in data stream.
                 If ``None``, will use ``1/(2 * dt)``.
                 Default is ``None``.
-            T (double, optional): Observation time in seconds. Default is ``4 * YEAR``.
+            T (double, optional): Observation time in seconds. Default is ``4 * YRSID_SI``.
             dt (double, optional): Observation cadence in seconds. Default is ``10.0`` seconds.
             **kwargs (dict, optional): Passes kwargs to :func:`run_wave`.
 
