@@ -25,8 +25,8 @@ except (ModuleNotFoundError, ImportError) as e:
 # import for GPU if available
 try:
     import cupy as cp
-    from .cutils.gbgpu_utils import get_ll as get_ll_gpu
-    from .cutils.gbgpu_utils import fill_global as fill_global_gpu
+    from .cutils.gbgpu_utils_gpu import get_ll as get_ll_gpu
+    from .cutils.gbgpu_utils_gpu import fill_global as fill_global_gpu
 
 except (ModuleNotFoundError, ImportError):
     pass
