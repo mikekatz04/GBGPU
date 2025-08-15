@@ -22,6 +22,7 @@
 
 void SharedMemoryWaveComp(
     cmplx* tdi_out,
+    int* start_inds_out,
     double* amp, 
     double* f0, 
     double* fdot0, 
@@ -114,6 +115,7 @@ typedef struct InputInfoTag{
     int num_noise;
     cmplx* M_mat;
     cmplx* N_arr;
+    int *start_inds_out;
 } InputInfo; 
 
 void SharedMemoryLikeComp(

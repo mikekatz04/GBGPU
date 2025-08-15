@@ -150,6 +150,7 @@ class GBGPU(object):
         dt=10.0,
         oversample=1,
         tdi2=False,
+        tdi_channel_setup="AE",
         use_c_implementation=False,
     ):
         """Create waveforms in batches.
@@ -281,18 +282,22 @@ class GBGPU(object):
         fstar = Clight / (self.orbits.armlength * 2 * np.pi)
 
         if use_c_implementation:
-            #breakpoint()
-            #AET_out = self.xp.zeros((N * self.num_bin * 3), dtype=complex)
-            AET_out = self.xp.zeros((self.num_bin * 3 * N,), dtype=complex)
-  
-            SharedMemoryWaveComp_wrap(AET_out, amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N, num_bin)
+            if tdi_channel_setup == "AE":
+                nchannels = 2
+            else:
+                nchannels = 3
 
-            AET_out = AET_out.reshape(self.num_bin, 3, N)
+            AET_out = self.xp.zeros((self.num_bin * nchannels * N,), dtype=complex)
+            _start_inds = self.xp.zeros((self.num_bin,), dtype=np.int32)
+            if self.num_bin == 0:
+                breakpoint()
+            SharedMemoryWaveComp_wrap(AET_out, _start_inds, amp, f0, fdot, fddot, phi0, iota, psi, lam, theta, T, dt, N, num_bin, tdi_channel_setup_map[tdi_channel_setup])
+            self.start_inds = _start_inds
+            AET_out = AET_out.reshape(self.num_bin, nchannels, N)
 
+            self.AETf = AET_out
             # setup waveforms for efficient GPU likelihood or global template building
-            self.A_out = AET_out[:, 0].flatten().copy()
-            self.E_out = AET_out[:, 1].flatten().copy()
-            self.X_out = AET_out[:, 2].flatten().copy()
+            return
 
         cosps, sinps = self.xp.cos(2.0 * psi), self.xp.sin(2.0 * psi)
 
@@ -395,6 +400,9 @@ class GBGPU(object):
     @property
     def T_out(self):
         """T channel."""
+        if self.AETf.shape[1] == 2:
+            raise ValueError("Requesting T channel when AE was generated.")
+
         return self.AETf[:, 2].T.flatten()
 
     def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
@@ -599,17 +607,19 @@ class GBGPU(object):
     @property
     def A(self):
         """return A channel reshaped based on number of binaries"""
-        return self.A_out.reshape(self.N, self.num_bin).T
+        return self.AETf[:, 0]
 
     @property
     def E(self):
         """return E channel reshaped based on number of binaries"""
-        return self.E_out.reshape(self.N, self.num_bin).T
+        return self.AETf[:, 1]
 
     @property
     def T(self):
         """return T channel reshaped based on number of binaries"""
-        return self.T_out.reshape(self.N, self.num_bin).T
+        if self.AETf.shape[1] == 2:
+            raise ValueError("Requesting T channel when AE was generated.")
+        return self.AETf[:, 2]
 
     @property
     def X(self):
@@ -2210,7 +2220,7 @@ class GBGPU(object):
                 raise ModuleNotFoundError(
                     "Sensitivity curve information through LISA Analysis Tools is not available. Stock option for Information matrix will not work. Please install LISA Analysis Tools (pip install lisaanalysistools)."
                 )
-            psd_func = tdi.A1TDISens.get_Sn
+            psd_func = A1TDISens.get_Sn
 
         if N is None:
             raise ValueError("N must be provided up front for Infromation Matrix.")
@@ -2240,9 +2250,8 @@ class GBGPU(object):
             params_up_1 = np.ones_like(params)
             params_up_1[ind] += 1 * eps
             params_up_1 *= params
-            params_up_1 = self._apply_parameter_transforms(
-                params_up_1, parameter_transforms
-            )
+            params_up_1 = self._apply_parameter_transforms(params_up_1, parameter_transforms)
+            
             self.run_wave(*params_up_1, **kwargs)
             h_I_up_eps = self.xp.asarray([self.A, self.E]).transpose((1, 0, 2))
 
@@ -2274,10 +2283,11 @@ class GBGPU(object):
                 )
                 self.run_wave(*params_up_2, **kwargs)
                 h_I_up_2eps = self.xp.asarray([self.A, self.E]).transpose((1, 0, 2))
-                if not np.all(self.start_inds == self.start_inds[0]):
-                    raise ValueError(
-                        "The user should decrease steps size (eps) because the frequency bins are changing during derivative calculation, which is not allowed."
-                    )
+                # TODO: check this?
+                # if not np.all(self.start_inds == self.start_inds[0]):
+                #     raise ValueError(
+                #         "The user should decrease steps size (eps) because the frequency bins are changing during derivative calculation, which is not allowed."
+                #     )
 
                 # 2 eps down derivative
                 # map all the parameters to 1

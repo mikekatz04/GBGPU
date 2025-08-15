@@ -10,6 +10,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
     ctypedef void* cmplx 'cmplx'
     void SharedMemoryWaveComp(
         cmplx* tdi_out,
+        int* start_inds_out,
         double* amp, 
         double* f0, 
         double* fdot0, 
@@ -176,6 +177,7 @@ cdef extern from "SharedMemoryGBGPU.hpp":
 @pointer_adjust
 def SharedMemoryWaveComp_wrap(
     tdi_out,
+    start_inds_out,
     amp, 
     f0, 
     fdot0, 
@@ -192,6 +194,7 @@ def SharedMemoryWaveComp_wrap(
     tdi_channel_setup
 ):
     cdef size_t tdi_out_in = tdi_out
+    cdef size_t start_inds_out_in = start_inds_out
     cdef size_t amp_in = amp
     cdef size_t f0_in = f0
     cdef size_t fdot0_in = fdot0
@@ -204,6 +207,7 @@ def SharedMemoryWaveComp_wrap(
 
     SharedMemoryWaveComp(
         <cmplx *> tdi_out_in,
+        <int *> start_inds_out_in,
         <double *>amp_in, 
         <double *>f0_in, 
         <double *>fdot0_in, 

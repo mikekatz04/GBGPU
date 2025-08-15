@@ -484,6 +484,7 @@ __global__
 #endif
 void get_waveform(
     cmplx *tdi_out,
+    int *start_inds_out,
     double *amp,
     double *f0,
     double *fdot0,
@@ -548,6 +549,8 @@ void get_waveform(
             bin_i,
             tdi_channel_setup);
 
+        start_inds_out[bin_i] = start_ind;
+        
 #ifdef __CUDACC__
         int start2 = threadIdx.x;
         int incr2 = blockDim.x;
@@ -609,6 +612,7 @@ void get_waveform_wrap(InputInfo inputs)
     //  Invokes kernel with FFT::block_dim threads in CUDA block
     get_waveform<FFT><<<inputs.num_bin_all, FFT::block_dim, shared_memory_size_mine>>>(
         inputs.tdi_out,
+        inputs.start_inds_out,
         inputs.amp,
         inputs.f0,
         inputs.fdot0,
@@ -644,6 +648,7 @@ struct get_waveform_wrap_functor
 
 void SharedMemoryWaveComp(
     cmplx *tdi_out,
+    int *start_inds_out,
     double *amp,
     double *f0,
     double *fdot0,
@@ -662,6 +667,7 @@ void SharedMemoryWaveComp(
 
     InputInfo inputs;
     inputs.tdi_out = tdi_out;
+    inputs.start_inds_out = start_inds_out;
     inputs.amp = amp;
     inputs.f0 = f0;
     inputs.fdot0 = fdot0;
@@ -714,6 +720,7 @@ void SharedMemoryWaveComp(
 #else
     get_waveform(
         inputs.tdi_out,
+        inputs.start_inds_out,
         inputs.amp,
         inputs.f0,
         inputs.fdot0,
