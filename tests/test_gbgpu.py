@@ -32,7 +32,7 @@ class WaveformTest(unittest.TestCase):
 
         dt = 15.0
         N = None
-        Tobs = 0.95 * YEAR
+        Tobs = 0.95 * YRSID_SI
         num_bin = 10
         amp = 1e-22  # amplitude
         f0 = 2e-3  # f0
@@ -81,7 +81,7 @@ class WaveformTest(unittest.TestCase):
     def test_likelihood(self):
         xp = cp if gpu_available else np
         dt = 15.0
-        Tobs = 0.95 * YEAR
+        Tobs = 0.95 * YRSID_SI
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
@@ -168,7 +168,7 @@ class WaveformTest(unittest.TestCase):
     def test_information_matrix(self):
         xp = cp if gpu_available else np
         dt = 15.0
-        Tobs = 0.95 * YEAR
+        Tobs = 0.95 * YRSID_SI
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 

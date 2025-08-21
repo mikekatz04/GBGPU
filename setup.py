@@ -206,7 +206,6 @@ setup(
             "cuda_complex.hpp",
             "LISA.h",
             "global.h",
-            "Constants.h",
         ],
     },
     python_requires=">=3.6",
