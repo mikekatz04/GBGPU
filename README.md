@@ -43,7 +43,7 @@ To install from source:
 1) Create a virtual environment. **Note**: There is no available `conda` compiler for Windows. If you want to install for Windows, you will probably need to add libraries and include paths to the `setup.py` file.
 
 ```
-conda create -n gbgpu_env -c conda-forge gcc_linux-64 gxx_linux-64 gsl numpy Cython scipy jupyter ipython h5py matplotlib python=3.12
+conda create -n gbgpu_env -c conda-forge gcc_linux-64 gxx_linux-64 gsl numpy Cython scipy jupyter ipython h5py matplotlib python=3.12 cmake
 conda activate gbgpu_env
 ```
 
@@ -65,7 +65,7 @@ cd GBGPU
 4) Run install. Make sure CUDA is on your PATH.
 
 ```
-python setup.py install
+pip install -v -e .
 ```
 
 ## Running the Tests

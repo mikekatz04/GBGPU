@@ -66,9 +66,9 @@ class GBGPUThirdBody(InheritGBGPU):
 
         self.P2 = P2
 
-        n2 = 2 * np.pi / (P2 * YEAR)
+        n2 = 2 * np.pi / (P2 * YRSID_SI)
 
-        T2 *= YEAR
+        T2 *= YRSID_SI
 
         # copy to GPU if needed
         A2 = self.xp.asarray(A2)
@@ -134,7 +134,7 @@ class GBGPUThirdBody(InheritGBGPU):
         P2 = np.atleast_1d(P2)
 
         # frequency of the sampling in /yr
-        freq_N = 1 / ((T / YEAR) / N)
+        freq_N = 1 / ((T / YRSID_SI) / N)
 
         # while freq_N does not reach the sampling frequency
         # necessary to resolve the third-body orbit
@@ -145,7 +145,7 @@ class GBGPUThirdBody(InheritGBGPU):
                 # double sources that need fixing
                 # while keeping N for sources that are fine
                 N = 2 * N * (inds_fix) + N * (~inds_fix)
-                freq_N = 1 / ((T / YEAR) / N)
+                freq_N = 1 / ((T / YRSID_SI) / N)
 
             # reapply oversampling if needed
             N = N * oversample
@@ -177,7 +177,7 @@ class GBGPUThirdBody(InheritGBGPU):
             3D double xp.ndarray: Updated frequencies with third-body effect.
 
         """
-        fi *= 1 + self.get_vLOS(xi, A2, varpi, e2, n2, T2) / Clight
+        fi *= 1 + self.get_vLOS(xi, A2, varpi, e2, n2, T2) / C_SI
         return fi
 
     def add_to_argS(self, argS, f0, fdot, fddot, xi, A2, varpi, e2, n2, T2):
@@ -426,7 +426,7 @@ class GBGPUThirdBody(InheritGBGPU):
         g3 = self.get_vLOS(t0, A2, varpi, e2, n2, T2) * get_fGW(f0, fdot, fddot, t0)
 
         # return area from trapezoidal rule
-        return dtt * (g1 + g3) / 2.0 * PI2 / Clight
+        return dtt * (g1 + g3) / 2.0 * PI * 2 / C_SI
 
     def get_aLOS(self, A2, varpi, e2, P2, T2, t, eps=1e-9):
         """Get line-of-sight acceleration
@@ -452,7 +452,7 @@ class GBGPUThirdBody(InheritGBGPU):
             3D double xp.ndarray: LOS acceleration
 
         """
-        n2 = 2 * np.pi / (P2 * YEAR)
+        n2 = 2 * np.pi / (P2 * YRSID_SI)
         # central differencing for derivative of velocity
         up = self.get_vLOS(A2, varpi, e2, n2, T2, t + eps)
         down = self.get_vLOS(A2, varpi, e2, n2, T2, t - eps)
@@ -507,7 +507,7 @@ class GBGPUThirdBody(InheritGBGPU):
         varpi = np.atleast_1d(varpi).copy()
         e2 = np.atleast_1d(e2).copy()
         P2 = np.atleast_1d(P2).copy()
-        n2 = 2 * np.pi / (P2 * YEAR)
+        n2 = 2 * np.pi / (P2 * YRSID_SI)
         T2 = np.atleast_1d(T2).copy()
         f0 = np.atleast_1d(f0).copy()
         fdot = np.atleast_1d(fdot).copy()
@@ -527,7 +527,7 @@ class GBGPUThirdBody(InheritGBGPU):
         assert t.shape[0] == len(A2)
 
         f_temp = f0 + fdot * t + 0.5 * fddot * t * t
-        f_temp *= 1.0 + self.get_vLOS(A2, varpi, e2, n2, T2, t) / Clight
+        f_temp *= 1.0 + self.get_vLOS(A2, varpi, e2, n2, T2, t) / C_SI
 
         fdot_new = (f_temp[2] - f_temp[0]) / (2 * eps)
 
@@ -583,13 +583,13 @@ def third_body_factors(
     """
 
     # adjust inner binary mass to kg
-    M *= MSUN
+    M *= MSUN_SI
 
     # adjust perturber mass to kg
     if third_mass_unit == "Mjup":
         factor = Mjup
     elif third_mass_unit == "MSUN":
-        factor = MSUN
+        factor = MSUN_SI
 
     else:
         raise NotImplementedError
@@ -598,7 +598,7 @@ def third_body_factors(
 
     # adjust perturber period to seconds
     if third_period_unit == "yrs":
-        P2 *= YEAR
+        P2 *= YRSID_SI
 
     elif third_period_unit == "sec":
         pass
@@ -663,7 +663,7 @@ def get_T2(P2, e2, phi2, third_period_unit="yrs"):
     """
     # adjust perturber period to seconds
     if third_period_unit == "yrs":
-        P2 *= YEAR
+        P2 *= YRSID_SI
 
     elif third_period_unit == "sec":
         pass
@@ -679,7 +679,7 @@ def get_T2(P2, e2, phi2, third_period_unit="yrs"):
     temp_T2 = (u2 - e2 * np.sin(u2)) / n2
 
     # adjust for values less than zero since it is periodic of P2
-    T2 = (temp_T2 / YEAR) * (temp_T2 >= 0.0) + ((P2 - np.abs(temp_T2)) / YEAR) * (
+    T2 = (temp_T2 / YRSID_SI) * (temp_T2 >= 0.0) + ((P2 - np.abs(temp_T2)) / YRSID_SI) * (
         temp_T2 < 0.0
     )
     return T2

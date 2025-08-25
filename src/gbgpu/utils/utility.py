@@ -125,9 +125,9 @@ def get_amplitude(m1, m2, f, d):
         xp.ndarray: Amplitude.
 
     """
-    Mc = get_chirp_mass(m1, m2) * MSUN
-    d = d * 1e3 * PC  # kpc to meters
-    A = 2 * (G * Mc) ** (5.0 / 3.0) / (Clight**4 * d) * (np.pi * f) ** (2.0 / 3.0)
+    Mc = get_chirp_mass(m1, m2) * MSUN_SI
+    d = d * 1e3 * PC_SI  # kpc to meters
+    A = 2 * (G_SI * Mc) ** (5.0 / 3.0) / (C_SI**4 * d) * (np.pi * f) ** (2.0 / 3.0)
     return A
 
 
@@ -156,15 +156,15 @@ def get_fdot(f, m1=None, m2=None, Mc=None):
         raise ValueError("Must provide either m1 & m2 or Mc.")
     elif m1 is not None or m2 is not None:
         assert m1 is not None and m2 is not None
-        Mc = get_chirp_mass(m1, m2) * MSUN
+        Mc = get_chirp_mass(m1, m2) * MSUN_SI
     elif Mc is not None:
-        Mc *= MSUN
+        Mc *= MSUN_SI
 
     # calculate fdot
     fdot = (
         (96.0 / 5.0)
         * np.pi ** (8 / 3)
-        * (G * Mc / Clight**3) ** (5 / 3)
+        * (G_SI * Mc / C_SI**3) ** (5 / 3)
         * f ** (11 / 3)
     )
     return fdot
@@ -187,11 +187,11 @@ def get_chirp_mass_from_f_fdot(f, fdot):
         5.0
         / 96.0
         * np.pi ** (-8 / 3)
-        * (G / Clight**3) ** (-5 / 3)
+        * (G_SI / C_SI**3) ** (-5 / 3)
         * f ** (-11 / 3)
         * fdot
     ) ** (3 / 5)
-    Mc = Mc_SI / MSUN
+    Mc = Mc_SI / MSUN_SI
     return Mc
 
 
@@ -219,16 +219,16 @@ def get_N(amp, f0, Tobs, oversample=1):
     mult = 8
 
     # adjust mult based on observation time
-    if (Tobs / YEAR) <= 1.0:
+    if (Tobs / YRSID_SI) <= 1.0:
         mult = 1
 
-    elif (Tobs / YEAR) <= 2.0:
+    elif (Tobs / YRSID_SI) <= 2.0:
         mult = 2
 
-    elif (Tobs / YEAR) <= 4.0:
+    elif (Tobs / YRSID_SI) <= 4.0:
         mult = 4
 
-    elif (Tobs / YEAR) <= 8.0:
+    elif (Tobs / YRSID_SI) <= 8.0:
         mult = 8
 
     # cast for all binaries

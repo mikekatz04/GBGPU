@@ -1,12 +1,11 @@
 [build-system]
 requires = [
-  "setuptools",
-  "wheel",
   "Cython",
   "numpy",
   "lisaanalysistools",
+  "scikit_build_core",
 ]
-build-backend = 'setuptools.build_meta'
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "gbgpu"

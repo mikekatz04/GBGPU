@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include <complex>
 #include "cuda_complex.hpp"
-#include "Constants.h"
 
 #ifdef __CUDACC__
 #include "cuda_runtime_api.h"
