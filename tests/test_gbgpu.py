@@ -6,7 +6,7 @@ import unittest
 try:
     import cupy as cp
 
-    cp.cuda.runtime.setDevice(2)
+    cp.cuda.runtime.setDevice(0)
     gpu_available = True
 
 except (ImportError, ModuleNotFoundError) as e:
