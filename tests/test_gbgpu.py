@@ -15,7 +15,7 @@ except (ImportError, ModuleNotFoundError) as e:
     gpu_available = False
 
 from gbgpu.gbgpu import GBGPU
-from gbgpu.utils.constants import *
+from lisatools.utils.constants import *
 
 import sys
 

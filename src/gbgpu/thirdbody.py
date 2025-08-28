@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 
 # import constants
-from .utils.constants import *
+from lisatools.utils.constants import *
 from .utils.citation import *
 
 # import for GPU if available
@@ -15,11 +15,11 @@ try:
 except (ModuleNotFoundError, ImportError):
     import numpy as cp
 
-from .gbgpu import InheritGBGPU
+from .gbgpu import GBGPUBase
 from .utils.utility import *
 
 
-class GBGPUThirdBody(InheritGBGPU):
+class GBGPUThirdBody(GBGPUBase):
     """Build the effect of a third body into Galactic binary waveforms.
 
     The third-body components are originally

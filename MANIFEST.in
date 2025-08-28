@@ -2,7 +2,7 @@
 include README
 
 # Include the license file
-include LICENCE
+include LICENSE
 include THIRD.txt
 
 # Include dependencies
@@ -22,9 +22,3 @@ recursive-include tests/testsuites  *
 
 # Include scripts
 recursive-include scripts   *
-
-# Include tuto
-include tutorial/*.ipynb
-
-# Include include files
-include include/*

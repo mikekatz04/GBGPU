@@ -15,7 +15,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from gbgpu.thirdbody import GBGPUThirdBody
 
-from gbgpu.utils.constants import *
+from lisatools.utils.constants import *
 from lisatools.detector import EqualArmlengthOrbits
 
 

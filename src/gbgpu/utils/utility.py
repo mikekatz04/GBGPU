@@ -2,7 +2,7 @@ from ast import Mod
 import numpy as np
 import warnings
 
-from .constants import *
+from lisatools.utils.constants import *
 from ..cutils.gbgpu_utils_cpu import *
 
 try:

@@ -81,9 +81,9 @@ python -m unittest discover
 
 ## Versioning
 
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/tags).
+We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/mikekatz04/GBGPU/tags).
 
-Current Version: 1.1.3
+Current Version: 1.1.4
 
 ## Authors
 
@@ -93,6 +93,11 @@ Current Version: 1.1.3
 * Tyson Littenberg
 * Stas Babak
 
+## Contributors
+
+* Mathieu Dubois
+* Maxime Pigou
+
 ## License
 
-This project is licensed under the GNU License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the Apache License - see the [LICENSE.md](LICENSE.md) file for details.
