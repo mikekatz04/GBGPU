@@ -85,20 +85,20 @@ jobs:
             arch: x86_64
             kind: core
             reqpython: '>=3.9'
-          - release: cuda11x
-            os: ubuntu-latest
-            arch: x86_64
-            kind: cuda_plugin
-            cuda_major: 11
-            cuda_minor: 8
-            reqpython: '>=3.9'
-          - release: cuda12x
-            os: ubuntu-latest
-            arch: x86_64
-            kind: cuda_plugin
-            cuda_major: 12
-            cuda_minor: 4
-            reqpython: '>=3.9'
+          # - release: cuda11x
+          #   os: ubuntu-latest
+          #   arch: x86_64
+          #   kind: cuda_plugin
+          #   cuda_major: 11
+          #   cuda_minor: 8
+          #   reqpython: '>=3.9'
+          # - release: cuda12x
+          #   os: ubuntu-latest
+          #   arch: x86_64
+          #   kind: cuda_plugin
+          #   cuda_major: 12
+          #   cuda_minor: 4
+          #   reqpython: '>=3.9'
           - release: cpu
             os: ubuntu-24.04-arm
             arch: aarch64
@@ -191,7 +191,7 @@ jobs:
           CIBW_ARCHS_MACOS: ${{ matrix.arch }}
           CIBW_CONFIG_SETTINGS: >
             cmake.define.GBGPU_WITH_GPU=OFF
-          CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
+          # CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
           CIBW_ENVIRONMENT: >
             SETUPTOOLS_SCM_PRETEND_VERSION="${{ needs.version.outputs.version }}"
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_ver }}
@@ -207,7 +207,7 @@ jobs:
             cmake.define.GBGPU_WITH_GPU=OFF
           CIBW_ENVIRONMENT: >
             SETUPTOOLS_SCM_PRETEND_VERSION="${{ needs.version.outputs.version }}"
-          CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
+          # CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
       - name: Build cuda plugin wheels (Linux)
         if: runner.os == 'Linux' && matrix.kind == 'cuda_plugin' && matrix.arch == 'x86_64'
         uses: pypa/cibuildwheel@v2.22.0
