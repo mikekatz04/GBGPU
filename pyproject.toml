@@ -11,7 +11,6 @@ build-backend = "scikit_build_core.build"
 name = "GBGPU"
 
 description = "GPU/CPU Galactic Binary Waveforms"
-license = "Apache"
 
 authors = [
   { name = "Michael Katz", email = "mikekatz04@gmail.com" },
