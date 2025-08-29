@@ -120,8 +120,6 @@ wheel.exclude = [
 
 [tool.scikit-build.wheel.packages]
 gbgpu = "src/gbgpu"       #@SKIP_PLUGIN@
-"gbgpu/tests" = "tests" #@SKIP_PLUGIN@
-
 
 lint.extend-select = [
   "I",
