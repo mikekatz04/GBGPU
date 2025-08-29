@@ -1,27 +1,25 @@
+
+
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GBGPU Tutorial &mdash; gbgpu  documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="_static/nbsphinx-code-cells.css?v=2aa19091" />
 
   
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script src="_static/jquery.js?v=5d32c60e"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=5929fcd5"></script>
-        <script src="_static/doctools.js?v=9a2dae69"></script>
-        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-        <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-        <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -108,17 +106,17 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">time</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 <span class="o">%</span><span class="k">matplotlib</span> inline
 
-<span class="kn">from</span> <span class="nn">gbgpu.gbgpu</span> <span class="kn">import</span> <span class="n">GBGPU</span>
-<span class="kn">from</span> <span class="nn">gbgpu.thirdbody</span> <span class="kn">import</span> <span class="n">GBGPUThirdBody</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gbgpu.gbgpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">GBGPU</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gbgpu.thirdbody</span><span class="w"> </span><span class="kn">import</span> <span class="n">GBGPUThirdBody</span>
 
-<span class="kn">from</span> <span class="nn">gbgpu.utils.constants</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">gbgpu.utils.utility</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">lisatools.utils.constants</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gbgpu.utils.utility</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
 </pre></div>
 </div>
 </div>
@@ -140,6 +138,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">dt</span> <span class="o">=</span> <span class="mf">10.0</span>
+<span class="n">YEAR</span> <span class="o">=</span> <span class="n">YRSID_SI</span>
 <span class="n">Tobs</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">YEAR</span>
 
 
@@ -356,30 +355,30 @@ Third-body signal length: (128,)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([[ 1.03670758e-02, -3.03751670e-09, -4.34853085e-06,
-         9.30287319e-05, -4.16250330e-04,  5.58219344e-04,
-        -5.55445555e-05,  4.37703212e-04],
-       [-3.03751670e-09,  2.75957296e-12,  4.60004509e-09,
-        -1.30903471e-07,  2.27487105e-10, -7.85411493e-07,
-         1.13683606e-07, -6.31724576e-08],
-       [-4.34853085e-06,  4.60004509e-09,  8.78628478e-06,
-        -2.50761137e-04,  3.73944799e-07, -1.50454902e-03,
-         1.72593472e-04, -7.75682309e-05],
-       [ 9.30287318e-05, -1.30903471e-07, -2.50761137e-04,
-         7.17103859e-03, -9.43217244e-06,  4.30257258e-02,
-        -5.08042272e-03,  1.88810467e-03],
-       [-4.16250330e-04,  2.27487092e-10,  3.73944776e-07,
-        -9.43217177e-06,  1.67174837e-05, -5.65945132e-05,
-         6.51025824e-06, -1.93069353e-05],
-       [ 5.58219343e-04, -7.85411493e-07, -1.50454902e-03,
-         4.30257258e-02, -5.65945172e-05,  2.58151320e-01,
-        -3.04822260e-02,  1.13284197e-02],
-       [-5.55445553e-05,  1.13683606e-07,  1.72593472e-04,
-        -5.08042272e-03,  6.51025872e-06, -3.04822260e-02,
-         1.08018147e-02, -8.85702255e-04],
-       [ 4.37703212e-04, -6.31724576e-08, -7.75682309e-05,
-         1.88810467e-03, -1.93069355e-05,  1.13284197e-02,
-        -8.85702255e-04,  9.57210495e-03]])
+array([[ 1.03442726e-02, -2.87238368e-09, -4.15952988e-06,
+         8.57635620e-05, -4.15323595e-04,  5.14629627e-04,
+        -4.71985177e-05,  4.36940404e-04],
+       [-2.87238368e-09,  2.68317866e-12,  4.54432131e-09,
+        -1.27915571e-07,  2.14931461e-10, -7.67486211e-07,
+         1.11430809e-07, -5.90709530e-08],
+       [-4.15952988e-06,  4.54432131e-09,  8.83482266e-06,
+        -2.49395721e-04,  3.58470301e-07, -1.49636027e-03,
+         1.71481485e-04, -7.25789823e-05],
+       [ 8.57635620e-05, -1.27915571e-07, -2.49395721e-04,
+         7.05412282e-03, -8.85548994e-06,  4.23243425e-02,
+        -4.99212364e-03,  1.72812110e-03],
+       [-4.15323595e-04,  2.14931456e-10,  3.58470291e-07,
+        -8.85548966e-06,  1.66794516e-05, -5.31345724e-05,
+         5.96553926e-06, -1.90887128e-05],
+       [ 5.14629627e-04, -7.67486211e-07, -1.49636027e-03,
+         4.23243425e-02, -5.31345741e-05,  2.53943689e-01,
+        -2.99525132e-02,  1.03685613e-02],
+       [-4.71985178e-05,  1.11430809e-07,  1.71481485e-04,
+        -4.99212364e-03,  5.96553947e-06, -2.99525132e-02,
+         1.07342991e-02, -7.66520364e-04],
+       [ 4.36940404e-04, -5.90709530e-08, -7.25789823e-05,
+         1.72812110e-03, -1.90887129e-05,  1.03685613e-02,
+        -7.66520364e-04,  9.34785176e-03]])
 </pre></div></div>
 </div>
 <p>Standard deviation on the marginalized parameters:</p>
@@ -397,8 +396,8 @@ array([[ 1.03670758e-02, -3.03751670e-09, -4.34853085e-06,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-array([2.03637676e-24, 3.32239249e-09, 2.23448704e-20, 8.46819850e-03,
-       8.17740391e-04, 1.52425781e-01, 4.15727117e-02, 4.89185674e-02])
+array([2.03413594e-24, 3.27608221e-09, 2.24065051e-20, 8.39888255e-03,
+       8.16809686e-04, 1.51178477e-01, 4.14425851e-02, 4.83421446e-02])
 </pre></div></div>
 </div>
 <p>Plot the Information Matrix ellipse for the intial frequency and frequency derivative:</p>
@@ -445,7 +444,7 @@ array([2.03637676e-24, 3.32239249e-09, 2.23448704e-20, 8.46819850e-03,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&lt;matplotlib.lines.Line2D at 0x154fa1220&gt;]
+[&lt;matplotlib.lines.Line2D at 0x1669945f0&gt;]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -522,10 +521,10 @@ Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[6.37190427e-23 6.37190427e-23 6.37190427e-23 6.37190427e-23
- 6.37190427e-23 6.37190427e-23 6.37190427e-23 6.37190427e-23
- 6.37190427e-23 6.37190427e-23 6.37190427e-23 6.37190427e-23
- 6.37190427e-23 6.37190427e-23 6.37190427e-23]
+[6.37562267e-23 6.37562267e-23 6.37562267e-23 6.37562267e-23
+ 6.37562267e-23 6.37562267e-23 6.37562267e-23 6.37562267e-23
+ 6.37562267e-23 6.37562267e-23 6.37562267e-23 6.37562267e-23
+ 6.37562267e-23 6.37562267e-23 6.37562267e-23]
 </pre></div></div>
 </div>
 </section>
@@ -550,10 +549,10 @@ Text(0, 0.5, &#39;$f_{gw}$ (Hz)&#39;)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[1.73056526e-19 1.73056526e-19 1.73056526e-19 1.73056526e-19
- 1.73056526e-19 1.73056526e-19 1.73056526e-19 1.73056526e-19
- 1.73056526e-19 1.73056526e-19 1.73056526e-19 1.73056526e-19
- 1.73056526e-19 1.73056526e-19 1.73056526e-19]
+[1.73157515e-19 1.73157515e-19 1.73157515e-19 1.73157515e-19
+ 1.73157515e-19 1.73157515e-19 1.73157515e-19 1.73157515e-19
+ 1.73157515e-19 1.73157515e-19 1.73157515e-19 1.73157515e-19
+ 1.73157515e-19 1.73157515e-19 1.73157515e-19]
 </pre></div></div>
 </div>
 </section>

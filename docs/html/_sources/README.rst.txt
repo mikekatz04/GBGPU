@@ -84,7 +84,7 @@ To install from source:
 
 ::
 
-   conda create -n gbgpu_env -c conda-forge gcc_linux-64 gxx_linux-64 gsl numpy Cython scipy jupyter ipython h5py matplotlib python=3.12
+   conda create -n gbgpu_env -c conda-forge gcc_linux-64 gxx_linux-64 gsl numpy Cython scipy jupyter ipython h5py matplotlib python=3.12 cmake
    conda activate gbgpu_env
 
 ::
@@ -110,7 +110,7 @@ To install from source:
 
 ::
 
-   python setup.py install
+   pip install -v -e .
 
 Running the Tests
 -----------------
@@ -132,21 +132,27 @@ Versioning
 
 We use `SemVer <http://semver.org/>`__ for versioning. For the versions
 available, see the `tags on this
-repository <https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/tags>`__.
+repository <https://github.com/mikekatz04/GBGPU/tags>`__.
 
-Current Version: 1.1.4
+Current Version: 1.1.5
 
 Authors
 -------
 
--  **Michael Katz**
--  Travis Robson
--  Neil Cornish
--  Tyson Littenberg
--  Stas Babak
+- **Michael Katz**
+- Travis Robson
+- Neil Cornish
+- Tyson Littenberg
+- Stas Babak
+
+Contributors
+------------
+
+- Mathieu Dubois
+- Maxime Pigou
 
 License
 -------
 
-This project is licensed under the GNU License - see the
+This project is licensed under the Apache License - see the
 `LICENSE.md <LICENSE.md>`__ file for details.
