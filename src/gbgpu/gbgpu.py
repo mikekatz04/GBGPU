@@ -1,7 +1,7 @@
 from multiprocessing.sharedctypes import Value
 import time
 import warnings
-from abc import ABC
+import abc
 
 import numpy as np
 
@@ -36,7 +36,7 @@ from .utils.utility import *
 from lisatools.detector import EqualArmlengthOrbits, Orbits
 
 
-class GBGPUBase(ABC):
+class GBGPUBase(abc.ABC):
     """Generate Galactic Binary Waveforms
 
     This class generates galactic binary waveforms in the frequency domain,
@@ -1150,6 +1150,7 @@ class GBGPUBase(ABC):
 
         return info_matrix
     
+    @abc.abstractmethod
     def add_to_argS(self, argS, f0, fdot, fddot, xi, *args):
         """Update ``argS`` in FastGB formalism for third-body effect
 
@@ -1178,7 +1179,7 @@ class GBGPUBase(ABC):
         """
         raise NotImplementedError
     
-    @classmethod
+    @abc.abstractmethod
     def prepare_additional_args(self, *args):
         """Prepare the arguments special to this class
 
@@ -1196,7 +1197,7 @@ class GBGPUBase(ABC):
         """
         raise NotImplementedError
 
-    @classmethod
+    @abc.abstractmethod
     def special_get_N(
         self,
         amp,
@@ -1222,6 +1223,7 @@ class GBGPUBase(ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def shift_frequency(self, fi, xi, *args):
         """Shift the evolution of the frequency in the slow part
 
