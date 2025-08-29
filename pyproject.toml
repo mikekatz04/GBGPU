@@ -86,10 +86,10 @@ version_file = "src/gbgpu/_version.py"
 #@FALLBACK_VERSION@
 
 [tool.scikit-build]
+wheel.packages = ["src/gbgpu"]
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 sdist.include = [
   "src/gbgpu/_version.py",
-  "tests/",
 ]
 sdist.exclude = [
   ".devcontainer/",
@@ -117,9 +117,6 @@ wheel.exclude = [
   "lib/*.so",
   "lib/*.a",
 ]
-
-[tool.scikit-build.wheel.packages]
-gbgpu = "src/gbgpu"       #@SKIP_PLUGIN@
 
 lint.extend-select = [
   "I",
