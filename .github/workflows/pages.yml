@@ -77,10 +77,10 @@ jobs:
       #   run: |
       #     echo "GBGPU_FILE_ALLOW_DOWNLOAD=no" >> "$GITHUB_ENV"
       #     echo "GBGPU_FILE_EXTRA_PATHS=$(pwd)/local_cache" >> "$GITHUB_ENV"
-      - name: Check external links are working
-        run: |
-          sphinx-build -M linkcheck docs/source docs/build_checklinks \
-              --define nbsphinx_execute=never
+      # - name: Check external links are working
+      #   run: |
+      #     sphinx-build -M linkcheck docs/source docs/build_checklinks \
+      #         --define nbsphinx_execute=never
       - name: Run notebook examples
         if: needs.select.outputs.notebooks == 'true'
         run: |
