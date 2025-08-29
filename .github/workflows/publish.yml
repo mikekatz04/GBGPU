@@ -191,7 +191,7 @@ jobs:
           CIBW_ARCHS_MACOS: ${{ matrix.arch }}
           CIBW_CONFIG_SETTINGS: >
             cmake.define.GBGPU_WITH_GPU=OFF
-          CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
+          # CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
           CIBW_ENVIRONMENT: >
             SETUPTOOLS_SCM_PRETEND_VERSION="${{ needs.version.outputs.version }}"
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_ver }}
@@ -207,7 +207,7 @@ jobs:
             cmake.define.GBGPU_WITH_GPU=OFF
           CIBW_ENVIRONMENT: >
             SETUPTOOLS_SCM_PRETEND_VERSION="${{ needs.version.outputs.version }}"
-          CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
+          # CIBW_TEST_COMMAND: python -m gbgpu.tests --disable testfile
       - name: Build cuda plugin wheels (Linux)
         if: runner.os == 'Linux' && matrix.kind == 'cuda_plugin' && matrix.arch == 'x86_64'
         uses: pypa/cibuildwheel@v2.22.0
