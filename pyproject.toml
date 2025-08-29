@@ -8,7 +8,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "gbgpu"
+name = "GBGPU"
 
 description = "GPU/CPU Galactic Binary Waveforms"
 license = "Apache"
