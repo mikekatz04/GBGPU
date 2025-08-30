@@ -155,4 +155,4 @@ License
 -------
 
 This project is licensed under the Apache License - see the
-`LICENSE.md <LICENSE.md>`__ file for details.
+`LICENSE <LICENSE>`__ file for details.
