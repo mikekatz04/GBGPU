@@ -48,12 +48,17 @@ shutil.copy(
 # ones.
 html_theme = "sphinx_rtd_theme"
 extensions = [
+    "myst_parser",
     "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.autosummary",
     "sphinx_rtd_theme",
+    "sphinx_tippy",
     "nbsphinx",
     "sphinx.ext.mathjax",
+    "IPython.sphinxext.ipython_console_highlighting",
 ]
 
 source_suffix = [".rst"]
