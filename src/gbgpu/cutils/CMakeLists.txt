@@ -21,6 +21,26 @@ else()
   set(BACKEND_BASE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+function(apply_cpu_backend_common_options libname)
+  set(target_name "gbgpu_cpu_${libname}")
+  set_property(
+    TARGET ${target_name}
+    PROPERTY LIBRARY_OUTPUT_DIRECTORY
+             "${BACKEND_BASE_OUTPUT_DIRECTORY}/gbgpu_backend_cpu")
+  set_property(TARGET ${target_name} PROPERTY OUTPUT_NAME ${libname})
+
+  install(TARGETS ${target_name} DESTINATION gbgpu_backend_cpu)
+
+  get_target_property(GBGPU_CXX_MARCH_OPT gbgpu CXX_MARCH)
+  if(GBGPU_CXX_MARCH_OPT)
+    target_compile_options(${target_name} PRIVATE "${GBGPU_CXX_MARCH_OPT}")
+  endif()
+
+  target_include_directories(${target_name} PRIVATE ${Python_NumPy_INCLUDE_DIR})
+  target_compile_definitions(${target_name}
+                             PRIVATE NPY_NO_DEPRECATED_API=NPY_1_9_API_VERSION)
+endfunction()
+
 # * * * * * * * * * * * * * * * * * * * *
 # * * Definition of compiled backends * *
 # * * * * * * * * * * * * * * * * * * * *
@@ -29,7 +49,7 @@ endif()
 # We compile the files in a module called gbgpu_utils_cpu
 if(GBGPU_WITH_CPU)
 
-  set(module_name "gbgpu_utils_cpu")
+  set(module_name "gbgpu_utils")
   set(cythonized_file "gbgpu_utils_wrap_cpu.cxx")
 
   # Process gbgpu_utils_wrap.pyx into a C++ file
@@ -82,7 +102,7 @@ if(GBGPU_WITH_CPU)
   endif()
 
   # Installation options
-  install(TARGETS "${module_name}" DESTINATION "gbgpu/cutils")
+  install(TARGETS "${module_name}" DESTINATION gbgpu_backend_cpu)
 
 endif()
 
@@ -90,8 +110,9 @@ endif()
 # We compile the files in a module called gbgpu_utils_gpu
 if(GBGPU_WITH_GPU)
 
-  set(module_name "gbgpu_utils_gpu")
+  set(module_name "gbgpu_utils")
   set(cythonized_file "gbgpu_utils_wrap_gpu.cxx")
+  set(backend_name "gbgpu_backend_cuda${CUDAToolkit_VERSION_MAJOR}x")
 
   # Process gbgpu_utils_wrap.pyx into a C++ file
   add_custom_command(
@@ -134,6 +155,6 @@ if(GBGPU_WITH_GPU)
     PROPERTY CUDA_ARCHITECTURES ${GBGPU_CUDA_ARCH})
 
   # Installation options
-  install(TARGETS "${module_name}" DESTINATION "gbgpu/cutils")
+  install(TARGETS "${module_name}" DESTINATION ${backend_name})
 
 endif()
