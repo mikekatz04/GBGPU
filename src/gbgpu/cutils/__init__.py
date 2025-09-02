@@ -202,7 +202,7 @@ class GBGPUCpuBackend(CpuBackend):
     @staticmethod
     def cpu_methods_loader() -> GBGPUBackendMethods:
         try:
-            import gbgpu_backend_cpu.gbgpu_utils
+            import gbgpu_backend_cpu.utils
             
         except (ModuleNotFoundError, ImportError) as e:
             raise BackendUnavailableException(
@@ -212,8 +212,8 @@ class GBGPUCpuBackend(CpuBackend):
         numpy = GBGPUCpuBackend.check_numpy()
 
         return GBGPUBackendMethods(
-            get_ll=gbgpu_backend_cpu.gbgpu_utils.get_ll,
-            fill_global=gbgpu_backend_cpu.gbgpu_utils.fill_global,
+            get_ll=gbgpu_backend_cpu.utils.get_ll,
+            fill_global=gbgpu_backend_cpu.utils.fill_global,
             xp=numpy,
         )
 
@@ -472,12 +472,13 @@ class Cuda11xBackend(_CudaBackend, abc.ABC):
                     pip_pkg="nvidia-cuda-nvrtc-cu11",
                     conda_pkg=None,
                 ),
-                _CudaBackend.NvidiaSoLib(
-                    soname="libcufftw.so.11",
-                    module_name="cufft",
-                    pip_pkg="nvidia-cufft-cu11",
-                    conda_pkg=None,
-                ),
+                # TODO: check this??
+                # _CudaBackend.NvidiaSoLib(
+                #     soname="libcufftw.so.11",
+                #     module_name="cufft",
+                #     pip_pkg="nvidia-cufft-cu11",
+                #     conda_pkg=None,
+                # ),
             ]
             _CudaBackend._try_import_nvidia_solib(cuda11x_solibs)
 
@@ -511,7 +512,7 @@ class GBGPUCuda11xBackend(Cuda11xBackend):
     @staticmethod
     def cuda11x_module_loader():
         try:
-            import gbgpu_backend_cuda11x.gbgpu_utils
+            import gbgpu_backend_cuda11x.utils
 
         except (ModuleNotFoundError, ImportError) as e:
             raise BackendUnavailableException(
@@ -526,8 +527,8 @@ class GBGPUCuda11xBackend(Cuda11xBackend):
             ) from e
 
         return GBGPUBackendMethods(
-            get_ll=gbgpu_backend_cuda11x.gbgpu_utils.get_ll,
-            fill_global=gbgpu_backend_cuda11x.gbgpu_utils.fill_global,
+            get_ll=gbgpu_backend_cuda11x.utils.get_ll,
+            fill_global=gbgpu_backend_cuda11x.utils.fill_global,
             xp=cupy,
         )
 
@@ -576,12 +577,13 @@ class Cuda12xBackend(_CudaBackend, abc.ABC):
                     pip_pkg="nvidia-cuda-nvrtc-cu12",
                     conda_pkg=None,
                 ),
-                _CudaBackend.NvidiaSoLib(
-                    soname="libcufftw.so.12",
-                    module_name="cufft",
-                    pip_pkg="nvidia-cufft-cu12",
-                    conda_pkg=None,
-                ),
+                # TODO: check this
+                # _CudaBackend.NvidiaSoLib(
+                #     soname="libcufftw.so.12",
+                #     module_name="cufft",
+                #     pip_pkg="nvidia-cufft-cu12",
+                #     conda_pkg=None,
+                # ),
             ]
             _CudaBackend._try_import_nvidia_solib(cuda12x_solibs)
 
@@ -597,8 +599,8 @@ class Cuda12xBackend(_CudaBackend, abc.ABC):
             backend_module_name=self.backend_name,
             cuda_min=(12, 0),
             cuda_max=(13, 0),
-            module_loader=Cuda12xBackend.cuda12x_module_loader,
-            dynlib_loader=Cuda12xBackend.cuda12x_dynlib_loader,
+            module_loader=self.__class__.cuda12x_module_loader,
+            dynlib_loader=self.__class__.cuda12x_dynlib_loader,
         )
         Feature = Backend.Feature
 
@@ -612,10 +614,11 @@ class Cuda12xBackend(_CudaBackend, abc.ABC):
 class GBGPUCuda12xBackend(Cuda12xBackend):
     """Implementation of CUDA 12.x backend"""
     backend_name : str = "gbgpu_backend_cuda12x"
+    
     @staticmethod
     def cuda12x_module_loader():
         try:
-            import gbgpu_backend_cuda12x.gbgpu_utils
+            import gbgpu_backend_cuda12x.utils
 
         except (ModuleNotFoundError, ImportError) as e:
             raise BackendUnavailableException(
@@ -630,8 +633,8 @@ class GBGPUCuda12xBackend(Cuda12xBackend):
             ) from e
 
         return GBGPUBackendMethods(
-            get_ll=gbgpu_backend_cuda12x.gbgpu_utils.get_ll,
-            fill_global=gbgpu_backend_cuda12x.gbgpu_utils.fill_global,
+            get_ll=gbgpu_backend_cuda12x.utils.get_ll,
+            fill_global=gbgpu_backend_cuda12x.utils.fill_global,
             xp=cupy,
         )
 
