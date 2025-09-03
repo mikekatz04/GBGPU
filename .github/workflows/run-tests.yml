@@ -3,10 +3,13 @@ name: Run unittests
 on:
   push:
     branches:
-      - main
+      - master
+      - dev-install
   pull_request:
     branches:
-      - main
+      - master
+      - dev-install
+
   workflow_dispatch:
 
 jobs:
