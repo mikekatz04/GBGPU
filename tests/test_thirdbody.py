@@ -26,7 +26,8 @@ class WaveformTest(unittest.TestCase):
         Tobs = 1.0 * YRSID_SI
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
-        gb = GBGPUThirdBody(orbits=orbits, use_gpu=gpu_available)
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPUThirdBody(orbits=orbits, force_backend=force_backend)
 
         N = int(256)
         num_bin = 10

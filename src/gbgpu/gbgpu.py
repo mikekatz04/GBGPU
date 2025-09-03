@@ -9,10 +9,6 @@ import numpy as np
 from lisatools.utils.constants import *
 from .utils.citation import *
 
-# import Cython classes
-from .cutils.gbgpu_utils_cpu import get_ll as get_ll_cpu
-from .cutils.gbgpu_utils_cpu import fill_global as fill_global_cpu
-
 try:
     from lisatools.sensitivity import A1TDISens
 
@@ -22,21 +18,14 @@ except (ModuleNotFoundError, ImportError) as e:
     tdi_available = False
     warnings.warn("tdi module not found. No sensitivity information will be included.")
 
-# import for GPU if available
-try:
-    import cupy as cp
-    from .cutils.gbgpu_utils_gpu import get_ll as get_ll_gpu
-    from .cutils.gbgpu_utils_gpu import fill_global as fill_global_gpu
-
-except (ModuleNotFoundError, ImportError):
-    pass
-
 from .utils.utility import *
 
 from lisatools.detector import EqualArmlengthOrbits, Orbits
+from typing import Optional, Sequence, TypeVar, Union
 
+from .utils.parallelbase import ParallelModuleBase
 
-class GBGPUBase(abc.ABC):
+class GBGPUBase(ParallelModuleBase, abc.ABC):
     """Generate Galactic Binary Waveforms
 
     This class generates galactic binary waveforms in the frequency domain,
@@ -52,6 +41,7 @@ class GBGPUBase(abc.ABC):
         * Circular Galactic binaries with an eccentric third body (inherited)
 
     Args:
+        # TODO: fix this
         use_gpu (bool, optional): If True, run on GPUs. Default is ``False``.
 
     Attributes:
@@ -74,27 +64,24 @@ class GBGPUBase(abc.ABC):
 
     """
 
-    def __init__(self, orbits: Orbits = None, use_gpu=False):
-
-        self.use_gpu = use_gpu
+    def __init__(self, orbits: Orbits = None, force_backend = None):
+        ParallelModuleBase.__init__(self, force_backend=force_backend)
         self.d_d = None
         self.orbits = orbits
 
-    @property
-    def xp(self):
-        """CuPy or NumPy"""
-        xp = np if not self.use_gpu else cp
-        return xp
+    @classmethod
+    def supported_backends(cls):
+        return cls.GPU_RECOMMENDED()
 
     @property
     def get_ll_func(self):
         """get_ll c func."""
-        return get_ll_cpu if not self.use_gpu else get_ll_gpu
+        return self.backend.get_ll
 
     @property
     def fill_global_func(self):
         """fill_global c func."""
-        return fill_global_cpu if not self.use_gpu else fill_global_gpu
+        return self.backend.fill_global
 
     @property
     def orbits(self) -> Orbits:
@@ -944,7 +931,7 @@ class GBGPUBase(abc.ABC):
         start = self.start_inds[0]
 
         # if using GPU, will return to CPU
-        if self.use_gpu:
+        if self.backend.name == "gpu":
             A_temp = self.A_out.squeeze().get()
             E_temp = self.E_out.squeeze().get()
 
@@ -1145,7 +1132,7 @@ class GBGPUBase(abc.ABC):
                 info_matrix[:, j, i] = info_matrix[:, i, j]
 
         # copy to cpu if needed
-        if self.use_gpu and return_gpu is False:
+        if self.backend.name == "gpu" and return_gpu is False:
             info_matrix = info_matrix.get()
 
         return info_matrix
