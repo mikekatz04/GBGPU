@@ -8,7 +8,8 @@ import numpy as np
 # import constants
 from lisatools.utils.constants import *
 from .utils.citation import *
-
+from lisatools.sensitivity import A1TDISens
+print("DONE DONE")
 try:
     from lisatools.sensitivity import A1TDISens
 
