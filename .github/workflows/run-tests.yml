@@ -38,7 +38,6 @@ jobs:
           which cmake
           cmake --version
           python -m pip install -v .
-      - name: Install dependency
       - name: Install coverage
         run: |
           python -m pip install coverage[toml]
