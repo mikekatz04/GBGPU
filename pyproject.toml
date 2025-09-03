@@ -22,8 +22,11 @@ requires-python = ">= 3.9"
 dependencies = [
   "lisaanalysistools>=1.0.17",
   "exceptiongroup; python_version<'3.11'", # To access ExceptionGroup with Python 3.9 and 3.10
+  "h5py",
   "jsonschema",                            # To validate content of file registry
   "lisaconstants",
+  "multispline",
+  "numba",
   "numpy",
   "nvidia-ml-py",                          # To detect CUDA version if any
   "platformdirs",                          # To locate config and data dir on all platforms
