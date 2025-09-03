@@ -1,4 +1,4 @@
-"""Implementation of a centralized configuration management for FEW."""
+"""Implementation of a centralized configuration management for GBGPU."""
 
 from __future__ import annotations
 
@@ -43,12 +43,12 @@ class ConfigSource(enum.Enum):
     """Config value comes from command line parameter"""
 
     SETTER = "setter"
-    """Config value set by config setter after importing FEW"""
+    """Config value set by config setter after importing GBGPU"""
 
 
 T = TypeVar("T")
 
-ENVVAR_PREFIX: str = "FEW_"
+ENVVAR_PREFIX: str = "GBGPU_"
 
 
 @dataclasses.dataclass
@@ -70,7 +70,7 @@ class ConfigEntry(Generic[T]):
     """Name of the entry in a config file"""
 
     env_var: Optional[str] = None
-    """Entry corresponding env var (uppercase, without FEW_ prefix)"""
+    """Entry corresponding env var (uppercase, without GBGPU_ prefix)"""
 
     cli_flags: Optional[Union[str, List[str]]] = None
     """Flag(s) for CLI arguments of this entry (e.g. "-f")"""
@@ -287,10 +287,10 @@ class ConfigConsumer(abc.ABC):
 
         config = configparser.ConfigParser()
         config.read(config_file)
-        if "few" not in config:
+        if "gbgpu" not in config:
             return {}
-        few_section = config["few"]
-        return {key: few_section[key] for key in few_section}
+        gbgpu_section = config["gbgpu"]
+        return {key: gbgpu_section[key] for key in gbgpu_section}
 
     @staticmethod
     def _get_from_envvars(env_vars: Optional[Mapping[str, str]]) -> Dict[str, str]:
@@ -514,7 +514,7 @@ class InitialConfigConsumer(ConfigConsumer):
             ),
             ConfigEntry(
                 label="config_file",
-                description="Path to FEW configuration file",
+                description="Path to GBGPU configuration file",
                 type=Optional[pathlib.Path],
                 default=None,
                 cli_flags=["-C", "--config-file"],
@@ -533,14 +533,14 @@ class InitialConfigConsumer(ConfigConsumer):
 
 
 def get_package_basepath() -> pathlib.Path:
-    import few
+    import gbgpu
 
-    return pathlib.Path(few.__file__).parent
+    return pathlib.Path(gbgpu.__file__).parent
 
 
 class Configuration(ConfigConsumer):
     """
-    Class implementing FEW complete configuration for the library.
+    Class implementing GBGPU complete configuration for the library.
     """
 
     log_level: int
@@ -556,7 +556,7 @@ class Configuration(ConfigConsumer):
 
     @staticmethod
     def config_entries() -> List[ConfigEntry]:
-        from few import _is_editable as is_editable_mode
+        from gbgpu import _is_editable as is_editable_mode
 
         return [
             ConfigEntry(
@@ -580,88 +580,88 @@ class Configuration(ConfigConsumer):
                 convert=lambda input: input,
                 validate=lambda input: input is None or isinstance(input, str),
             ),
-            ConfigEntry(
-                label="file_registry_path",
-                description="File Registry path",
-                type=Optional[pathlib.Path],
-                default=None,
-                cli_flags=["--file-registry"],
-                env_var="FILE_REGISTRY",
-                cfg_entry="file-registry",
-                convert=lambda p: None if p is None else pathlib.Path(p),
-                validate=lambda p: True if p is None else p.is_file(),
-            ),
-            ConfigEntry(
-                label="file_storage_path",
-                description="File Manager storage directory (absolute or relative to current working directory, must exist)",
-                type=Optional[pathlib.Path],
-                default=(get_package_basepath() / "data") if is_editable_mode else None,
-                cli_flags=["--storage-dir"],
-                env_var="FILE_STORAGE_DIR",
-                cfg_entry="file-storage-dir",
-                convert=lambda p: None if p is None else pathlib.Path(p).absolute(),
-                validate=lambda p: True if p is None else p.is_dir(),
-            ),
-            ConfigEntry(
-                label="file_download_path",
-                description="File Manager download directory (absolute, or relative to storage_path)",
-                type=Optional[pathlib.Path],
-                default=(get_package_basepath() / "data") if is_editable_mode else None,
-                cli_flags=["--download-dir"],
-                env_var="FILE_DOWNLOAD_DIR",
-                cfg_entry="file-download-dir",
-                convert=lambda p: None if p is None else pathlib.Path(p),
-                validate=lambda p: True
-                if p is None
-                else (p.is_dir() if p.is_absolute() else True),
-            ),
-            ConfigEntry(
-                label="file_allow_download",
-                description="Whether file manager can download missing files from internet",
-                type=bool,
-                default=True,
-                cli_flags="--file-download",
-                cli_kwargs={"action": argparse.BooleanOptionalAction},
-                env_var="FILE_ALLOW_DOWNLOAD",
-                cfg_entry="file-allow-download",
-                convert=lambda x: userstr_to_bool(x) if isinstance(x, str) else bool(x),
-            ),
-            ConfigEntry(
-                label="file_integrity_check",
-                description="When should th file manager perform integrity checks (never, once, always)",
-                type=str,
-                default="once",
-                cli_flags="--file-integrity-check",
-                cli_kwargs={"choices": ("never", "once", "always")},
-                env_var="FILE_INTEGRITY_CHECK",
-                cfg_entry="file-integrity-check",
-                validate=lambda x: x in ("never", "once", "always"),
-            ),
-            ConfigEntry(
-                label="file_extra_paths",
-                description="Supplementary paths in which FEW will search for files",
-                type=Optional[List[pathlib.Path]],
-                default=[get_package_basepath() / "data"],
-                cli_flags=["--extra-path"],
-                cli_kwargs={"action": "append"},
-                env_var="FILE_EXTRA_PATHS",
-                cfg_entry="file-extra-paths",
-                convert=userinput_to_pathlist,
-                overwrite=lambda old, new: old + new
-                if old is not None
-                else new,  # concatenate extra path lists
-            ),
-            ConfigEntry(
-                label="file_disabled_tags",
-                description="Tags for which access to associated files is disabled",
-                type=Optional[List[str]],
-                default=None,
-                env_var="DISABLED_TAGS",
-                convert=userinput_to_strlist,
-                overwrite=lambda old, new: old + new
-                if old is not None
-                else new,  # concatenate tag lists
-            ),
+            # ConfigEntry(
+            #     label="file_registry_path",
+            #     description="File Registry path",
+            #     type=Optional[pathlib.Path],
+            #     default=None,
+            #     cli_flags=["--file-registry"],
+            #     env_var="FILE_REGISTRY",
+            #     cfg_entry="file-registry",
+            #     convert=lambda p: None if p is None else pathlib.Path(p),
+            #     validate=lambda p: True if p is None else p.is_file(),
+            # ),
+            # ConfigEntry(
+            #     label="file_storage_path",
+            #     description="File Manager storage directory (absolute or relative to current working directory, must exist)",
+            #     type=Optional[pathlib.Path],
+            #     default=(get_package_basepath() / "data") if is_editable_mode else None,
+            #     cli_flags=["--storage-dir"],
+            #     env_var="FILE_STORAGE_DIR",
+            #     cfg_entry="file-storage-dir",
+            #     convert=lambda p: None if p is None else pathlib.Path(p).absolute(),
+            #     validate=lambda p: True if p is None else p.is_dir(),
+            # ),
+            # ConfigEntry(
+            #     label="file_download_path",
+            #     description="File Manager download directory (absolute, or relative to storage_path)",
+            #     type=Optional[pathlib.Path],
+            #     default=(get_package_basepath() / "data") if is_editable_mode else None,
+            #     cli_flags=["--download-dir"],
+            #     env_var="FILE_DOWNLOAD_DIR",
+            #     cfg_entry="file-download-dir",
+            #     convert=lambda p: None if p is None else pathlib.Path(p),
+            #     validate=lambda p: True
+            #     if p is None
+            #     else (p.is_dir() if p.is_absolute() else True),
+            # ),
+            # ConfigEntry(
+            #     label="file_allow_download",
+            #     description="Whether file manager can download missing files from internet",
+            #     type=bool,
+            #     default=True,
+            #     cli_flags="--file-download",
+            #     cli_kwargs={"action": argparse.BooleanOptionalAction},
+            #     env_var="FILE_ALLOW_DOWNLOAD",
+            #     cfg_entry="file-allow-download",
+            #     convert=lambda x: userstr_to_bool(x) if isinstance(x, str) else bool(x),
+            # ),
+            # ConfigEntry(
+            #     label="file_integrity_check",
+            #     description="When should th file manager perform integrity checks (never, once, always)",
+            #     type=str,
+            #     default="once",
+            #     cli_flags="--file-integrity-check",
+            #     cli_kwargs={"choices": ("never", "once", "always")},
+            #     env_var="FILE_INTEGRITY_CHECK",
+            #     cfg_entry="file-integrity-check",
+            #     validate=lambda x: x in ("never", "once", "always"),
+            # ),
+            # ConfigEntry(
+            #     label="file_extra_paths",
+            #     description="Supplementary paths in which GBGPU will search for files",
+            #     type=Optional[List[pathlib.Path]],
+            #     default=[get_package_basepath() / "data"],
+            #     cli_flags=["--extra-path"],
+            #     cli_kwargs={"action": "append"},
+            #     env_var="FILE_EXTRA_PATHS",
+            #     cfg_entry="file-extra-paths",
+            #     convert=userinput_to_pathlist,
+            #     overwrite=lambda old, new: old + new
+            #     if old is not None
+            #     else new,  # concatenate extra path lists
+            # ),
+            # ConfigEntry(
+            #     label="file_disabled_tags",
+            #     description="Tags for which access to associated files is disabled",
+            #     type=Optional[List[str]],
+            #     default=None,
+            #     env_var="DISABLED_TAGS",
+            #     convert=userinput_to_strlist,
+            #     overwrite=lambda old, new: old + new
+            #     if old is not None
+            #     else new,  # concatenate tag lists
+            # ),
             ConfigEntry(
                 label="enabled_backends",
                 description="List of backends that must be enabled",
@@ -776,12 +776,12 @@ def detect_cfg_file() -> Optional[pathlib.Path]:
     from .. import __version_tuple__
 
     LOCATIONS = [
-        pathlib.Path.cwd() / "few.ini",
-        platformdirs.user_config_path() / "few.ini",
+        pathlib.Path.cwd() / "gbgpu.ini",
+        platformdirs.user_config_path() / "gbgpu.ini",
         platformdirs.site_config_path()
-        / "few"
+        / "gbgpu"
         / "v{}.{}".format(__version_tuple__[0], __version_tuple__[1])
-        / "few.ini",
+        / "gbgpu.ini",
     ]
     from .globals import get_logger
 

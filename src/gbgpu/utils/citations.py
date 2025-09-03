@@ -1,7 +1,7 @@
-# Collection of citations for modules in FastEMRIWaveforms package
+# Collection of citations for modules in GBGPU package
 
 """
-:code:`few.utils.citations`:
+:code:`gbgpu.utils.citations`:
 
 This module is used to collect citations for all modules in the package. This
 module is then imported to add citations to module classes using their :code:`citation`
@@ -14,7 +14,7 @@ from typing import Iterable, List, Optional, Union
 
 from pydantic import BaseModel
 
-from few.utils.exceptions import InvalidInputFile
+from gbgpu.utils.exceptions import InvalidInputFile
 
 
 def _hyphen_replace(field: str) -> str:
@@ -236,17 +236,9 @@ Reference = Union[ArticleReference, SoftwareReference]
 
 
 class REFERENCE(enum.Enum):
-    FEW = "Chua:2020stf"
-    LARGER_FEW = "Katz:2021yft"
-    FEW_SOFTWARE = "FastEMRIWaveforms"
-    ROMANNET = "Chua:2018woh"
-    PN5 = "Fujita:2020zxe"
-    KERR_SEPARATRIX = "Stein:2019buj"
-    AAK1 = "Chua:2015mua"
-    AAK2 = "Chua:2017ujo"
-    AK = "Barack:2003fp"
-    FD = "Speri:2023jte"
-    KERR_ECC_EQ = "Chapman-Bird:2025xtd"
+    FAST_GB = "Cornish:2007if"
+    TRIPLES_1 = "Robson:2018svj"
+    GBGPU_SOFTWARE = "michael_l_katz_2022_6500434"
 
     def __str__(self) -> str:
         return str(self.value)
@@ -276,11 +268,11 @@ def build_citation_registry() -> CitationRegistry:
     import jsonschema
     import yaml
 
-    from few import __file__ as _few_root_file
-    from few import _is_editable as is_editable
+    from gbgpu import __file__ as _gbgpu_root_file
+    from gbgpu import _is_editable as is_editable
 
-    few_root = pathlib.Path(_few_root_file).parent
-    cff_root = few_root.parent.parent if is_editable else few_root
+    gbgpu_root = pathlib.Path(_gbgpu_root_file).parent
+    cff_root = gbgpu_root.parent.parent if is_editable else gbgpu_root
     citation_cff_path = cff_root / "CITATION.cff"
 
     with open(citation_cff_path, "rt") as fid:
@@ -295,7 +287,7 @@ def build_citation_registry() -> CitationRegistry:
         raise InvalidInputFile("cff_1_2_0.schema.json is not a valid schema.") from e
     except jsonschema.exceptions.ValidationError as e:
         raise InvalidInputFile(
-            "The file {} does not match its expected schema. Contact few developers.".format(
+            "The file {} does not match its expected schema. Contact gbgpu developers.".format(
                 citation_cff_path
             )
         ) from e
@@ -320,10 +312,9 @@ def build_citation_registry() -> CitationRegistry:
 
 
 COMMON_REFERENCES = [
-    REFERENCE.KERR_ECC_EQ,
-    REFERENCE.FEW,
-    REFERENCE.LARGER_FEW,
-    REFERENCE.FEW_SOFTWARE,
+    REFERENCE.FAST_GB,
+    REFERENCE.TRIPLES_1,
+    REFERENCE.GBGPU_SOFTWARE,
 ]
 
 
@@ -358,7 +349,7 @@ class Citable:
     @classmethod
     def _get_registry(cls) -> CitationRegistry:
         if Citable.registry is None:
-            from few import get_logger
+            from gbgpu import get_logger
 
             get_logger().debug("Building the Citation Registry from CITATION.cff")
             Citable.registry = build_citation_registry()

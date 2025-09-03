@@ -1,4 +1,4 @@
-"""Definition of global states (logger, config, file manager, fast backend, ...)"""
+"""Definition of global states (logger, config, fast backend, ...)"""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import os
 import typing
 
 from ..cutils import Backend, BackendsManager
-from ..files import FileManager
 from .config import (
     ConfigConsumer,
     ConfigEntry,
@@ -17,7 +16,7 @@ from .config import (
     InitialConfigConsumer,
     detect_cfg_file,
 )
-from .exceptions import FewException
+from .exceptions import GBGPUException
 
 
 class Singleton(type):
@@ -29,11 +28,11 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class FewGlobalsInitializedTwice(FewException):
+class GBGPUGlobalsInitializedTwice(GBGPUException):
     """Exception raised if globals are initialized multiple times."""
 
 
-class FewGlobalsReadOnly(FewException):
+class GBGPUGlobalsReadOnly(GBGPUException):
     """Exception raised when trying to modify the global structure."""
 
 
@@ -119,7 +118,7 @@ class ConfigurationSetter:
     def _convert_and_set(self, label: str, value: typing.Any) -> ConfigurationSetter:
         if Globals().is_initialized:
             get_logger().warning(
-                "FEW configurations is already initialized. Option {}={} might not be taken into account".format(
+                "GBGPU configurations is already initialized. Option {}={} might not be taken into account".format(
                     label, value
                 )
             )
@@ -131,7 +130,7 @@ class ConfigurationSetter:
         return self._args
 
     def finalize(self):
-        """Finalize FEW initialization with specified parameters."""
+        """Finalize GBGPU initialization with specified parameters."""
         if self._finalizer is not None:
             self._finalizer(self.get_args())
 
@@ -140,7 +139,7 @@ class Globals(metaclass=Singleton):
     _logger: logging.Logger
     _initial_config: InitialConfigConsumer
     _config: Configuration
-    _file_manager: FileManager
+    # _file_manager: FileManager
     _config_setter: ConfigurationSetter
     _backends_manager: BackendsManager
 
@@ -159,19 +158,19 @@ class Globals(metaclass=Singleton):
     ):
         """Initialize config, file manager and logger with optional CLI arguments."""
         if not super().__getattribute__("_to_initialize"):
-            raise FewGlobalsInitializedTwice("FEW globals are already initialized.")
+            raise GBGPUGlobalsInitializedTwice("GBGPU globals are already initialized.")
         if set_args is None:
             config_setter = self.get_configuration_setter()
             set_args = config_setter.get_args()
         self._init_config(cli_args=cli_args, set_args=set_args)
         self._postconfig_logger()
-        self._init_file_manager()
+        # self._init_file_manager()
         self._init_backends_manager()
 
         super().__setattr__("_to_initialize", False)
         super().__setattr__("_config_setter", None)
 
-        self.logger.debug("FEW globals initialized.")
+        self.logger.debug("GBGPU globals initialized.")
 
     def reset(self):
         """Reset the global structure."""
@@ -180,7 +179,7 @@ class Globals(metaclass=Singleton):
         if self.is_initialized:
             super().__delattr__("_initial_config")
             super().__delattr__("_config")
-            super().__delattr__("_file_manager")
+            # super().__delattr__("_file_manager")
 
         # Remove attributes always existing
         super().__delattr__("_logger")
@@ -205,11 +204,11 @@ class Globals(metaclass=Singleton):
             self.init()
         return super().__getattribute__("_config")
 
-    @property
-    def file_manager(self) -> FileManager:
-        if not self.is_initialized:
-            self.init()
-        return super().__getattribute__("_file_manager")
+    # @property
+    # def file_manager(self) -> FileManager:
+    #     if not self.is_initialized:
+    #         self.init()
+    #     return super().__getattribute__("_file_manager")
 
     @property
     def backends_manager(self) -> BackendsManager:
@@ -221,30 +220,30 @@ class Globals(metaclass=Singleton):
         """
         Access a configuration setter.
 
-        raises FewGlobalsInitializedTwice if globals are already initialized and reset is False.
+        raises GBGPUGlobalsInitializedTwice if globals are already initialized and reset is False.
         """
         if self.is_initialized:
             if reset:
                 self.reset()
             else:
-                raise FewGlobalsInitializedTwice(
-                    "FEW globals are already initialized. Cannot access a setter."
+                raise GBGPUGlobalsInitializedTwice(
+                    "GBGPU globals are already initialized. Cannot access a setter."
                 )
         return super().__getattribute__("_config_setter")
 
     def __setattr__(self, name, value):
-        raise FewGlobalsReadOnly("Cannot set attribute on Globals structure.")
+        raise GBGPUGlobalsReadOnly("Cannot set attribute on Globals structure.")
 
     def _preinit_logger(self):
         """Pre-initialize logger."""
-        logger = logging.getLogger("few")
+        logger = logging.getLogger("gbgpu")
         logger.setLevel(logging.DEBUG)
         for handler in logger.handlers:
             logger.removeHandler(handler)
 
         INITIAL_CAPACITY = 1024  # Log up to 1024 messages until globals are initialized
         handler = logging.handlers.MemoryHandler(capacity=INITIAL_CAPACITY)
-        handler.set_name("_few_initial_handler")
+        handler.set_name("_gbgpu_initial_handler")
         logger.addHandler(handler)
         super().__setattr__("_logger", logger)
 
@@ -336,7 +335,7 @@ class Globals(metaclass=Singleton):
             stderr_handler.setFormatter(formatter)
 
         for handler in logger.handlers:
-            if handler.get_name() == "_few_initial_handler":
+            if handler.get_name() == "_gbgpu_initial_handler":
                 assert isinstance(handler, logging.handlers.MemoryHandler)
                 handler.setTarget(
                     MultiHandlerTarget(cfg.log_level, stdout_handler, stderr_handler)
@@ -349,10 +348,10 @@ class Globals(metaclass=Singleton):
         logger.addHandler(stdout_handler)
         logger.addHandler(stderr_handler)
 
-    def _init_file_manager(self):
-        cfg: Configuration = super().__getattribute__("_config")
-        file_manager = FileManager(cfg)
-        super().__setattr__("_file_manager", file_manager)
+    # def _init_file_manager(self):
+    #     cfg: Configuration = super().__getattribute__("_config")
+    #     file_manager = FileManager(cfg)
+    #     super().__setattr__("_file_manager", file_manager)
 
     def _init_backends_manager(self):
         cfg: Configuration = super().__getattribute__("_config")
@@ -361,17 +360,17 @@ class Globals(metaclass=Singleton):
 
 
 def get_logger() -> logging.Logger:
-    """Get FEW logger"""
+    """Get GBGPU logger"""
     return Globals().logger
 
 
-def get_file_manager() -> FileManager:
-    """Get FEW File Manager"""
-    return Globals().file_manager
+# def get_file_manager() -> FileManager:
+#     """Get GBGPU File Manager"""
+#     return Globals().file_manager
 
 
 def get_config() -> Configuration:
-    """Get FEW configuration"""
+    """Get GBGPU configuration"""
     return Globals().config
 
 
@@ -409,7 +408,7 @@ def get_first_backend(backend_names: typing.Sequence[str]) -> Backend:
 
 
 def initialize(*cli_args):
-    """Initialize FEW configuration, logger and file manager with CLI arguments"""
+    """Initialize GBGPU configuration, logger and file manager with CLI arguments"""
     Globals().init(*cli_args)
 
 
@@ -422,7 +421,7 @@ def reset(quiet: bool = False):
     """Reset global states."""
     if not quiet:
         get_logger().warning(
-            "FEW globals are about to be reset. Objects built up until now should be deleted to prevent unexpected side-effects."
+            "GBGPU globals are about to be reset. Objects built up until now should be deleted to prevent unexpected side-effects."
         )
     Globals().reset()
 
@@ -434,7 +433,7 @@ __all__ = [
     "Globals",
     "ConfigurationSetter",
     "get_logger",
-    "get_file_manager",
+    # "get_file_manager",
     "get_config",
     "get_config_setter",
     "get_backend",

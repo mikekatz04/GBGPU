@@ -36,13 +36,13 @@ class MissingDependencies(BackendUnavailableException):
         message = super().__str__()
         if self.pip_deps:
             message += """
-    If you are using few in an environment managed using pip, run:
+    If you are using gbgpu in an environment managed using pip, run:
         $ pip install {}
 
 """.format(", ".join(self.pip_deps))
         if self.conda_deps:
             message += """
-    If you are using few in an environment managed using conda, run:
+    If you are using gbgpu in an environment managed using conda, run:
         $ conda install {}
 
 """.format(", ".join(self.conda_deps))
@@ -640,10 +640,11 @@ class GBGPUCuda12xBackend(Cuda12xBackend):
 
 
 KNOWN_BACKENDS = {
-    "cuda12x": Cuda12xBackend,
-    "cuda11x": Cuda11xBackend,
-    "cpu": CpuBackend,
+    "cuda12x": GBGPUCuda12xBackend,
+    "cuda11x": GBGPUCuda11xBackend,
+    "cpu": GBGPUCpuBackend,
 }
+
 """List of existing backends, per default order of preference."""
 
 
