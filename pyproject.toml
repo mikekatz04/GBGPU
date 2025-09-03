@@ -29,9 +29,11 @@ dependencies = [
   "platformdirs",                          # To locate config and data dir on all platforms
   "pydantic",                              # To handle citations and references with advanced dataclasses
   "pyyaml",                                # To read file registry
+  "requests",                              # To download files automatically
+  "rich",                                  # To display downlaod progress bar
   "scipy",
   "tqdm",
-  "requests",
+  "wrapt",
   #@DEPS_CUPYCUDA@,
   #@DEPS_GBGPUCORE@,
 ]
@@ -67,6 +69,9 @@ optional-dependencies.doc = [
 
 optional-dependencies.sampling = [
   "eryn",
+  "fastlisaresponse",
+  "lisaanalysistools",
+  "lisatools",
 ]
 
 optional-dependencies.testing = [
