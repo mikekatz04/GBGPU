@@ -26,9 +26,8 @@ class GBGPUThirdBody(GBGPUBase):
     by Travis Robson for the paper `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
 
     Args:
-        use_gpu (bool, optional): If True, run on GPUs. Default is ``False``.
-
-    Attributes:
+        force_backend (str, optional): Change to general backend in use. Example options are ``'cpu'`` and ``'gpu'``.
+            Default is ``None``. 
 
     """
 
