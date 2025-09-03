@@ -41,11 +41,10 @@ class GBGPUBase(ParallelModuleBase, abc.ABC):
         * Circular Galactic binaries with an eccentric third body (inherited)
 
     Args:
-        # TODO: fix this
-        use_gpu (bool, optional): If True, run on GPUs. Default is ``False``.
+        force_backend (str, optional): Change to general backend in use. Example options are ``'cpu'`` and ``'gpu'``.
+            Default is ``None``. 
 
     Attributes:
-        use_gpu (bool): Use GPU if True.
         get_basis_tensors (obj): Cython function.
         GenWave (obj): Cython function.
         GenWaveThird (obj): Cython function.
@@ -1006,8 +1005,8 @@ class GBGPUBase(ParallelModuleBase, abc.ABC):
                 a first-order central difference computation. If ``False``, use the higher order
                 derivative that computes two more waveforms during the derivative calculation.
                 Default is ``False``.
-            return_gpu (False, optional): If True and self.use_gpu is True, return Information
-                matrices in cupy array. Default is False.
+            return_gpu (False, optional): If ``True`` and backend is GPU-based, return Information
+                matrices in cupy array. Default is ``False``.
 
         Returns:
             3D xp.ndarray: Information Matrices for all binaries with shape: ``(number of binaries, number of parameters, number of parameters)``.
