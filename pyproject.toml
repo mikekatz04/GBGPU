@@ -31,6 +31,7 @@ dependencies = [
   "pyyaml",                                # To read file registry
   "scipy",
   "tqdm",
+  "requests",
   #@DEPS_CUPYCUDA@,
   #@DEPS_GBGPUCORE@,
 ]
