@@ -28,7 +28,9 @@ class WaveformTest(unittest.TestCase):
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
+        # TODO: improve this
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPU(orbits=orbits, force_backend=force_backend)
 
         dt = 15.0
         N = None
@@ -85,7 +87,8 @@ class WaveformTest(unittest.TestCase):
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPU(orbits=orbits, force_backend=force_backend)
         gb.d_d = 0.0
 
         N = int(256)
@@ -172,7 +175,8 @@ class WaveformTest(unittest.TestCase):
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPU(orbits=orbits, force_backend=force_backend)
         gb.d_d = 0.0
 
         N = int(256)

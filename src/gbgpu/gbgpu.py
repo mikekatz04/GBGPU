@@ -931,7 +931,7 @@ class GBGPUBase(ParallelModuleBase, abc.ABC):
         start = self.start_inds[0]
 
         # if using GPU, will return to CPU
-        if self.use_gpu:
+        if self.backend.name == "gpu":
             A_temp = self.A_out.squeeze().get()
             E_temp = self.E_out.squeeze().get()
 
@@ -1132,7 +1132,7 @@ class GBGPUBase(ParallelModuleBase, abc.ABC):
                 info_matrix[:, j, i] = info_matrix[:, i, j]
 
         # copy to cpu if needed
-        if self.use_gpu and return_gpu is False:
+        if self.backend.name == "gpu" and return_gpu is False:
             info_matrix = info_matrix.get()
 
         return info_matrix
