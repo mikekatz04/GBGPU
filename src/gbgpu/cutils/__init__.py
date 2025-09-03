@@ -4,7 +4,7 @@ import enum
 import types
 import typing
 import abc
-
+from typing import Optional, Sequence, TypeVar, Union
 from ..utils.exceptions import GBGPUException
 
 
@@ -141,20 +141,18 @@ class Backend:
         """Shortcut to check whether a backend uses CUDA devices"""
         return self.supports(feature=Backend.Feature.CUDA)
     
-class GBGPUBackend(Backend):
+class GBGPUBackend:
     get_ll: typing.Callable[(...), None]
     fill_global: typing.Callable[(...), None]
 
-    def __init__(self, *args):
+    def __init__(self, gbgpu_backend_methods):
 
         # set direct gbgpu methods
         # pass rest to general backend
-        gbgpu_backend_methods = args[1]
         assert isinstance(gbgpu_backend_methods, GBGPUBackendMethods)
 
         self.get_ll = gbgpu_backend_methods.get_ll
         self.fill_global = gbgpu_backend_methods.fill_global
-        super().__init__(*args)
 
 
 class CpuBackend(Backend, abc.ABC):
@@ -178,7 +176,7 @@ class CpuBackend(Backend, abc.ABC):
         
         return numpy
 
-    def __init__(self):
+    def __init__(self, ):
         """Initialize the CPU backend"""
         name = "cpu"
         if self.backend_name is None:
@@ -186,18 +184,22 @@ class CpuBackend(Backend, abc.ABC):
         
         self._check_module_installed(name, self.backend_name)
 
-        super().__init__(
+        Backend.__init__(
+            self,
             name=name,
             methods=self.cpu_methods_loader(),
             features=Backend.Feature.NUMPY,
         )
 
 
-
-class GBGPUCpuBackend(CpuBackend):
+class GBGPUCpuBackend(CpuBackend, GBGPUBackend):
     """Implementation of the CPU backend"""
     
     backend_name = "gbgpu_backend_cpu"
+
+    def __init__(self, *args, **kwargs):
+        CpuBackend.__init__(self, *args, **kwargs)
+        GBGPUBackend.__init__(self, self.cpu_methods_loader())
 
     @staticmethod
     def cpu_methods_loader() -> GBGPUBackendMethods:
@@ -506,9 +508,15 @@ class Cuda11xBackend(_CudaBackend, abc.ABC):
         )
 
 
-class GBGPUCuda11xBackend(Cuda11xBackend):
+class GBGPUCuda11xBackend(Cuda11xBackend, GBGPUBackend):
+
     """Implementation of CUDA 11.x backend"""
     backend_name : str = "gbgpu_backend_cuda11x"
+
+    def __init__(self, *args, **kwargs):
+        Cuda11xBackend.__init__(self, *args, **kwargs)
+        GBGPUBackend.__init__(self, self.cuda11x_module_loader())
+        
     @staticmethod
     def cuda11x_module_loader():
         try:
@@ -611,10 +619,14 @@ class Cuda12xBackend(_CudaBackend, abc.ABC):
         )
 
 
-class GBGPUCuda12xBackend(Cuda12xBackend):
+class GBGPUCuda12xBackend(Cuda12xBackend, GBGPUBackend):
     """Implementation of CUDA 12.x backend"""
     backend_name : str = "gbgpu_backend_cuda12x"
     
+    def __init__(self, *args, **kwargs):
+        Cuda12xBackend.__init__(self, *args, **kwargs)
+        GBGPUBackend.__init__(self, self.cuda12x_module_loader())
+        
     @staticmethod
     def cuda12x_module_loader():
         try:
