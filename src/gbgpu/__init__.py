@@ -29,14 +29,29 @@ except (ModuleNotFoundError, ImportError):
     _is_editable = False
 
 from . import cutils, utils
-from .utils.globals import (
-    get_backend,
-    get_config,
-    get_config_setter,
-    # get_file_manager,
-    get_logger,
-    has_backend,
-)
+from .cutils import KNOWN_BACKENDS
+
+from gpubackendtools.gpubackendtools import GpuBackendToolConsumer
+from gpubackendtools.parallelbase import ParallelModuleBase
+from gpubackendtools.utils.globals import Globals
+
+global gbgpu_backend_consumer
+gbgpu_backend_consumer = GpuBackendToolConsumer(name="gbgpu", compiled_backends=KNOWN_BACKENDS)
+from .cutils import GBGPUCpuBackend, GBGPUCuda11xBackend, GBGPUCuda12xBackend
+
+add_backends = {
+    "gbgpu_cpu": GBGPUCpuBackend,
+    "gbgpu_cuda11x": GBGPUCuda11xBackend,
+    "gbgpu_cuda12x": GBGPUCuda12xBackend,
+}
+
+Globals().backends_manager.add_backends(add_backends)
+
+class GBGPUParallelModule(ParallelModuleBase):
+    def __init__(self, force_backend=None):
+        force_backend_in = ('gbgpu', force_backend) if isinstance(force_backend, str) else force_backend
+        super().__init__(force_backend_in)
+
 
 __all__ = [
     "__version__",

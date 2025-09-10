@@ -7,7 +7,8 @@ import logging.handlers
 import os
 import typing
 
-from ..cutils import Backend, BackendsManager
+from gpubackendtools.gpubackendtools import Backend, BackendsManager
+from ..cutils import KNOWN_BACKENDS
 from .config import (
     ConfigConsumer,
     ConfigEntry,
@@ -355,7 +356,7 @@ class Globals(metaclass=Singleton):
 
     def _init_backends_manager(self):
         cfg: Configuration = super().__getattribute__("_config")
-        backends_manager = BackendsManager(enabled_backends=cfg.enabled_backends)
+        backends_manager = BackendsManager(KNOWN_BACKENDS, enabled_backends=cfg.enabled_backends)
         super().__setattr__("_backends_manager", backends_manager)
 
 

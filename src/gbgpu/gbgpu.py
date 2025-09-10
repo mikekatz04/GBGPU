@@ -8,6 +8,7 @@ import numpy as np
 # import constants
 from lisatools.utils.constants import *
 from .utils.citation import *
+from . import GBGPUParallelModule
 
 try:
     from lisatools.sensitivity import A1TDISens
@@ -23,9 +24,9 @@ from .utils.utility import *
 from lisatools.detector import EqualArmlengthOrbits, Orbits
 from typing import Optional, Sequence, TypeVar, Union
 
-from .utils.parallelbase import ParallelModuleBase
+from gpubackendtools.parallelbase import ParallelModuleBase
 
-class GBGPUBase(ParallelModuleBase, abc.ABC):
+class GBGPUBase(GBGPUParallelModule, abc.ABC):
     """Generate Galactic Binary Waveforms
 
     This class generates galactic binary waveforms in the frequency domain,
@@ -64,7 +65,7 @@ class GBGPUBase(ParallelModuleBase, abc.ABC):
     """
 
     def __init__(self, orbits: Orbits = None, force_backend = None):
-        ParallelModuleBase.__init__(self, force_backend=force_backend)
+        GBGPUParallelModule.__init__(self, force_backend=force_backend)
         self.d_d = None
         self.orbits = orbits
 
