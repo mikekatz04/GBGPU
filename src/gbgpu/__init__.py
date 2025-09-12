@@ -1,4 +1,4 @@
-"""Fast and accurate EMRI Waveforms."""
+"""GBGPU."""
 
 # ruff: noqa: E402
 try:
@@ -31,13 +31,9 @@ except (ModuleNotFoundError, ImportError):
 from . import cutils, utils
 from .cutils import KNOWN_BACKENDS
 
-from gpubackendtools.gpubackendtools import GpuBackendToolConsumer
-from gpubackendtools.parallelbase import ParallelModuleBase
-from gpubackendtools.utils.globals import Globals
-
-global gbgpu_backend_consumer
-gbgpu_backend_consumer = GpuBackendToolConsumer(name="gbgpu", compiled_backends=KNOWN_BACKENDS)
+from gpubackendtools import Globals
 from .cutils import GBGPUCpuBackend, GBGPUCuda11xBackend, GBGPUCuda12xBackend
+
 
 add_backends = {
     "gbgpu_cpu": GBGPUCpuBackend,
@@ -47,10 +43,8 @@ add_backends = {
 
 Globals().backends_manager.add_backends(add_backends)
 
-class GBGPUParallelModule(ParallelModuleBase):
-    def __init__(self, force_backend=None):
-        force_backend_in = ('gbgpu', force_backend) if isinstance(force_backend, str) else force_backend
-        super().__init__(force_backend_in)
+
+from gpubackendtools import get_backend, has_backend, get_first_backend
 
 
 __all__ = [
