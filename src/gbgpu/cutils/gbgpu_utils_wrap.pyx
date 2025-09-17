@@ -27,7 +27,7 @@ def get_ll(*args, **kwargs):
         start_ind, M, num_bin, 
         data_index, noise_index, 
         data_length 
-    ) = wrapper(*args, **kwargs)
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t d_h_in = d_h
     cdef size_t h_h_in = h_h
@@ -48,14 +48,14 @@ def get_ll(*args, **kwargs):
             <int*> start_ind_in, M, num_bin, <int*> data_index_in, <int*> noise_index_in, data_length);
 
 
-def fill_global():
+def fill_global(*args, **kwargs):
 
     (
         A_glob, E_glob,
         A_template, E_template,
         start_ind, M, num_bin, 
         group_index, data_length
-    ) = wrapper(*args, **kwargs)
+    ), tkwargs = wrapper(*args, **kwargs)
     
     cdef size_t A_template_in = A_template
     cdef size_t E_template_in = E_template

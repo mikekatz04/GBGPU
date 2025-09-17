@@ -8,7 +8,7 @@ from typing import Optional, Sequence, TypeVar, Union
 from ..utils.exceptions import *
 
 from gpubackendtools.gpubackendtools import BackendMethods, CpuBackend, Cuda11xBackend, Cuda12xBackend
-from gpubackendtools.utils.exceptions import *
+from gpubackendtools.exceptions import *
 
 @dataclasses.dataclass
 class GBGPUBackendMethods(BackendMethods):

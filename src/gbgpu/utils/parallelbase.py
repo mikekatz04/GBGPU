@@ -1,5 +1,3 @@
-from .globals import get_backend, get_first_backend, get_logger
-from ..cutils import Backend
 from typing import Optional, Sequence, TypeVar, Union
 import types
 

@@ -8,7 +8,7 @@ import numpy as np
 # import constants
 from lisatools.utils.constants import *
 from .utils.citation import *
-from . import GBGPUParallelModule
+from .utils.parallelbase import GBGPUParallelModule
 
 try:
     from lisatools.sensitivity import A1TDISens
