@@ -1,7 +1,7 @@
 import numpy as np
 cimport numpy as np
 
-from gbgpu.utils.pointeradjust import pointer_adjust
+from gpubackendtools import wrapper
 
 assert sizeof(int) == sizeof(np.int32_t)
 
@@ -17,12 +17,17 @@ cdef extern from "gbgpu_utils.hh":
                    double* A_psd, double* E_psd, double df,
                    int* start_ind, int M, int num_bin, int* data_index, int* noise_index, int data_length);
 
-@pointer_adjust
-def get_ll(d_h, h_h,
-              A_template, E_template,
-              A_data, E_data,
-              A_psd, E_psd, df,
-              start_ind, M, num_bin, data_index, noise_index, data_length):
+def get_ll(*args, **kwargs):
+
+    (   
+        d_h, h_h,
+        A_template, E_template,
+        A_data, E_data,
+        A_psd, E_psd, df,
+        start_ind, M, num_bin, 
+        data_index, noise_index, 
+        data_length 
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t d_h_in = d_h
     cdef size_t h_h_in = h_h
@@ -42,11 +47,16 @@ def get_ll(d_h, h_h,
             <double*> A_psd_in, <double*> E_psd_in, df,
             <int*> start_ind_in, M, num_bin, <int*> data_index_in, <int*> noise_index_in, data_length);
 
-@pointer_adjust
-def fill_global(A_glob, E_glob,
-              A_template, E_template,
-              start_ind, M, num_bin, group_index, data_length):
 
+def fill_global(*args, **kwargs):
+
+    (
+        A_glob, E_glob,
+        A_template, E_template,
+        start_ind, M, num_bin, 
+        group_index, data_length
+    ), tkwargs = wrapper(*args, **kwargs)
+    
     cdef size_t A_template_in = A_template
     cdef size_t E_template_in = E_template
     cdef size_t A_glob_in = A_glob

@@ -1,4 +1,4 @@
-"""Fast and accurate EMRI Waveforms."""
+"""GBGPU."""
 
 # ruff: noqa: E402
 try:
@@ -29,14 +29,23 @@ except (ModuleNotFoundError, ImportError):
     _is_editable = False
 
 from . import cutils, utils
-from .utils.globals import (
-    get_backend,
-    get_config,
-    get_config_setter,
-    # get_file_manager,
-    get_logger,
-    has_backend,
-)
+from .cutils import KNOWN_BACKENDS
+
+from gpubackendtools import Globals
+from .cutils import GBGPUCpuBackend, GBGPUCuda11xBackend, GBGPUCuda12xBackend
+
+
+add_backends = {
+    "gbgpu_cpu": GBGPUCpuBackend,
+    "gbgpu_cuda11x": GBGPUCuda11xBackend,
+    "gbgpu_cuda12x": GBGPUCuda12xBackend,
+}
+
+Globals().backends_manager.add_backends(add_backends)
+
+
+from gpubackendtools import get_backend, has_backend, get_first_backend
+
 
 __all__ = [
     "__version__",
