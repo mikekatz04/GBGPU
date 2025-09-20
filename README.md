@@ -6,7 +6,7 @@ The current version of the code is very closely related to the implementation of
 
 The code is CPU/GPU agnostic. CUDA and NVIDIA GPUs are required to run these codes for GPUs.
 
-See the [documentation](https://mikekatz04.github.io/GBGPU/html/index.html) for more details. This code was designed for [arXiv:2205.03461](https://arxiv.org/abs/2205.03461). If you use any part of this code, please cite [arXiv:2205.03461](https://arxiv.org/abs/2205.03461), its [Zenodo page](https://zenodo.org/record/6500434#.YmpofxNBzlw), [arXiv:0704.1808](https://arxiv.org/abs/0704.1808), and [arXiv:1806.00500](https://arxiv.org/abs/1806.00500). 
+See the [documentation](https://mikekatz04.github.io/GBGPU/) for more details. This code was designed for [arXiv:2205.03461](https://arxiv.org/abs/2205.03461). If you use any part of this code, please cite [arXiv:2205.03461](https://arxiv.org/abs/2205.03461), its [Zenodo page](https://zenodo.org/records/16999246), [arXiv:0704.1808](https://arxiv.org/abs/0704.1808), and [arXiv:1806.00500](https://arxiv.org/abs/1806.00500). 
 
 ## Getting Started
 
@@ -43,7 +43,7 @@ To install from source:
 1) Create a virtual environment. **Note**: There is no available `conda` compiler for Windows. If you want to install for Windows, you will probably need to add libraries and include paths to the `setup.py` file.
 
 ```
-conda create -n gbgpu_env -c conda-forge gcc_linux-64 gxx_linux-64 gsl numpy Cython scipy jupyter ipython h5py matplotlib python=3.12
+conda create -n gbgpu_env -c conda-forge gcc_linux-64 gxx_linux-64 gsl numpy Cython scipy jupyter ipython h5py matplotlib python=3.12 cmake
 conda activate gbgpu_env
 ```
 
@@ -65,7 +65,7 @@ cd GBGPU
 4) Run install. Make sure CUDA is on your PATH.
 
 ```
-python setup.py install
+pip install -v -e .
 ```
 
 ## Running the Tests
@@ -81,9 +81,9 @@ python -m unittest discover
 
 ## Versioning
 
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/tags).
+We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/mikekatz04/GBGPU/tags).
 
-Current Version: 1.1.3
+Current Version: 1.2.2
 
 ## Authors
 
@@ -93,6 +93,11 @@ Current Version: 1.1.3
 * Tyson Littenberg
 * Stas Babak
 
+## Contributors
+
+* Mathieu Dubois
+* Maxime Pigou
+
 ## License
 
-This project is licensed under the GNU License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the Apache License - see the [LICENSE](https://github.com/mikekatz04/GBGPU/blob/master/LICENSE) file for details.

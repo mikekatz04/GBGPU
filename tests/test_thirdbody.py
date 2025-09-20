@@ -15,7 +15,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from gbgpu.thirdbody import GBGPUThirdBody
 
-from gbgpu.utils.constants import *
+from lisatools.utils.constants import *
 from lisatools.detector import EqualArmlengthOrbits
 
 
@@ -23,10 +23,11 @@ class WaveformTest(unittest.TestCase):
     def test_ecc_third_body(self):
         xp = cp if gpu_available else np
         dt = 15.0
-        Tobs = 1.0 * YEAR
+        Tobs = 1.0 * YRSID_SI
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
-        gb = GBGPUThirdBody(orbits=orbits, use_gpu=gpu_available)
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPUThirdBody(orbits=orbits, force_backend=force_backend)
 
         N = int(256)
         num_bin = 10

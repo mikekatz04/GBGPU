@@ -6,7 +6,7 @@ import unittest
 try:
     import cupy as cp
 
-    cp.cuda.runtime.setDevice(2)
+    cp.cuda.runtime.setDevice(0)
     gpu_available = True
 
 except (ImportError, ModuleNotFoundError) as e:
@@ -15,7 +15,7 @@ except (ImportError, ModuleNotFoundError) as e:
     gpu_available = False
 
 from gbgpu.gbgpu import GBGPU
-from gbgpu.utils.constants import *
+from lisatools.utils.constants import *
 
 import sys
 
@@ -28,11 +28,13 @@ class WaveformTest(unittest.TestCase):
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
+        # TODO: improve this
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPU(orbits=orbits, force_backend=force_backend)
 
         dt = 15.0
         N = None
-        Tobs = 0.95 * YEAR
+        Tobs = 0.95 * YRSID_SI
         num_bin = 10
         amp = 1e-22  # amplitude
         f0 = 2e-3  # f0
@@ -81,11 +83,12 @@ class WaveformTest(unittest.TestCase):
     def test_likelihood(self):
         xp = cp if gpu_available else np
         dt = 15.0
-        Tobs = 0.95 * YEAR
+        Tobs = 0.95 * YRSID_SI
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPU(orbits=orbits, force_backend=force_backend)
         gb.d_d = 0.0
 
         N = int(256)
@@ -168,11 +171,12 @@ class WaveformTest(unittest.TestCase):
     def test_information_matrix(self):
         xp = cp if gpu_available else np
         dt = 15.0
-        Tobs = 0.95 * YEAR
+        Tobs = 0.95 * YRSID_SI
         orbits = EqualArmlengthOrbits(use_gpu=gpu_available)
         orbits.configure(linear_interp_setup=True)
 
-        gb = GBGPU(orbits=orbits, use_gpu=gpu_available)
+        force_backend = "gpu" if gpu_available else "cpu"
+        gb = GBGPU(orbits=orbits, force_backend=force_backend)
         gb.d_d = 0.0
 
         N = int(256)
