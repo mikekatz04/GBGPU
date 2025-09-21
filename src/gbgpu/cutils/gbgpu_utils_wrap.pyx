@@ -5,7 +5,7 @@ from gpubackendtools import wrapper
 
 assert sizeof(int) == sizeof(np.int32_t)
 
-cdef extern from "../include/gbgpu_utils.hh":
+cdef extern from "gbgpu_utils.hh":
     ctypedef void* cmplx 'cmplx'
 
     void fill_global_wrap(cmplx* A_glob, cmplx* E_glob, cmplx* A_template, cmplx* E_template,
@@ -16,6 +16,8 @@ cdef extern from "../include/gbgpu_utils.hh":
                    cmplx* A_data, cmplx* E_data,
                    double* A_psd, double* E_psd, double df,
                    int* start_ind, int M, int num_bin, int* data_index, int* noise_index, int data_length);
+
+    void swap_ll_diff_wrap(cmplx* d_h_remove, cmplx* d_h_add, cmplx* add_remove, cmplx* remove_remove, cmplx* add_add, cmplx* A_remove, cmplx* E_remove, int* start_ind_all_remove, cmplx* A_add, cmplx* E_add, int* start_ind_all_add, cmplx* A_data, cmplx* E_data, double* A_psd, double* E_psd, double df, int M, int num_bin, int* data_index, int* noise_index, int data_length);
 
 def get_ll(*args, **kwargs):
 
@@ -68,8 +70,15 @@ def fill_global(*args, **kwargs):
             <cmplx*> A_template_in, <cmplx*> E_template_in,
             <int*> start_ind_in, M, num_bin, <int*>group_index_in, data_length);
 
-@pointer_adjust
-def swap_ll_diff(d_h_remove, d_h_add, add_remove, remove_remove, add_add, A_remove, E_remove, start_ind_all_remove, A_add, E_add, start_ind_all_add, A_data, E_data, A_psd, E_psd, df, M, num_bin, data_index, noise_index, data_length):
+
+def swap_ll_diff(*args, **kwargs):
+
+    (
+        d_h_remove, d_h_add, add_remove, remove_remove, add_add, 
+        A_remove, E_remove, start_ind_all_remove, A_add, E_add, 
+        start_ind_all_add, A_data, E_data, A_psd, E_psd, 
+        df, M, num_bin, data_index, noise_index, data_length
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t d_h_remove_in = d_h_remove
     cdef size_t d_h_add_in = d_h_add

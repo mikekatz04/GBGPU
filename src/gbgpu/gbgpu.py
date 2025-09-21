@@ -72,6 +72,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
     """
 
     def __init__(self, orbits: Orbits = None, force_backend = None):
+        breakpoint()
         GBGPUParallelModule.__init__(self, force_backend=force_backend)
         self.d_d = None
         self.orbits = orbits

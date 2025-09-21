@@ -90,6 +90,22 @@ endfunction()
 # --- utils ---
 # ----------------
 
+# 0. Download lisa analysis tools c files.
+file(
+  DOWNLOAD 
+  https://raw.githubusercontent.com/mikekatz04/LISAanalysistools/refs/heads/main/src/lisatools/cutils/Detector.cu 
+  "./src/gbgpu/cutils/Detector.cu"
+)
+file(
+  DOWNLOAD 
+  https://raw.githubusercontent.com/mikekatz04/LISAanalysistools/refs/heads/main/src/lisatools/cutils/Detector.hpp 
+  "./src/gbgpu/cutils/Detector.hpp"
+)
+file(
+  DOWNLOAD 
+  https://raw.githubusercontent.com/mikekatz04/LISAanalysistools/refs/heads/main/src/lisatools/cutils/global.hpp 
+  "./src/gbgpu/cutils/global.hpp"
+)
 # I. Process gbgpu_utils_wrap.pyx into a C++ file
 add_custom_command(
   OUTPUT "utils.cxx"
@@ -111,11 +127,19 @@ if(GBGPU_WITH_CPU)
     DEPENDS "gbgpu_utils.cu"
     VERBATIM)
 
-  python_add_library(gbgpu_cpu_utils MODULE WITH_SOABI utils.cxx gbgpu_utils.cxx)
+    add_custom_command(
+    OUTPUT "Detector.cxx"
+    COMMENT "Copy Detector.cu to Detector.cxx"
+    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Detector.cu"
+            "${CMAKE_CURRENT_BINARY_DIR}/Detector.cxx"
+    DEPENDS "Detector.cu"
+    VERBATIM)
+
+  python_add_library(gbgpu_cpu_utils MODULE WITH_SOABI Detector.cxx utils.cxx gbgpu_utils.cxx)
   apply_cpu_backend_common_options(utils)
 
   target_sources(gbgpu_cpu_utils PUBLIC FILE_SET HEADERS FILES
-                                         cuda_complex.hpp global.h gbgpu_utils.hh)
+  global.hpp Detector.hpp cuda_complex.hpp global.h gbgpu_utils.hh)
 endif()
 
 # III. Declare the GPU backend
@@ -124,6 +148,71 @@ if(GBGPU_WITH_GPU)
   apply_gpu_backend_common_options(utils)
   target_sources(gbgpu_gpu_utils PUBLIC FILE_SET HEADERS FILES
                                          cuda_complex.hpp global.h gbgpu_utils.hh)
+
+  set(CMAKE_MODULE_PATH "src/gbgpu/cutils/nvidia-mathdx-25.06.1/nvidia/mathdx/25.06/lib/cmake" "${CMAKE_MODULE_PATH}")
+  
+  add_custom_command(
+  OUTPUT "sharedmemgbgpu.cxx"
+  COMMENT "Cythonize sharedmemgbgpu.pyx into sharedmemgbgpu.cxx"
+  COMMAND
+    Python::Interpreter -m cython "${CMAKE_CURRENT_SOURCE_DIR}/sharedmemgbgpu.pyx"
+    --output-file "${CMAKE_CURRENT_BINARY_DIR}/sharedmemgbgpu.cxx" -3 -+ --module-name
+    "sharedmem" -I "${CMAKE_CURRENT_SOURCE_DIR}"
+  DEPENDS "sharedmemgbgpu.pyx"
+  VERBATIM)
+
+  # Add an include directory for a specific target
+  # Find a library
+  python_add_library(gbgpu_gpu_sharedmem MODULE WITH_SOABI sharedmemgbgpu.cxx)
+  apply_gpu_backend_common_options(sharedmem)
+  message(STATUS "CUDA ARCHS HERE: ${GBGPU_CUDA_ARCH}")
+  set_property(TARGET gbgpu_gpu_sharedmem PROPERTY CUDA_ARCHITECTURES ${GBGPU_CUDA_ARCH})
+  set_property(TARGET gbgpu_gpu_sharedmem PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+  set_property(TARGET gbgpu_gpu_sharedmem PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+  file(DOWNLOAD
+      "https://developer.nvidia.com/downloads/compute/cuFFTDx/redist/cuFFTDx/cuda12/nvidia-mathdx-25.06.1-cuda12.tar.gz" # The URL of the file to download
+      "./src/gbgpu/cutils/nvidia-mathdx-25.06.1-cuda12.tar.gz" # The local path to save the file
+      INACTIVITY_TIMEOUT 10 # Optional: Terminate after 10 seconds of inactivity
+      # TIMEOUT 30 # Optional: Terminate after 30 seconds total
+      STATUS download_status # Optional: Store download status in a variable
+      # LOG download_log # Optional: Store a log of the operation in a variable
+      # SHOW_PROGRESS # Optional: Display progress information
+  )
+
+  execute_process(COMMAND tar -xzf "./src/gbgpu/cutils/nvidia-mathdx-25.06.1-cuda12.tar.gz" -C "./src/gbgpu/cutils/")
+  # Define variables for clarity (optional)
+  # set(ARCHIVE_FILE "./src/gbgpu/cutils/nvidia-mathdx-25.06.1-cuda12.tar.gz")
+  # set(EXTRACT_DIR "./src/gbgpu/cutils/") # extract to cutils directory
+
+  # # Create the extraction directory if it doesn't exist
+  # file(MAKE_DIRECTORY "${EXTRACT_DIR}")
+
+  # # Execute the tar command to extract the archive
+  # execute_process(
+  #     COMMAND tar xzf "${ARCHIVE_FILE}"
+  #     WORKING_DIRECTORY "${EXTRACT_DIR}"
+  #     RESULT_VARIABLE TAR_RESULT
+  #     OUTPUT_VARIABLE TAR_OUTPUT
+  #     ERROR_VARIABLE TAR_ERROR
+  # )
+
+  # # Optional: Check for errors
+  # if(NOT TAR_RESULT EQUAL 0)
+  #     message(FATAL_ERROR "Failed to extract archive: ${TAR_ERROR}")
+  # endif()
+
+  set(mathdx_cufftdx_DISABLE_CUTLASS TRUE)
+  set(cufftdx_ROOT "./src/gbgpu/cutils/nvidia-mathdx-25.06.1/nvidia/mathdx/25.06/")
+  find_package(cufftdx REQUIRED CONFIG)
+  target_sources(gbgpu_gpu_sharedmem PUBLIC FILE_SET HEADERS FILES
+  global.hpp Detector.hpp cuda_complex.hpp global.h SharedMemoryGBGPU.hpp
+  common.hpp fp16_common.hpp common.hpp Detector.cu SharedMemoryGBGPU.cu)
+  target_link_libraries(gbgpu_gpu_sharedmem PUBLIC CUDA::cudart CUDA::cublas
+      CUDA::cusparse cufftdx::cufftdx)
+  message(STATUS "CMAKE_INSTALL_LIBDIR HERE: ${CMAKE_INSTALL_LIBDIR}")
+  install(TARGETS gbgpu_gpu_sharedmem
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages/gbgpu)
 endif()
 
 
