@@ -236,6 +236,7 @@ def get_N(amp, f0, Tobs, oversample=1):
 
     # if a sensitivity curve is available, verify the SNR is not too high
     # if it is, needs more points
+    fstar = C_SI / (lisaL * 2 * PI)
     fonfs = f0 / fstar
 
     SnX = np.sqrt(get_sensitivity(f0, sens_fn="X1TDISens"))

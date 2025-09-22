@@ -3,7 +3,7 @@ from multiprocessing.sharedctypes import Value
 from re import A
 import time
 import warnings
-from abc import ABC
+import abc
 from attr import Attribute
 
 import numpy as np
@@ -72,7 +72,6 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
     """
 
     def __init__(self, orbits: Orbits = None, force_backend = None):
-        breakpoint()
         GBGPUParallelModule.__init__(self, force_backend=force_backend)
         self.d_d = None
         self.orbits = orbits
@@ -622,7 +621,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         adjust_inplace=False,
         use_c_implementation=False,
         N=None,
-        T=4 * YEAR,
+        T=4 * YRSID_SI,
         dt=10.0,
         data_length=None,
         data_splits=None,
@@ -891,7 +890,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         adjust_inplace=False,
         use_c_implementation=False,
         N=None,
-        T=4 * YEAR,
+        T=4 * YRSID_SI,
         dt=10.0,
         data_length=None,
         data_splits=None,
@@ -1162,7 +1161,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         noise_index=None,
         use_c_implementation=True,
         N: int=None,
-        T=4 * YEAR,
+        T=4 * YRSID_SI,
         dt=10.0,
         oversample=1,
         return_cupy=False,
@@ -1437,7 +1436,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         start_freq_ind=0,
         use_c_implementation=False,
         N=None,
-        T=4 * YEAR,
+        T=4 * YRSID_SI,
         dt=10.0,
         batch_size=None,
         oversample=1,
@@ -1715,7 +1714,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         adjust_inplace=False,
         use_c_implementation=False,
         N=None,
-        T=4 * YEAR,
+        T=4 * YRSID_SI,
         dt=10.0,
         data_length=None,
         data_splits=None,
@@ -2039,7 +2038,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         except AttributeError:
             return ll_diff
 
-    def inject_signal(self, *args, fmax=None, T=4.0 * YEAR, dt=10.0, **kwargs):
+    def inject_signal(self, *args, fmax=None, T=4.0 * YRSID_SI, dt=10.0, **kwargs):
         """Inject a single signal
 
         Provides the injection of a single signal into a data stream with frequencies
@@ -2298,107 +2297,6 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
             info_matrix = info_matrix.get()
 
         return info_matrix
-<<<<<<< HEAD
-
-
-class InheritGBGPU(GBGPU, ABC):
-    """Inherit this class to expand on GBGPU waveforms.
-
-    The required methods to be added are shown below.
-
-    """
-    @abc.abstractmethod
-    def add_to_phasing(self, argS, f0, fdot, fddot, xi, *args):
-        """Update ``argS`` in FastGB formalism for third-body effect
-
-
-        Adding an effective phase that goes into ``arg2`` in the construction
-        of the slow part of the waveform. ``arg2`` is then included directly
-        in the transfer function. See :meth:`gbgpu.gbgpu.GBGPU._construct_slow_part`
-        for the use of argS in the larger code.
-
-        Args:
-            arg_phasing (3D double xp.ndarray): Special phase evaluation that goes into ``kdotP``.
-                Shape is ``(num binaries, 3 spacecraft, N)``.
-            f0 (1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            fdot (1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz/s.
-            fddot (1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz/s^2.
-            xi (3D double xp.ndarray): Time at each spacecraft.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            T (double): Observation time in seconds.
-            *args (tuple): Args returned from :meth:`prepare_additional_args`.
-
-        Returns:
-            3D double xp.ndarray: Updated ``argS`` with third-body effect
-
-        """
-        raise NotImplementedError
-    
-    @abc.abstractmethod
-    def prepare_additional_args(self, *args):
-        """Prepare the arguments special to this class
-
-        This function must take in the extra ``args`` input
-        into :meth:`GBGPU.run_wave` and transform them as needed
-        to input into the rest of the code. If using GPUs,
-        this is where the parameters are copied to GPUs.
-
-        Args:
-            *args (tuple): Any additional args to be dealt with.
-
-        Returns:
-            Tuple: New args. In the rest of the code this is ``add_args``.
-
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def special_get_N(
-        self,
-        amp,
-        f0,
-        T,
-        *args,
-        oversample=1,
-    ):
-        """Determine proper sampling rate in time domain for slow-part.
-
-        Args:
-            amp (double or 1D double np.ndarray): Amplitude parameter.
-            f0 (double or 1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            T (double): Observation time in seconds.
-            *args (tuple): Args input for beyond-GBGPU functionality.
-            oversample(int, optional): Oversampling factor compared to the determined ``N``
-                value. Final N will be ``oversample * N``. This is only used if N is
-                not provided. Default is ``1``.
-        Returns:
-            1D int32 xp.ndarray: Number of time-domain points recommended for each binary.
-
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def shift_frequency(self, fi, xi, *args):
-        """Shift the evolution of the frequency in the slow part
-
-        Args:
-            fi (3D double xp.ndarray): Instantaneous frequencies of the
-                wave before applying third-body effect at each spacecraft as a function of time.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            xi (3D double xp.ndarray): Time at each spacecraft.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            *args (tuple): Args returned from :meth:`prepare_additional_args`.
-
-        Returns:
-            3D double xp.ndarray: Updated frequencies with third-body effect.
-
-        """
-        raise NotImplementedError
-
 
 
 class GBGPU(GBGPUBase):
