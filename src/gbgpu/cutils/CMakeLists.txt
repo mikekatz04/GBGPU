@@ -117,6 +117,16 @@ add_custom_command(
   DEPENDS "gbgpu_utils_wrap.pyx"
   VERBATIM)
 
+add_custom_command(
+  OUTPUT "sharedmemgbgpu.cxx"
+  COMMENT "Cythonize sharedmemgbgpu.pyx into sharedmemgbgpu.cxx"
+  COMMAND
+    Python::Interpreter -m cython "${CMAKE_CURRENT_SOURCE_DIR}/sharedmemgbgpu.pyx"
+    --output-file "${CMAKE_CURRENT_BINARY_DIR}/sharedmemgbgpu.cxx" -3 -+ --module-name
+    "sharedmem" -I "${CMAKE_CURRENT_SOURCE_DIR}"
+  DEPENDS "sharedmemgbgpu.pyx"
+  VERBATIM)
+
 # II. Declare the CPU backend
 if(GBGPU_WITH_CPU)
   add_custom_command(
@@ -127,7 +137,7 @@ if(GBGPU_WITH_CPU)
     DEPENDS "gbgpu_utils.cu"
     VERBATIM)
 
-    add_custom_command(
+  add_custom_command(
     OUTPUT "Detector.cxx"
     COMMENT "Copy Detector.cu to Detector.cxx"
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Detector.cu"
@@ -135,12 +145,33 @@ if(GBGPU_WITH_CPU)
     DEPENDS "Detector.cu"
     VERBATIM)
 
+  add_custom_command(
+    OUTPUT "SharedMemoryGBGPU.cxx"
+    COMMENT "Copy SharedMemoryGBGPU.cu to SharedMemoryGBGPU.cxx"
+    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/SharedMemoryGBGPU.cu"
+            "${CMAKE_CURRENT_BINARY_DIR}/SharedMemoryGBGPU.cxx"
+    DEPENDS "SharedMemoryGBGPU.cu"
+    VERBATIM)
+
+
   python_add_library(gbgpu_cpu_utils MODULE WITH_SOABI Detector.cxx utils.cxx gbgpu_utils.cxx)
   apply_cpu_backend_common_options(utils)
 
   target_sources(gbgpu_cpu_utils PUBLIC FILE_SET HEADERS FILES
   global.hpp Detector.hpp cuda_complex.hpp global.h gbgpu_utils.hh)
+
+  
+  python_add_library(gbgpu_cpu_sharedmem MODULE WITH_SOABI Detector.cxx SharedMemoryGBGPU.cxx sharedmemgbgpu.cxx)
+  apply_cpu_backend_common_options(sharedmem)
+  target_sources(gbgpu_cpu_sharedmem PUBLIC FILE_SET HEADERS FILES
+  global.hpp Detector.hpp cuda_complex.hpp global.h SharedMemoryGBGPU.hpp
+  common.hpp fp16_common.hpp common.hpp)
+  install(TARGETS gbgpu_cpu_sharedmem gbgpu_cpu_utils
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages/gbgpu)
+
+
 endif()
+
 
 # III. Declare the GPU backend
 if(GBGPU_WITH_GPU)
@@ -151,22 +182,13 @@ if(GBGPU_WITH_GPU)
 
   set(CMAKE_MODULE_PATH "src/gbgpu/cutils/nvidia-mathdx-25.06.1/nvidia/mathdx/25.06/lib/cmake" "${CMAKE_MODULE_PATH}")
   
-  add_custom_command(
-  OUTPUT "sharedmemgbgpu.cxx"
-  COMMENT "Cythonize sharedmemgbgpu.pyx into sharedmemgbgpu.cxx"
-  COMMAND
-    Python::Interpreter -m cython "${CMAKE_CURRENT_SOURCE_DIR}/sharedmemgbgpu.pyx"
-    --output-file "${CMAKE_CURRENT_BINARY_DIR}/sharedmemgbgpu.cxx" -3 -+ --module-name
-    "sharedmem" -I "${CMAKE_CURRENT_SOURCE_DIR}"
-  DEPENDS "sharedmemgbgpu.pyx"
-  VERBATIM)
-
   # Add an include directory for a specific target
   # Find a library
-  python_add_library(gbgpu_gpu_sharedmem MODULE WITH_SOABI sharedmemgbgpu.cxx)
+  python_add_library(gbgpu_gpu_sharedmem MODULE WITH_SOABI Detector.cu SharedMemoryGBGPU.cu sharedmemgbgpu.cxx)
   apply_gpu_backend_common_options(sharedmem)
   message(STATUS "CUDA ARCHS HERE: ${GBGPU_CUDA_ARCH}")
   set_property(TARGET gbgpu_gpu_sharedmem PROPERTY CUDA_ARCHITECTURES ${GBGPU_CUDA_ARCH})
+  set_property(TARGET gbgpu_gpu_sharedmem PROPERTY CUDA_SEPARABLE_COMPILATION ON)
   set_property(TARGET gbgpu_gpu_sharedmem PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
   set_property(TARGET gbgpu_gpu_sharedmem PROPERTY POSITION_INDEPENDENT_CODE ON)
 
@@ -207,7 +229,7 @@ if(GBGPU_WITH_GPU)
   find_package(cufftdx REQUIRED CONFIG)
   target_sources(gbgpu_gpu_sharedmem PUBLIC FILE_SET HEADERS FILES
   global.hpp Detector.hpp cuda_complex.hpp global.h SharedMemoryGBGPU.hpp
-  common.hpp fp16_common.hpp common.hpp Detector.cu SharedMemoryGBGPU.cu)
+  common.hpp fp16_common.hpp common.hpp)
   target_link_libraries(gbgpu_gpu_sharedmem PUBLIC CUDA::cudart CUDA::cublas
       CUDA::cusparse cufftdx::cufftdx)
   message(STATUS "CMAKE_INSTALL_LIBDIR HERE: ${CMAKE_INSTALL_LIBDIR}")

@@ -30,6 +30,7 @@ class WaveformTest(unittest.TestCase):
 
         # TODO: improve this
         force_backend = "gpu" if gpu_available else "cpu"
+        breakpoint()
         gb = GBGPU(orbits=orbits, force_backend=force_backend)
 
         dt = 15.0

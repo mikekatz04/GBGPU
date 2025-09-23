@@ -14,11 +14,12 @@ from gpubackendtools.exceptions import *
 class GBGPUBackendMethods(BackendMethods):
     get_ll: typing.Callable[(...), None]
     fill_global: typing.Callable[(...), None]
-
+    sharedmem: typing.Callable[(...), None]
 
 class GBGPUBackend:
     get_ll: typing.Callable[(...), None]
     fill_global: typing.Callable[(...), None]
+    sharedmem: typing.Callable[(...), None]
 
     def __init__(self, gbgpu_backend_methods):
 
@@ -43,6 +44,7 @@ class GBGPUCpuBackend(CpuBackend, GBGPUBackend):
     def cpu_methods_loader() -> GBGPUBackendMethods:
         try:
             import gbgpu_backend_cpu.utils
+            import gbgpu_backend_cpu.sharedmem
             
         except (ModuleNotFoundError, ImportError) as e:
             raise BackendUnavailableException(
@@ -54,6 +56,7 @@ class GBGPUCpuBackend(CpuBackend, GBGPUBackend):
         return GBGPUBackendMethods(
             get_ll=gbgpu_backend_cpu.utils.get_ll,
             fill_global=gbgpu_backend_cpu.utils.fill_global,
+            sharedmem=gbgpu_backend_cpu.sharedmem,
             xp=numpy,
         )
 
@@ -72,6 +75,7 @@ class GBGPUCuda11xBackend(Cuda11xBackend, GBGPUBackend):
     def cuda11x_module_loader():
         try:
             import gbgpu_backend_cuda11x.utils
+            import gbgpu_backend_cuda11x.sharedmem
 
         except (ModuleNotFoundError, ImportError) as e:
             raise BackendUnavailableException(
@@ -88,6 +92,7 @@ class GBGPUCuda11xBackend(Cuda11xBackend, GBGPUBackend):
         return GBGPUBackendMethods(
             get_ll=gbgpu_backend_cuda11x.utils.get_ll,
             fill_global=gbgpu_backend_cuda11x.utils.fill_global,
+            sharedmem=gbgpu_backend_cuda11x.sharedmem,
             xp=cupy,
         )
 
@@ -104,6 +109,7 @@ class GBGPUCuda12xBackend(Cuda12xBackend, GBGPUBackend):
     def cuda12x_module_loader():
         try:
             import gbgpu_backend_cuda12x.utils
+            import gbgpu_backend_cuda12x.sharedmem
 
         except (ModuleNotFoundError, ImportError) as e:
             raise BackendUnavailableException(
@@ -120,15 +126,10 @@ class GBGPUCuda12xBackend(Cuda12xBackend, GBGPUBackend):
         return GBGPUBackendMethods(
             get_ll=gbgpu_backend_cuda12x.utils.get_ll,
             fill_global=gbgpu_backend_cuda12x.utils.fill_global,
+            sharedmem=gbgpu_backend_cuda12x.sharedmem,
             xp=cupy,
         )
 
-
-KNOWN_BACKENDS = {
-    "cuda12x": GBGPUCuda12xBackend,
-    "cuda11x": GBGPUCuda11xBackend,
-    "cpu": GBGPUCpuBackend,
-}
 
 """List of existing backends, per default order of preference."""
 # TODO: __all__ ?

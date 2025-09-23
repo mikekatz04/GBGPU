@@ -20,6 +20,12 @@
 #include <complex>
 #include <cmath>
 
+
+// # TODO: remove this
+CUDA_CALLABLE_MEMBER double Clight = 299792458.0;
+CUDA_CALLABLE_MEMBER double AU = 149597870700.0;
+CUDA_CALLABLE_MEMBER double SQ3 = 1.73205080757;
+CUDA_CALLABLE_MEMBER double lambda0 = 0.000000;
 using namespace std;
 
 // Recursive FFT function
@@ -1276,7 +1282,7 @@ void SharedMemoryLikeComp(
         inputs.dt,
         inputs.N,
         inputs.num_bin_all,
-        inputs.start_freq_ind,
+        inputs.start_freq_inds,
         inputs.data_length,
         inputs.tdi_channel_setup, 
         inputs.num_data,

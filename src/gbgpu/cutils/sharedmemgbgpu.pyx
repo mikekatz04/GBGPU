@@ -1,8 +1,7 @@
 import numpy as np
 cimport numpy as np
 from libc.stdint cimport uintptr_t
-
-from gbgpu.utils.pointeradjust import pointer_adjust, wrapper
+from gpubackendtools import wrapper
 from libcpp cimport bool
 assert sizeof(int) == sizeof(np.int32_t)
 
@@ -174,25 +173,26 @@ cdef extern from "SharedMemoryGBGPU.hpp":
         int num_noise
     ) except+
 
-@pointer_adjust
-def SharedMemoryWaveComp_wrap(
-    tdi_out,
-    start_inds_out,
-    amp, 
-    f0, 
-    fdot0, 
-    fddot0, 
-    phi0, 
-    iota, 
-    psi, 
-    lam, 
-    theta,
-    T,
-    dt, 
-    N,
-    num_bin_all, 
-    tdi_channel_setup
-):
+def SharedMemoryWaveComp_wrap(*args, **kwargs):
+    (
+        tdi_out,
+        start_inds_out,
+        amp, 
+        f0, 
+        fdot0, 
+        fddot0, 
+        phi0, 
+        iota, 
+        psi, 
+        lam, 
+        theta,
+        T,
+        dt, 
+        N,
+        num_bin_all, 
+        tdi_channel_setup
+    ), tkwargs = wrapper(args, kwargs)
+
     cdef size_t tdi_out_in = tdi_out
     cdef size_t start_inds_out_in = start_inds_out
     cdef size_t amp_in = amp
@@ -225,8 +225,8 @@ def SharedMemoryWaveComp_wrap(
     )
 
 
-@pointer_adjust
-def SharedMemoryLikeComp_wrap(
+def SharedMemoryLikeComp_wrap(*args, **kwargs):
+    (
         d_h,
         h_h,
         data,
@@ -253,7 +253,8 @@ def SharedMemoryLikeComp_wrap(
         do_synchronize,
         num_data,
         num_noise
-    ):
+    ), tkwargs = wrapper(args, kwargs)
+    
 
     cdef size_t d_h_in = d_h
     cdef size_t h_h_in = h_h
@@ -302,8 +303,8 @@ def SharedMemoryLikeComp_wrap(
     )
 
 
-@pointer_adjust
-def SharedMemorySwapLikeComp_wrap(
+def SharedMemorySwapLikeComp_wrap(*args, **kwargs):
+    (
         d_h_remove,
         d_h_add,
         remove_remove,
@@ -342,7 +343,7 @@ def SharedMemorySwapLikeComp_wrap(
         do_synchronize,
         num_data,
         num_noise
-    ):
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t d_h_remove_in = d_h_remove
     cdef size_t d_h_add_in = d_h_add
@@ -416,8 +417,8 @@ def SharedMemorySwapLikeComp_wrap(
 
 
 
-@pointer_adjust
-def SharedMemoryChiSquaredComp_wrap(
+def SharedMemoryChiSquaredComp_wrap(*args, **kwargs):
+    (
         h1_h1,
         h2_h2,
         h1_h2,
@@ -443,7 +444,7 @@ def SharedMemoryChiSquaredComp_wrap(
         do_synchronize,
         num_data, 
         num_noise
-    ):
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t h1_h1_in = h1_h1
     cdef size_t h2_h2_in = h2_h2
@@ -490,8 +491,8 @@ def SharedMemoryChiSquaredComp_wrap(
     )
 
 
-@pointer_adjust
-def SharedMemoryGenerateGlobal_wrap(
+def SharedMemoryGenerateGlobal_wrap(*args, **kwargs):
+    (   
         data,
         data_index,
         factors,
@@ -513,7 +514,7 @@ def SharedMemoryGenerateGlobal_wrap(
         tdi_channel_setup,
         device,
         do_synchronize
-    ):
+    ), tkwargs = wrapper(args, kwargs)
 
     cdef size_t data_in = data
     cdef size_t data_index_in = data_index
@@ -554,8 +555,8 @@ def SharedMemoryGenerateGlobal_wrap(
     )
 
 
-@pointer_adjust
-def SharedMemoryFstatLikeComp_wrap(
+def SharedMemoryFstatLikeComp_wrap(*args, **kwargs):
+    (
         M_mat,
         N_arr,
         data,
@@ -578,7 +579,7 @@ def SharedMemoryFstatLikeComp_wrap(
         do_synchronize,
         num_data,
         num_noise
-    ):
+    ), tkwargs = wrapper(args, kwargs)
 
     cdef size_t M_mat_in = M_mat
     cdef size_t N_arr_in = N_arr
