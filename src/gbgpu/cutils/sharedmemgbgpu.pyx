@@ -191,7 +191,7 @@ def SharedMemoryWaveComp_wrap(*args, **kwargs):
         N,
         num_bin_all, 
         tdi_channel_setup
-    ), tkwargs = wrapper(args, kwargs)
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t tdi_out_in = tdi_out
     cdef size_t start_inds_out_in = start_inds_out
@@ -253,7 +253,7 @@ def SharedMemoryLikeComp_wrap(*args, **kwargs):
         do_synchronize,
         num_data,
         num_noise
-    ), tkwargs = wrapper(args, kwargs)
+    ), tkwargs = wrapper(*args, **kwargs)
     
 
     cdef size_t d_h_in = d_h
@@ -514,7 +514,7 @@ def SharedMemoryGenerateGlobal_wrap(*args, **kwargs):
         tdi_channel_setup,
         device,
         do_synchronize
-    ), tkwargs = wrapper(args, kwargs)
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t data_in = data
     cdef size_t data_index_in = data_index
@@ -579,7 +579,7 @@ def SharedMemoryFstatLikeComp_wrap(*args, **kwargs):
         do_synchronize,
         num_data,
         num_noise
-    ), tkwargs = wrapper(args, kwargs)
+    ), tkwargs = wrapper(*args, **kwargs)
 
     cdef size_t M_mat_in = M_mat
     cdef size_t N_arr_in = N_arr
