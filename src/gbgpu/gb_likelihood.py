@@ -860,6 +860,20 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
                 waveform_kwargs=waveform_kwargs,
             )
 
+        # Indices to the device BEFORE the keep-mask exists: ``keep`` is
+        # built from ``params_*_phys`` and is therefore a DEVICE mask, so a
+        # host-numpy ``data_index[keep_idx]`` below makes numpy call
+        # ``np.asarray`` on it and cupy raises "Implicit conversion to a
+        # NumPy array is not allowed". The multi-shard router forwards its
+        # shard-local ``intra`` maps, which are built with numpy, so only
+        # the sharded path tripped -- it silently skipped every GB_ORTHO
+        # premise check of the 1-yr v8 run (job 466: 1,702 skips, zero
+        # orthogonality data; production ll scoring never calls this).
+        # Same conversion the FD engine does in get_ll / get_swap_ll; the
+        # comps convert internally too, but too late for the masking here.
+        data_index = xp.asarray(data_index).astype(xp.int32)
+        noise_index = xp.asarray(noise_index).astype(xp.int32)
+
         # WDM bounds-keep: each source's central frequency layer must sit in
         # the active band. The kernel internally skips OOB layers, but the
         # move needs to set ll_diff = -1e300 on those proposals.
