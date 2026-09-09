@@ -5513,9 +5513,10 @@ void gb_signal_het_v5_score_one_source(
     cmplx  *B0nc_all, cmplx *B1nc_all,
     int    *n_sparse_local_arr,
     double *params_cand_all, double *params_ref_all,
+    const int *w_lo_arr,
     int     data_idx, int bin_i, int v5_mode,
     int     n_nodes, int n_knots, int nparams, int f0_idx, int fdot_idx,
-    int     Nf, int Nf_active, int N_sparse_t, int stride,
+    int     Nf, int Nf_active, int W_slab, int N_sparse_t, int stride,
     int     ind_min_t, int ind_min_f, int m_active_half_width,
     double  layer_df, double dt, double T_obs, double t_start,
     int     nchannels, int tdi_type, int project_real,
@@ -5820,17 +5821,43 @@ void gb_signal_het_v5_score_one_source(
     }
     CUDA_SYNC_THREADS;
 
-    // ---- active m-band (clipped exactly like the v2 consumer) -------------
+    // ---- active m-band (clipped exactly like the v2 consumer), then
+    // ---- mapped onto this reference's COMPACT stash window ---------------
+    // The m_g clip is UNCHANGED from the full-band form -- the candidate's
+    // active band is a property of the candidate and the WDM grid, not of
+    // the stash layout. Only the coefficient LOOKUP is windowed: row im
+    // lives at local index m_g - w0 when that falls inside [0, W_slab), and
+    // is OFF-WINDOW (-1) otherwise.
+    //
+    // Off-window rows are SKIPPED, not clamped to the window edge. This is
+    // the one place the in-model contract must differ from the F-stat one
+    // (gb_signal_het_fstat_score_one_source clamps): the F-stat window is
+    // carrier-centred with >= 1 layer of margin, so its edge rows carry
+    // EXACT zeros and clamping onto them is free. The in-model window is
+    // the buffer's narrow BAND SLAB (band_slab_Nf), whose edge rows carry
+    // real, nonzero coefficients -- clamping there would fold an edge
+    // layer in several times over. Skipping instead reproduces the
+    // full-band stash EXACTLY in every case, because the full-band stash
+    // is identically zero off the window by construction (setup_in_model's
+    // expansion scattered a W-wide slab into a zeroed Nf_active array), and
+    // adding exact zeros to a sum that starts at +0.0 is bit-identical to
+    // not adding them.
+    //
+    // Degenerate case: W_slab == Nf_active with all-zero w_lo puts every
+    // row in-window at m_local == m_g - ind_min_f, i.e. verbatim the
+    // full-band indexing.
     const double f0_cand = params_c[f0_idx];
     const int Nf_active_idx_max = Nf_active - 1;
+    const int w0 = ind_min_f + (w_lo_arr != nullptr ? w_lo_arr[data_idx] : 0);
     const int m_floor = (int) floor(f0_cand / layer_df);
-    int m_active[GB_SIGHET_M_ACTIVE_MAX];
+    int m_active[GB_SIGHET_M_ACTIVE_MAX];   // WINDOW-LOCAL row, or -1
     for (int im = 0; im < M; ++im) {
         int m_g = m_floor + (im - m_active_half_width);
         if (m_g < ind_min_f) m_g = ind_min_f;
         if (m_g > ind_min_f + Nf_active_idx_max)
             m_g = ind_min_f + Nf_active_idx_max;
-        m_active[im] = m_g;
+        const int ml = m_g - w0;
+        m_active[im] = (ml >= 0 && ml < W_slab) ? ml : -1;
     }
 
     // ---- stage this candidate's mask rows into shared --------------------
@@ -5845,9 +5872,11 @@ void gb_signal_het_v5_score_one_source(
         const int row     = idx / nwords;
         const int w       = idx % nwords;
         const int c       = row / M;
-        const int m_local = m_active[row % M] - ind_min_f;
-        mask_sh[idx] = c0_mask_all[
-            (((size_t) data_idx * nchannels + c) * Nf_active
+        const int m_local = m_active[row % M];
+        // Off-window rows never reach a fold below; stage an all-clear word
+        // rather than reading outside the compact slab.
+        mask_sh[idx] = (m_local < 0) ? 0ULL : c0_mask_all[
+            (((size_t) data_idx * nchannels + c) * W_slab
              + (size_t) m_local) * nwords + w];
     }
     CUDA_SYNC_THREADS;
@@ -5866,9 +5895,10 @@ void gb_signal_het_v5_score_one_source(
         const int c  = idx / (M * N_sparse_t);
         const int im = (idx / N_sparse_t) % M;
         const int b  = idx % N_sparse_t;
-        const int m_local = m_active[im] - ind_min_f;
+        const int m_local = m_active[im];
+        if (m_local < 0) continue;          // off-window: A0 = A1 = 0
         const size_t coef_i = ((size_t) data_idx * nchannels + c)
-                              * Nf_active * N_sparse_t
+                              * W_slab * N_sparse_t
                               + (size_t) m_local * N_sparse_t + b;
         cmplx r, dr;
         gb_sighet_v5_r_dr(mask_sh + (size_t) (c * M + im) * nwords,
@@ -5887,7 +5917,8 @@ void gb_signal_het_v5_score_one_source(
             const int c2 = (idx / (M * N_sparse_t)) % nchannels;
             const int im = (idx / N_sparse_t) % M;
             const int b  = idx % N_sparse_t;
-            const int m_local = m_active[im] - ind_min_f;
+            const int m_local = m_active[im];
+            if (m_local < 0) continue;      // off-window: B0 = B1 = ... = 0
             cmplx r_c, dr_c, r_c2, dr_c2;
             gb_sighet_v5_r_dr(mask_sh + (size_t) (c * M + im) * nwords,
                               rpix_re + (size_t) c * N_sparse_t,
@@ -5899,7 +5930,7 @@ void gb_signal_het_v5_score_one_source(
                               b, N_sparse_t, Dn, &r_c2, &dr_c2);
             const size_t coef_i =
                 (((size_t) data_idx * nchannels + c) * nchannels + c2)
-                * Nf_active * N_sparse_t
+                * W_slab * N_sparse_t
                 + (size_t) m_local * N_sparse_t + b;
             const cmplx r_outer   = gcmplx::conj(r_c) * r_c2;
             const cmplx cross_drr = gcmplx::conj(r_c)  * dr_c2
@@ -5919,14 +5950,15 @@ void gb_signal_het_v5_score_one_source(
             const int c  = idx / (M * N_sparse_t);
             const int im = (idx / N_sparse_t) % M;
             const int b  = idx % N_sparse_t;
-            const int m_local = m_active[im] - ind_min_f;
+            const int m_local = m_active[im];
+            if (m_local < 0) continue;      // off-window: B0 = B1 = ... = 0
             cmplx r, dr;
             gb_sighet_v5_r_dr(mask_sh + (size_t) (c * M + im) * nwords,
                               rpix_re + (size_t) c * N_sparse_t,
                               rpix_im + (size_t) c * N_sparse_t,
                               b, N_sparse_t, Dn, &r, &dr);
             const size_t coef_i = ((size_t) data_idx * nchannels + c)
-                                  * Nf_active * N_sparse_t
+                                  * W_slab * N_sparse_t
                                   + (size_t) m_local * N_sparse_t + b;
             const double rsq = (gcmplx::conj(r) * r).real();
             const cmplx cross_drr = gcmplx::conj(r) * dr
@@ -5959,9 +5991,9 @@ void gb_signal_het_v5_get_ll_kernel(
     int    *n_sparse_local_arr,
     double *band_w, int *band_j0, int band_len,
     double *params_cand_all, double *params_ref_all,
-    int    *data_index_all, int v5_mode,
+    int    *data_index_all, const int *w_lo_arr, int v5_mode,
     int num_bin, int n_nodes, int n_knots, int nparams, int f0_idx, int fdot_idx,
-    int Nf, int Nf_active, int N_sparse_t, int stride,
+    int Nf, int Nf_active, int W_slab, int N_sparse_t, int stride,
     int ind_min_t, int ind_min_f, int m_active_half_width,
     double layer_df, double dt, double T_obs, double t_start,
     int nchannels, int tdi_type, int project_real,
@@ -5985,10 +6017,10 @@ void gb_signal_het_v5_get_ll_kernel(
             c0_mask_all, A0_all, A1_all, B0_all, B1_all,
             B0nc_all, B1nc_all,
             n_sparse_local_arr,
-            params_cand_all, params_ref_all,
+            params_cand_all, params_ref_all, w_lo_arr,
             data_index_all[bin_i], bin_i, v5_mode,
             n_nodes, n_knots, nparams, f0_idx, fdot_idx,
-            Nf, Nf_active, N_sparse_t, stride,
+            Nf, Nf_active, W_slab, N_sparse_t, stride,
             ind_min_t, ind_min_f, m_active_half_width,
             layer_df, dt, T_obs, t_start,
             nchannels, tdi_type, project_real,
@@ -6030,10 +6062,10 @@ void GBComputationGroup::gb_signal_het_v5_get_ll_wrap(
     int    *n_sparse_local_arr,
     double *band_w, int *band_j0, int band_len,
     double *params_cand_all, double *params_ref_all,
-    int    *data_index_all,
+    int    *data_index_all, int *w_lo_arr,
     int     num_bin, int num_data,
     int     n_nodes, int n_knots, int nparams, int f0_idx, int fdot_idx,
-    int     Nf, int Nt, int Nf_active, int Nt_active,
+    int     Nf, int Nt, int Nf_active, int W_slab, int Nt_active,
     int     Nt_layer, int N_sparse_t, int stride,
     int     ind_min_t, int ind_min_f,
     int     m_active_half_width,
@@ -6056,6 +6088,12 @@ void GBComputationGroup::gb_signal_het_v5_get_ll_wrap(
         throw std::invalid_argument(
             "[gb_signal_het_v5_get_ll_wrap] v5_mode must be 1 (phase-aliased "
             "shared arena) or 2 (flat carve, the occupancy control).");
+    }
+    if (W_slab <= 0 || W_slab > Nf_active) {
+        throw std::invalid_argument(
+            "[gb_signal_het_v5_get_ll_wrap] W_slab must be in "
+            "[1, Nf_active] (compact per-reference stash width; pass "
+            "Nf_active + all-zero w_lo for a full-band stash).");
     }
     (void) num_data; (void) Nt_active;
 
@@ -6101,9 +6139,9 @@ void GBComputationGroup::gb_signal_het_v5_get_ll_wrap(
         B0nc_all, B1nc_all,
         n_sparse_local_arr,
         band_w, band_j0, band_len,
-        params_cand_all, params_ref_all, data_index_all, v5_mode,
+        params_cand_all, params_ref_all, data_index_all, w_lo_arr, v5_mode,
         num_bin, n_nodes, n_knots, nparams, f0_idx, fdot_idx,
-        Nf, Nf_active, N_sparse_t, stride,
+        Nf, Nf_active, W_slab, N_sparse_t, stride,
         ind_min_t, ind_min_f, m_active_half_width,
         layer_df, dt, T_obs, t_start,
         nchannels, tdi_type, project_real, d_h_im_out);
@@ -6154,10 +6192,10 @@ void GBComputationGroup::gb_signal_het_v5_get_ll_wrap(
             c0_mask_all, A0_all, A1_all, B0_all, B1_all,
             B0nc_all, B1nc_all,
             n_sparse_local_arr,
-            params_cand_all, params_ref_all,
+            params_cand_all, params_ref_all, w_lo_arr,
             data_index_all[bin], bin, v5_mode,
             n_nodes, n_knots, nparams, f0_idx, fdot_idx,
-            Nf, Nf_active, N_sparse_t, stride,
+            Nf, Nf_active, W_slab, N_sparse_t, stride,
             ind_min_t, ind_min_f, m_active_half_width,
             layer_df, dt, T_obs, t_start,
             nchannels, tdi_type, project_real,

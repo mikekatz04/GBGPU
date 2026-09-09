@@ -931,7 +931,10 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
     // by ``c0_mask_all`` -- the bit-packed |c0| row-floor mask that
     // setup_in_model precomputes, which is all the scorer needs from c0 --
     // plus the trailing ``v5_mode`` selector (1 = phase-aliased shared
-    // arena, 2 = flat carve / occupancy control).
+    // arena, 2 = flat carve / occupancy control). Stash arrays are COMPACT
+    // per-reference windows of width ``W_slab`` with per-reference
+    // active-local origins ``w_lo_arr`` (full-band stash = W_slab ==
+    // Nf_active + all-zero w_lo).
     void gb_signal_het_v5_get_ll(
         GBTDIonTheFlyWrap *tdi_wrap,
         array_type<double> d_h_out, array_type<double> h_h_out,
@@ -947,9 +950,10 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<double> params_cand_all,
         array_type<double> params_ref_all,
         array_type<int> data_index_all,
+        array_type<int> w_lo_arr,
         int num_bin, int num_data,
         int n_nodes, int n_knots, int nparams, int f0_idx, int fdot_idx,
-        int Nf, int Nt, int Nf_active, int Nt_active,
+        int Nf, int Nt, int Nf_active, int W_slab, int Nt_active,
         int Nt_layer, int N_sparse_t, int stride,
         int ind_min_t, int ind_min_f,
         int m_active_half_width,

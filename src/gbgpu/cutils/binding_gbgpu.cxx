@@ -894,7 +894,8 @@ void GBComputationGroupWrap::gb_signal_het_v4_get_ll(
 }
 
 // ---- signal-het V5: the v4 body with c0_sparse_all -> c0_mask_all (the
-// ---- precomputed row-floor mask) plus the trailing v5_mode ---------------
+// ---- precomputed row-floor mask) plus the trailing v5_mode; COMPACT
+// ---- per-reference stash windows (W_slab + w_lo) -------------------------
 void GBComputationGroupWrap::gb_signal_het_v5_get_ll(
     GBTDIonTheFlyWrap *tdi_wrap,
     array_type<double> d_h_out, array_type<double> h_h_out,
@@ -910,9 +911,10 @@ void GBComputationGroupWrap::gb_signal_het_v5_get_ll(
     array_type<double> params_cand_all,
     array_type<double> params_ref_all,
     array_type<int> data_index_all,
+    array_type<int> w_lo_arr,
     int num_bin, int num_data,
     int n_nodes, int n_knots, int nparams, int f0_idx, int fdot_idx,
-    int Nf, int Nt, int Nf_active, int Nt_active,
+    int Nf, int Nt, int Nf_active, int W_slab, int Nt_active,
     int Nt_layer, int N_sparse_t, int stride,
     int ind_min_t, int ind_min_f,
     int m_active_half_width,
@@ -921,12 +923,14 @@ void GBComputationGroupWrap::gb_signal_het_v5_get_ll(
     int nchannels, int tdi_type, int project_real,
     int v5_mode, array_type<double> d_h_im_out)
 {
+    // COMPACT stash sizes: W_slab wide per reference, absolute window
+    // origins in w_lo_arr (full-band = W_slab == Nf_active + zeros).
     const size_t b_xyz  = (size_t) num_data * nchannels * nchannels
-                        * Nf_active * N_sparse_t;
-    const size_t b_diag = (size_t) num_data * nchannels * Nf_active * N_sparse_t;
-    // One bit per (data, channel, active layer, sparse pixel), packed along
+                        * W_slab * N_sparse_t;
+    const size_t b_diag = (size_t) num_data * nchannels * W_slab * N_sparse_t;
+    // One bit per (data, channel, window layer, sparse pixel), packed along
     // the pixel axis -- 1/128 the size of c0_sparse_all itself.
-    const size_t n_mask = (size_t) num_data * nchannels * Nf_active
+    const size_t n_mask = (size_t) num_data * nchannels * W_slab
                         * (size_t) ((N_sparse_t + 63) / 64);
 
     gb_signal_het_v5_get_ll_wrap(
@@ -937,11 +941,9 @@ void GBComputationGroupWrap::gb_signal_het_v5_get_ll(
             return_pointer_and_check_length(c0_mask_all, "c0_mask_all",
                                             n_mask, 1)),
         reinterpret_cast<cmplx*>(return_pointer_and_check_length(
-            A0_all, "A0_all",
-            (size_t) num_data * nchannels * Nf_active * N_sparse_t, 1)),
+            A0_all, "A0_all", b_diag, 1)),
         reinterpret_cast<cmplx*>(return_pointer_and_check_length(
-            A1_all, "A1_all",
-            (size_t) num_data * nchannels * Nf_active * N_sparse_t, 1)),
+            A1_all, "A1_all", b_diag, 1)),
         reinterpret_cast<cmplx*>(return_pointer_and_check_length(
             B0_all, "B0_all", (tdi_type == 0) ? b_xyz : b_diag, 1)),
         reinterpret_cast<cmplx*>(return_pointer_and_check_length(
@@ -959,9 +961,10 @@ void GBComputationGroupWrap::gb_signal_het_v5_get_ll(
                                          nparams, num_data),
         return_pointer_and_check_length(data_index_all, "data_index_all",
                                          num_bin, 1),
+        return_pointer_and_check_length(w_lo_arr, "w_lo_arr", num_data, 1),
         num_bin, num_data,
         n_nodes, n_knots, nparams, f0_idx, fdot_idx,
-        Nf, Nt, Nf_active, Nt_active,
+        Nf, Nt, Nf_active, W_slab, Nt_active,
         Nt_layer, N_sparse_t, stride,
         ind_min_t, ind_min_f,
         m_active_half_width,
@@ -1414,7 +1417,14 @@ void gbgpu_part(nb::module_ &m) {
          "c0_sparse_all, which the scorer no longer reads) and r/dr are "
          "rebuilt in registers. Per-pixel shared cost 528 -> 48 B/point; "
          "with the phase-lifetime arena the footprint is 27.6 KB, constant "
-         "in N_sparse_t up to N ~ 450. Bit-identical to v4. Trailing "
+         "in N_sparse_t up to N ~ 450. Bit-identical to v4. Stash arrays "
+         "are COMPACT per-reference windows (W_slab wide, absolute origins "
+         "ind_min_f + w_lo_arr[d]); full-band = W_slab == Nf_active + "
+         "all-zero w_lo. Active-band rows off a reference's window are "
+         "SKIPPED (they held exact zeros in the full-band layout), not "
+         "clamped onto the window edge as in the F-stat scorer -- the "
+         "in-model window is the buffer's narrow band slab, whose edge "
+         "rows are nonzero. Trailing "
          "v5_mode: 1 = phase-aliased arena (production; ~5 blocks/SM on an "
          "A100 vs v4's 1), 2 = flat carve at the same arithmetic and "
          "traffic (~3 blocks/SM) -- the A/B that isolates occupancy. "

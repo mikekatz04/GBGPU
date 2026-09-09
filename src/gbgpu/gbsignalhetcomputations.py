@@ -108,10 +108,14 @@ def _resolve_n_cp(n_cp_build, Tobs):
 def _c0_row_mask_bits(c0, xp):
     """Bit-packed |c0| row-floor mask -- the v5 scorer's only view of c0.
 
-    ``c0`` is the expanded reference stash, ``(n, nch, Nf_active,
-    N_sparse_t)``. Returns ``uint64`` of shape ``(n, nch, Nf_active,
-    ceil(N_sparse_t / 64))`` with bit ``b % 64`` of word ``b // 64`` set
-    where pixel ``b`` survives its row's floor.
+    ``c0`` is the reference stash, ``(n, nch, L, N_sparse_t)`` -- ``L`` is
+    ``Nf_active`` on the full-band layout and the compact window width
+    ``W_slab`` on the windowed one. Returns ``uint64`` of shape
+    ``(n, nch, L, ceil(N_sparse_t / 64))`` with bit ``b % 64`` of word
+    ``b // 64`` set where pixel ``b`` survives its row's floor. The floor
+    is a per-row reduction, so the compact mask is bit-for-bit the window
+    rows of the full-band one (the rows it omits held all-zero c0, hence
+    all-clear bits).
 
     This is EXACTLY the test the v4 kernel runs -- ``|c0| > max(1e-12 *
     max_b |c0|, 1e-300)`` along each ``(c, m_local)`` row -- hoisted out of
@@ -763,7 +767,97 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         self._slot_to_ref = None
         self._slot_to_ref_xp = None
         self.c0_mask_all = None
+        self._stash_W = None
+        self._stash_w_lo = None
+        self._stash_windowed = None
         return self
+
+    # ---- in-model stash layout ------------------------------------------
+    #: Width in WDM layers of each reference's stash row, and the matching
+    #: per-reference ACTIVE-LOCAL window origins. ``_stash_W ==
+    #: g["Nf_active"]`` with all-zero ``_stash_w_lo`` is the FULL-BAND
+    #: layout (what every scorer understood before the compact-window
+    #: port); anything narrower is the compact layout, which only the v5
+    #: scorer indexes. ``None`` means "no stash of this class's making" --
+    #: the standalone ``__init__`` construction, which is always full-band.
+    _stash_W = None
+    _stash_w_lo = None
+    #: Layout resolved for the CURRENT block, so a mid-block patch can never
+    #: disagree with the build (e.g. via an env flip between the two calls).
+    _stash_windowed = None
+
+    def _resolve_stash_layout(self) -> bool:
+        """True if this block's stash stays COMPACT (per-reference windows).
+
+        Only the v5 scorer takes the ``(W_slab, w_lo_arr)`` contract; v2 /
+        v3 / v4 and the in-kernel scorer index the stash with an Nf_active
+        stride and no window origin, so a comp configured for one of those
+        must keep the full-band expansion. ``GB_SIGHET_INMODEL_WINDOWED``
+        overrides: "0" forces the legacy expansion even under v5 (the
+        production rollback lever, and the control arm of the parity gate);
+        anything else forces windowing, and raises if the scorer cannot
+        read it rather than silently producing garbage.
+
+        Resolved once per block and cached: the mid-block refresh MUST use
+        the layout the build used.
+        """
+        if self._stash_windowed is not None and self._in_model is not None:
+            return bool(self._stash_windowed)
+        g = self._g
+        v5 = bool(g.get("v4_knots", 0)) and bool(int(g.get("v5", 0)))
+        knob = os.environ.get("GB_SIGHET_INMODEL_WINDOWED")
+        if knob is None:
+            windowed = v5
+        else:
+            windowed = knob != "0"
+            if windowed and not v5:
+                raise RuntimeError(
+                    "GB_SIGHET_INMODEL_WINDOWED asked for the compact "
+                    "per-reference stash, but this comp's scorer is not v5 "
+                    f"(v4_knots={g.get('v4_knots', 0)}, v5={g.get('v5', 0)}). "
+                    "v2/v3/v4 and the in-kernel scorer read the stash with a "
+                    "full-band stride and would misindex every row. Build "
+                    "the comp with v4_knots>0 and v5=1, or unset the knob.")
+        self._stash_windowed = bool(windowed)
+        # Say it out loud, ONCE per comp. Same argument as the "sig-het
+        # scorer:" line above: nothing else in a run's log distinguishes
+        # "the compact stash is live" from "it silently fell back to the
+        # full-band expansion", and the two differ by ~35x in stash bytes.
+        if not getattr(self, "_stash_layout_logged", False):
+            self._stash_layout_logged = True
+            logger.info(
+                "sig-het in-model stash: %s  [v5=%s, GB_SIGHET_INMODEL_"
+                "WINDOWED=%s]",
+                "COMPACT per-reference windows" if windowed
+                else f"full band (Nf_active={g['Nf_active']})",
+                g.get("v5", 0), knob if knob is not None else "unset",
+            )
+        return bool(windowed)
+
+    def _v5_window_args(self, num_data):
+        """``(W_slab, w_lo_arr)`` for the v5 kernel's compact-window contract.
+
+        Falls back to the degenerate full-band pair for a stash this class
+        did not build through ``setup_in_model`` (the standalone
+        ``__init__`` construction) -- which is exactly what the kernel
+        documents as ``W_slab == Nf_active`` + all-zero ``w_lo``.
+        """
+        xp = self.xp
+        if self._stash_W is None:
+            return int(self._g["Nf_active"]), xp.zeros(int(num_data),
+                                                       dtype=xp.int32)
+        return int(self._stash_W), self._stash_w_lo
+
+    def _assert_full_band_stash(self, scorer):
+        """Guard the scorers that only understand the full-band layout."""
+        if self._stash_W is not None and int(self._stash_W) != int(
+                self._g["Nf_active"]):
+            raise RuntimeError(
+                f"sig-het {scorer} reads the coefficient stash with a "
+                f"full-band Nf_active={self._g['Nf_active']} stride, but the "
+                f"active stash is COMPACT (W_slab={self._stash_W}). Only the "
+                "v5 scorer takes the windowed contract; set "
+                "GB_SIGHET_INMODEL_WINDOWED=0 to keep the expansion.")
 
     def setup_in_model(self, buffer_aca, params_ref_phys, data_index,
                        N_vals=None) -> bool:
@@ -784,10 +878,17 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         existing ones and only THOSE slots' coefficient blocks are
         rebuilt in place -- the move's mid-block drift refresh uses this
         to re-anchor only the sources that walked too far from their
-        expansion point. Returns True so callers can tell an active
-        sig-het setup from the no-op hooks (which return None)."""
+        expansion point. A refreshed source's WINDOW may move, so the
+        patch rewrites both the (whole) coefficient rows and that
+        reference's ``_stash_w_lo`` origin. Returns True so callers can
+        tell an active sig-het setup from the no-op hooks (which return
+        None)."""
         g = self._g
         self._clamp_n_sparse_fd_for_device()
+        # Stash layout FIRST: a misconfiguration (windowing forced onto a
+        # scorer that cannot read it) must raise before the reference build,
+        # not after it.
+        windowed = self._resolve_stash_layout()
         nch = 3
         xp = self.xp
         # host copy of the slot ids for the slot->ref map bookkeeping.
@@ -817,9 +918,12 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         #     computation writing into a compact slab -- no kernel change;
         #   * the bin-fold runs batched over the (n, ..., W, Nt_active)
         #     window slices;
-        #   * results scatter into full-band, absolutely-indexed stash
-        #     arrays (zeros elsewhere == exactly what the full-band build
-        #     produced there), so the get_ll consumer is untouched.
+        #   * the results STAY windowed for the v5 scorer, which takes the
+        #     window width and per-reference origins as (W_slab, w_lo_arr)
+        #     -- see _resolve_stash_layout. For the scorers that only know
+        #     the full-band stride they scatter into full-band,
+        #     absolutely-indexed arrays (zeros elsewhere == exactly what a
+        #     full-band build produced there).
         #
         # This makes the reference build Tobs-independent: full-band it
         # scaled with Nf_active*Nt_active (~2.4 s/source at 1 yr, and a
@@ -890,20 +994,67 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         # ~8.4 ms/source of per-call GPU API overhead scaled linearly with
         # the block (50 s/iteration at nwalkers=64) and cancelled the
         # sig-het likelihood win.
+        # DENSE-TRANSIENT CHUNKING (user ruling 2026-09-09: "c0_dense_w is only
+        # needed during the reference build -- batch it"). The kernel writes
+        # each reference's dense c0 (nch x W x Nt_active complex128 = 2.04
+        # MB/source at 1 yr) and the bin-fold consumes it; nothing downstream
+        # needs more than one chunk resident. Allocating it for the FULL
+        # batch put ~520 MB (n=256) of transient on the device that scaled
+        # with the in-model pool -- one of the two things the
+        # GB_INMODEL_SETUP_BATCH staging cap existed to bound. Now: the
+        # reference build and the fold run chunk by chunk over the SAME byte
+        # budget the fold already used (GB_SIGHET_FOLD_MAX_BYTES), which now
+        # honestly counts the dense c0 next to the <h|h> intermediates
+        # (Ec + En) it was sized for, so ONE knob bounds the whole build
+        # transient at any pool size. The sparse c0 stays full-batch: the
+        # scorer consumes it and it is small (n x nch x W x N_sparse_t;
+        # 14 MB at n=256, 1 yr).
+        #
+        # Bit-identical to the unchunked build: make_reference's per-row
+        # math is independent across references (rows 0..k-1 of what it is
+        # handed), and the fold was already chunked on this axis. The dense
+        # buffer is allocated ONCE at chunk size and reused for every full
+        # chunk; only a final partial chunk gets its own exact-size buffer,
+        # so the kernel is never handed a strided view as an OUTPUT (inputs
+        # are sliced views, as the fold already did). Zeroed before each
+        # reuse because the kernel writes only inside each reference's
+        # window and the fold reads the whole slab.
         c0_sparse_w = xp.zeros((n, nch, W, g["N_sparse_t"]),
                                dtype=xp.complex128)
-        c0_dense_w = xp.zeros((n, nch, W, g["Nt_active"]),
-                              dtype=xp.complex128)
-        self.cpp.gb_signal_het_make_reference(
-            self.tdi_wrap, c0_sparse_w, c0_dense_w,
-            self.window_full, self.n_sparse_local,
-            xp.ascontiguousarray(xp.asarray(w_lo_host, dtype=xp.int32)),
-            refs, n, 9, 1, 2,
-            g["Nf"], g["Nt"], W, g["Nt_active"],
-            g["nt_layer"], g["N_sparse_t"], g["stride"],
-            g["ind_min_t"], g["ind_min_f"],
-            g["layer_df"], g["dt"], g["Tobs"], g["t0"],
-            3, g["n_sparse_fd"], g["tukey_alpha"], g["n_cp_build"])
+        per_src_bytes = (2 * nch * nch * W * g["Nt_active"] * 16    # Ec + En
+                         + nch * W * g["Nt_active"] * 16)            # dense c0
+        chunk = max(1, min(n, _SIGHET_FOLD_MAX_BYTES // max(per_src_bytes, 1)))
+        w_lo_dev = xp.ascontiguousarray(xp.asarray(w_lo_host, dtype=xp.int32))
+        c0_dense_buf = xp.zeros((chunk, nch, W, g["Nt_active"]),
+                                dtype=xp.complex128)
+        c0_dense_w = None   # bound even if n == 0, so the del below is safe
+        folds = []
+        for s in range(0, n, chunk):
+            k = min(chunk, n - s)
+            if k == chunk:
+                c0_dense_w = c0_dense_buf
+                c0_dense_w[...] = 0.0
+            else:
+                c0_dense_w = xp.zeros((k, nch, W, g["Nt_active"]),
+                                      dtype=xp.complex128)
+            c0_sparse_chunk = xp.zeros((k, nch, W, g["N_sparse_t"]),
+                                       dtype=xp.complex128)
+            self.cpp.gb_signal_het_make_reference(
+                self.tdi_wrap, c0_sparse_chunk, c0_dense_w,
+                self.window_full, self.n_sparse_local,
+                xp.ascontiguousarray(w_lo_dev[s:s + k]),
+                xp.ascontiguousarray(refs[s:s + k]), k, 9, 1, 2,
+                g["Nf"], g["Nt"], W, g["Nt_active"],
+                g["nt_layer"], g["N_sparse_t"], g["stride"],
+                g["ind_min_t"], g["ind_min_f"],
+                g["layer_df"], g["dt"], g["Tobs"], g["t0"],
+                3, g["n_sparse_fd"], g["tukey_alpha"], g["n_cp_build"])
+            c0_sparse_w[s:s + k] = c0_sparse_chunk
+            folds.append(bin_fold_real(
+                res_w[s:s + k], c0_dense_w, invC_w[s:s + k],
+                self.n_sparse_local, g["stride"], g["Nt_active"],
+                tdi_type="XYZ"))
+        del c0_dense_buf, c0_dense_w
 
         # Row helper for the full-band stash expansion below. The scatters
         # use direct advanced-index ASSIGNMENT, not xp.put_along_axis: cupy
@@ -912,17 +1063,6 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         # gaps -- same environment-trap family as module-level ``cp``).
         rows = xp.arange(n)
 
-        # BATCHED bin-fold over the window slices; chunked because the
-        # <h|h> intermediates (Ec + En, nch^2 * W * Nt_active complex128
-        # per source) remain the setup's memory high-water mark.
-        per_src_bytes = 2 * nch * nch * W * g["Nt_active"] * 16
-        chunk = max(1, min(n, _SIGHET_FOLD_MAX_BYTES // max(per_src_bytes, 1)))
-        folds = [
-            bin_fold_real(res_w[s:s + chunk], c0_dense_w[s:s + chunk],
-                          invC_w[s:s + chunk], self.n_sparse_local,
-                          g["stride"], g["Nt_active"], tdi_type="XYZ")
-            for s in range(0, n, chunk)
-        ]
         if len(folds) == 1:
             A0s, A1s, B0s, B1s, B0ncs, B1ncs = folds[0]
         else:
@@ -930,38 +1070,78 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
                 xp.concatenate(parts, axis=0) for parts in zip(*folds)
             ]
 
-        # Scatter the compact window results into full-band stash arrays
-        # (absolute layer indexing, zeros outside -- the consumer kernel is
-        # unchanged). A-blocks: (n, nch, Nf_active, N_sparse_t), axis 2;
-        # B-blocks: (n, nch, nch, Nf_active, N_sparse_t), axis 3.
-        def _expand_A(vals):
-            out = xp.zeros((n, nch, g["Nf_active"], g["N_sparse_t"]),
-                           dtype=xp.complex128)
-            out[rows[:, None, None], ch[None, :, None],
-                layers[:, None, :], :] = vals
-            return out
+        # ---- stash layout: COMPACT windows, or the legacy full-band --------
+        # WINDOWED (v5 scorers): keep exactly what the fold produced. The
+        # scorer takes the window width and the per-reference active-local
+        # origins as (W_slab, w_lo_arr) and skips active-band rows that fall
+        # off a reference's window -- which is where the full-band layout
+        # held exact zeros, so the two are bit-identical. At the production
+        # narrow-slab settings this is the whole point of the change: W = 5
+        # of Nf_active = 179 layers, i.e. ~97% of the seven stash arrays
+        # were zeros. (~8 GB/refresh at GB_INMODEL_SETUP_BATCH=256,
+        # N_sparse_t=256 -> ~0.23 GB.)
+        #
+        # FULL-BAND: v2 / v3 / v4 / the in-kernel scorer index the stash with
+        # an Nf_active stride and no window origin, so a comp configured for
+        # one of those keeps the expansion. Nothing silently mixes layouts:
+        # the choice is resolved ONCE per block (see _resolve_stash_layout,
+        # called at the top of this method) and every consumer asserts
+        # against ``self._stash_W``.
+        if windowed:
+            c0_sparse = xp.ascontiguousarray(c0_sparse_w)
+            A0s, A1s = (xp.ascontiguousarray(A0s), xp.ascontiguousarray(A1s))
+            B0s, B1s = (xp.ascontiguousarray(B0s), xp.ascontiguousarray(B1s))
+            B0ncs = xp.ascontiguousarray(B0ncs)
+            B1ncs = xp.ascontiguousarray(B1ncs)
+            stash_W = int(W)
+        else:
+            # Scatter the compact window results into full-band stash arrays
+            # (absolute layer indexing, zeros outside -- the consumer kernel
+            # is unchanged). A-blocks: (n, nch, Nf_active, N_sparse_t),
+            # axis 2; B-blocks: (n, nch, nch, Nf_active, N_sparse_t), axis 3.
+            def _expand_A(vals):
+                out = xp.zeros((n, nch, g["Nf_active"], g["N_sparse_t"]),
+                               dtype=xp.complex128)
+                out[rows[:, None, None], ch[None, :, None],
+                    layers[:, None, :], :] = vals
+                return out
 
-        def _expand_B(vals):
-            out = xp.zeros((n, nch, nch, g["Nf_active"], g["N_sparse_t"]),
-                           dtype=xp.complex128)
-            out[rows[:, None, None, None], ch[None, :, None, None],
-                ch[None, None, :, None], layers[:, None, None, :], :] = vals
-            return out
+            def _expand_B(vals):
+                out = xp.zeros((n, nch, nch, g["Nf_active"], g["N_sparse_t"]),
+                               dtype=xp.complex128)
+                out[rows[:, None, None, None], ch[None, :, None, None],
+                    ch[None, None, :, None],
+                    layers[:, None, None, :], :] = vals
+                return out
 
-        c0_sparse = _expand_A(c0_sparse_w)
-        A0s, A1s = _expand_A(A0s), _expand_A(A1s)
-        B0s, B1s = _expand_B(B0s), _expand_B(B1s)
-        B0ncs, B1ncs = _expand_B(B0ncs), _expand_B(B1ncs)
+            c0_sparse = _expand_A(c0_sparse_w)
+            A0s, A1s = _expand_A(A0s), _expand_A(A1s)
+            B0s, B1s = _expand_B(B0s), _expand_B(B1s)
+            B0ncs, B1ncs = _expand_B(B0ncs), _expand_B(B1ncs)
+            stash_W = int(g["Nf_active"])
         # The |c0| row-floor mask is the ONLY thing the fold needs from c0,
         # and it depends only on the reference -- so build it here, once,
         # instead of in every candidate's block. See _c0_row_mask_bits.
+        # (The floor is a per-(ref, channel, layer) row reduction, so a
+        # compact c0 gives bit-for-bit the window rows of the expanded
+        # mask; the rows it drops were all-zero c0 -> all-clear bits.)
         c0_mask = _c0_row_mask_bits(c0_sparse, xp)
+        # Per-reference ACTIVE-LOCAL window origins, in the same row order as
+        # the stash. All-zero on the full-band layout, which is the kernel's
+        # documented degenerate case.
+        w_lo_stash = (xp.ascontiguousarray(xp.asarray(w_lo_host,
+                                                      dtype=xp.int32))
+                      if windowed else xp.zeros(n, dtype=xp.int32))
 
         if self._in_model is not None:
             # Mid-block PATCH: re-anchor only the given slots (the move's
-            # drift refresh). They must already carry a reference. Full-row
-            # assignment (not a window write) so a shifted window cannot
-            # leave stale coefficients behind.
+            # drift refresh). They must already carry a reference. Full-ROW
+            # assignment (never a partial write inside a row) so a shifted
+            # window cannot leave stale coefficients behind -- on the
+            # windowed layout the row IS the window, so the shift is carried
+            # by ``_stash_w_lo`` and the whole W-wide row is overwritten.
+            # Forget to update w_lo and a refreshed source whose window moved
+            # would read its new coefficients at the OLD absolute layers.
             if int(slots.max()) >= len(self._slot_to_ref):
                 raise RuntimeError(
                     "sig-het in-model patch hit a slot outside the "
@@ -971,6 +1151,15 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
                 raise RuntimeError(
                     "sig-het in-model patch hit a slot with no reference; "
                     "mid-block refreshes must target the block's slots.")
+            if int(stash_W) != int(self._stash_W):
+                # A mid-block width change would silently misindex every
+                # row (the stride is baked into the stash). Cannot happen
+                # with a stable buffer + engine, so make it loud.
+                raise RuntimeError(
+                    f"sig-het in-model patch changed the stash window width "
+                    f"({self._stash_W} -> {stash_W}); the block's stash "
+                    "stride is fixed at build time. Clear the reference and "
+                    "rebuild instead of patching.")
             self.c0_sparse_all[ref_idx] = c0_sparse
             self.c0_mask_all[ref_idx] = c0_mask
             self.A0_all[ref_idx] = A0s
@@ -980,12 +1169,14 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
             self.B0nc_all[ref_idx] = B0ncs
             self.B1nc_all[ref_idx] = B1ncs
             self.params_ref_all[ref_idx] = refs
+            # THE window shift. Same row order as the coefficient scatters.
+            self._stash_w_lo[xp.asarray(ref_idx)] = w_lo_stash
             return True
 
         # The coefficient stash is the per-block CACHE: built once here (on
         # the run's device), then reused by every repeat-proposal get_ll
         # with no further host<->device traffic. (Freshly allocated by the
-        # expanders above, so already contiguous.)
+        # fold / expanders above, so already contiguous.)
         self.c0_sparse_all = c0_sparse
         # v5's view of c0. Cheap (1/128 the size of c0_sparse_all) and built
         # unconditionally so the v5 A/B never carries a setup-cost asymmetry
@@ -998,6 +1189,8 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         self.B0nc_all = B0ncs
         self.B1nc_all = B1ncs
         self.params_ref_all = refs
+        self._stash_W = stash_W
+        self._stash_w_lo = w_lo_stash
 
         slot_map = np.full(int(slots.max()) + 1, -1, dtype=int)
         slot_map[slots] = np.arange(n)
@@ -1010,11 +1203,44 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
 
     def clear_in_model(self) -> None:
         """Deactivate the in-model reference: get_ll_wdm routes back to the
-        chunked delegate (RJ / removal / any out-of-block scoring)."""
+        chunked delegate (RJ / removal / any out-of-block scoring), and the
+        block's coefficient stash is RELEASED.
+
+        The release matters as much as the routing. The stash is the run's
+        single largest transient (seven per-reference coefficient arrays,
+        complex128), and ``clear_in_model`` is called after EVERY repeat
+        block, so holding it until the next ``setup_in_model`` reassigns the
+        attributes kept it resident across the whole rest of the iteration
+        AND briefly doubled the peak at the next build (new arrays allocated
+        before the old references dropped). Measured context: dev0 peaked at
+        87.2 / 95.8 GB in the live 1-year run and OOMed 1.5 GB above that.
+
+        Scoped to the band-engine in-model stash: the standalone
+        ``__init__`` construction builds its own single-reference stash into
+        the same attributes and never marks it in-model, so a clear on such
+        an object leaves it alone.
+        """
+        was_active = getattr(self, "_in_model", None) is not None
         self._in_model = None
         self._slot_to_ref = None
         self._slot_to_ref_xp = None
         self.c0_mask_all = None
+        if not was_active:
+            return
+        # Drop the block's coefficient stash. get_ll_wdm already routes to
+        # the chunked delegate while ``_in_model`` is None, and get_ll
+        # raises on a released stash rather than reading a stale one.
+        self.c0_sparse_all = None
+        self.A0_all = None
+        self.A1_all = None
+        self.B0_all = None
+        self.B1_all = None
+        self.B0nc_all = None
+        self.B1nc_all = None
+        self.params_ref_all = None
+        self._stash_W = None
+        self._stash_w_lo = None
+        self._stash_windowed = None
 
     # ------------------------------------------------------------------
     # F-stat against SHARED references (search / grid-fit path).
@@ -1261,31 +1487,54 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         invC_w = invC_full[ch[None, :, None, None], ch[None, None, :, None],
                            layers[:, None, None, :], :]
 
-        # ---- compact reference c0 (ONE batched backend call) --------------
+        # ---- compact reference c0 + bin-fold, CHUNKED TOGETHER -------------
+        # Same dense-transient chunking as setup_in_model (user ruling
+        # 2026-09-09): the dense c0 is needed only between make_reference and
+        # the fold, so it is built one chunk at a time under the same
+        # GB_SIGHET_FOLD_MAX_BYTES budget (now counting the dense c0 next to
+        # the Ec + En intermediates). Matters more here than in-model: the
+        # 1-yr grid fit hands in 10,495 peaks against a 2048-slot buffer, so
+        # a full-batch dense c0 was the largest single allocation of the
+        # epoch-0 phase that OOMed jobs 443/446. Bit-identical: per-row math
+        # is independent across references. Dense buffer allocated once at
+        # chunk size and reused; a final partial chunk gets an exact-size
+        # buffer so the kernel never takes a strided view as an output.
         c0_sparse_w = xp.zeros((n, nch, W, g["N_sparse_t"]),
                                dtype=xp.complex128)
-        c0_dense_w = xp.zeros((n, nch, W, g["Nt_active"]),
-                              dtype=xp.complex128)
-        self.cpp.gb_signal_het_make_reference(
-            self.tdi_wrap, c0_sparse_w, c0_dense_w,
-            self.window_full, self.n_sparse_local,
-            w_lo, refs, n, 9, 1, 2,
-            g["Nf"], g["Nt"], W, g["Nt_active"],
-            g["nt_layer"], g["N_sparse_t"], g["stride"],
-            g["ind_min_t"], g["ind_min_f"],
-            g["layer_df"], g["dt"], g["Tobs"], g["t0"],
-            3, g["n_sparse_fd"], g["tukey_alpha"], g["n_cp_build"])
-
-        # ---- compact bin-fold (chunked over refs for peak memory) ---------
-        per_src_bytes = 2 * nch * nch * W * g["Nt_active"] * 16
+        per_src_bytes = (2 * nch * nch * W * g["Nt_active"] * 16    # Ec + En
+                         + nch * W * g["Nt_active"] * 16)            # dense c0
         chunk = max(1, min(n, _SIGHET_FOLD_MAX_BYTES
                            // max(per_src_bytes, 1)))
-        folds = [
-            bin_fold_real(res_w[s:s + chunk], c0_dense_w[s:s + chunk],
-                          invC_w[s:s + chunk], self.n_sparse_local,
-                          g["stride"], g["Nt_active"], tdi_type="XYZ")
-            for s in range(0, n, chunk)
-        ]
+        c0_dense_buf = xp.zeros((chunk, nch, W, g["Nt_active"]),
+                                dtype=xp.complex128)
+        c0_dense_w = None   # bound even if n == 0, so the del below is safe
+        folds = []
+        for s in range(0, n, chunk):
+            k = min(chunk, n - s)
+            if k == chunk:
+                c0_dense_w = c0_dense_buf
+                c0_dense_w[...] = 0.0
+            else:
+                c0_dense_w = xp.zeros((k, nch, W, g["Nt_active"]),
+                                      dtype=xp.complex128)
+            c0_sparse_chunk = xp.zeros((k, nch, W, g["N_sparse_t"]),
+                                       dtype=xp.complex128)
+            self.cpp.gb_signal_het_make_reference(
+                self.tdi_wrap, c0_sparse_chunk, c0_dense_w,
+                self.window_full, self.n_sparse_local,
+                xp.ascontiguousarray(w_lo[s:s + k]),
+                xp.ascontiguousarray(refs[s:s + k]), k, 9, 1, 2,
+                g["Nf"], g["Nt"], W, g["Nt_active"],
+                g["nt_layer"], g["N_sparse_t"], g["stride"],
+                g["ind_min_t"], g["ind_min_f"],
+                g["layer_df"], g["dt"], g["Tobs"], g["t0"],
+                3, g["n_sparse_fd"], g["tukey_alpha"], g["n_cp_build"])
+            c0_sparse_w[s:s + k] = c0_sparse_chunk
+            folds.append(bin_fold_real(
+                res_w[s:s + k], c0_dense_w, invC_w[s:s + k],
+                self.n_sparse_local, g["stride"], g["Nt_active"],
+                tdi_type="XYZ"))
+        del c0_dense_buf, c0_dense_w
         if len(folds) == 1:
             A0s, A1s, B0s, B1s, B0ncs, B1ncs = folds[0]
         else:
@@ -1654,6 +1903,14 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         d_h = xp.zeros(N, dtype=xp.float64)
         h_h = xp.zeros(N, dtype=xp.float64)
         d_h_im = xp.zeros(N, dtype=xp.float64)   # fused quadrature output
+        if self.params_ref_all is None:
+            # clear_in_model released the block's stash. Say so, rather than
+            # dying on an AttributeError three frames down.
+            raise RuntimeError(
+                "sig-het get_ll has no coefficient stash: the in-model "
+                "reference was released by clear_in_model (or never built). "
+                "Call setup_in_model first; get_ll_wdm routes to the chunked "
+                "delegate on its own while no reference is active.")
         num_data = int(self.params_ref_all.shape[0])
         g = self._g
         if g.get("v4_knots", 0) and self._v4_band_arrays is None:
@@ -1697,6 +1954,12 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
                     "sig-het v5 needs the |c0| row-floor mask, which "
                     "setup_in_model builds alongside the coefficient stash; "
                     "no in-model reference is active.")
+            # COMPACT per-reference stash windows: W_slab wide, absolute
+            # origins ind_min_f + w_lo[ref]. The full-band stash (v5 over a
+            # comp that kept the expansion, or the standalone construction)
+            # is the degenerate W_slab == Nf_active + all-zero w_lo, which
+            # the kernel indexes identically to the pre-window code.
+            _W_slab, _w_lo = self._v5_window_args(num_data)
             self.cpp.gb_signal_het_v5_get_ll(
                 self.tdi_wrap, d_h, h_h, self.c0_mask_all,
                 self.A0_all, self.A1_all, self.B0_all, self.B1_all,
@@ -1704,11 +1967,11 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
                 self.n_sparse_local,
                 self._v4_band_arrays[0], self._v4_band_arrays[1],
                 self._v4_band_arrays[2],
-                x, self.params_ref_all, di,
+                x, self.params_ref_all, di, _w_lo,
                 N, num_data,
                 self._resolve_v3_nodes(x, di), int(g["v4_knots"]),
                 9, 1, 2,
-                g["Nf"], g["Nt"], g["Nf_active"], g["Nt_active"],
+                g["Nf"], g["Nt"], g["Nf_active"], _W_slab, g["Nt_active"],
                 g["nt_layer"], g["N_sparse_t"], g["stride"],
                 g["ind_min_t"], g["ind_min_f"], g["m_half"],
                 g["layer_df"], g["dt"], g["Tobs"], g["t0"],
@@ -1728,6 +1991,12 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
             # per call. Consumes the SAME stash as v2/v3. Takes precedence
             # over v3 when both knobs are set (the fit node count still
             # honors v3_n_nodes / the adaptive resolve).
+            #
+            # FULL-BAND ONLY: v4 indexes the stash with an Nf_active stride
+            # and no window origin. setup_in_model only windows for v5, so
+            # this can never fire in a consistent comp -- it is the tripwire
+            # against a future layout change reaching v4 silently.
+            self._assert_full_band_stash("v4")
             self.cpp.gb_signal_het_v4_get_ll(
                 self.tdi_wrap, d_h, h_h, self.c0_sparse_all,
                 self.A0_all, self.A1_all, self.B0_all, self.B1_all,
@@ -1753,6 +2022,7 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
             # V3: ratio-spline candidate build straight into the bin-fold
             # (no FFT / polyphase / division). Consumes the SAME stash as
             # v2 -- setup_in_model needs no v3-specific work.
+            self._assert_full_band_stash("v3")     # full-band stride only
             self.cpp.gb_signal_het_v3_get_ll(
                 self.tdi_wrap, d_h, h_h, self.c0_sparse_all,
                 self.A0_all, self.A1_all, self.B0_all, self.B1_all,
@@ -1771,6 +2041,7 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
             self.last_h_h = h_h.copy()
             self.last_d_h_im = _QUAD_SIGN_SIGHET * d_h_im
             return -0.5 * self.d_d + d_h - 0.5 * h_h
+        self._assert_full_band_stash("v2 (in-kernel)")  # full-band stride only
         self.cpp.gb_signal_het_get_ll_in_kernel(
             self.tdi_wrap, d_h, h_h, self.c0_sparse_all,
             self.A0_all, self.A1_all, self.B0_all, self.B1_all,

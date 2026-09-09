@@ -692,6 +692,16 @@ class GBComputationGroup{
     //                  blocks/SM -- the A/B that isolates occupancy
     // v5_mode = 2 against the v4 entry point isolates everything that is not
     // occupancy; v5_mode = 1 against v5_mode = 2 isolates occupancy alone.
+    //
+    // COMPACT-SLAB STASH (same contract as the F-stat scorer below): the
+    // stash arrays are per-reference windows of width ``W_slab`` with
+    // per-reference absolute origin ``ind_min_f + w_lo_arr[data_idx]``
+    // (full-band = W_slab == Nf_active + all-zero w_lo). Unlike the F-stat
+    // scorer, rows of the candidate's active m-band that fall OFF the
+    // window are skipped rather than clamped onto the window edge: the
+    // in-model window is the buffer's narrow band slab, whose edge rows
+    // carry nonzero coefficients. Skipping reproduces the full-band stash
+    // bit-for-bit (it was identically zero off the window).
     void gb_signal_het_v5_get_ll_wrap(
         GBTDIonTheFly *tdi_on_fly,
         double *d_h_out, double *h_h_out,
@@ -703,10 +713,10 @@ class GBComputationGroup{
         double *band_w, int *band_j0, int band_len,
         double *params_cand_all,
         double *params_ref_all,
-        int    *data_index_all,
+        int    *data_index_all, int *w_lo_arr,
         int     num_bin, int num_data,
         int     n_nodes, int n_knots, int nparams, int f0_idx, int fdot_idx,
-        int     Nf, int Nt, int Nf_active, int Nt_active,
+        int     Nf, int Nt, int Nf_active, int W_slab, int Nt_active,
         int     Nt_layer, int N_sparse_t, int stride,
         int     ind_min_t, int ind_min_f,
         int     m_active_half_width,
