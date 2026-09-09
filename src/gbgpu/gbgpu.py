@@ -77,7 +77,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
             raise ValueError("Expected an Orbits object or None")
 
         # The property setter substitutes EqualArmlengthOrbits when given None.
-        self.orbits = orbits
+        self.orbits = orbits # type: ignore
         
         # `gpus` controls multi-GPU dispatch. `None` -> CPU mode (or single-GPU on a single-device system).
         self.gpus = None
@@ -90,10 +90,13 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
             t0_abs = t0
         self.t0_abs = t0_abs
 
-        # mojito: option to flip the reference phase in waveform generation.
+        # mojito: option to flip the reference phase in waveform generation to match jaxgb.
         self.flip_ref_phase = flip_ref_phase
-
-
+        
+        # ensure shared-memory backend is installed and available for use.
+        if hasattr(self.backend, "sharedmem"):
+            self.sharedmem_backend = getattr(self.backend, "sharedmem")
+        
     @classmethod
     def supported_backends(cls):
         return cls.GPU_RECOMMENDED()
@@ -434,7 +437,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
                 Ps_arr, self.orbits.armlength, tdi2,
                 window_type, window_alpha
             )
-            self.backend.sharedmem.SharedMemoryWaveComp_wrap(*tuple_in)
+            self.sharedmem_backend.SharedMemoryWaveComp_wrap(*tuple_in)
             self.start_inds = _start_inds
             response_out = response_out.reshape(self.num_bin, nchannels, N)
 
@@ -1102,7 +1105,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
                 )
 
                 self._xp_sync()
-                self.backend.sharedmem.SharedMemoryLikeComp_wrap(*tuple_in)
+                self.sharedmem_backend.SharedMemoryLikeComp_wrap(*tuple_in)
                 inputs_in.append([gpu, inds_here, tuple_in])
                 self._xp_sync()
 
@@ -1175,7 +1178,8 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         return_cupy=False,
         tdi2: bool = False,
         window: Optional[str] = None,
-        window_alpha: float = 0.0
+        window_alpha: float = 0.0, 
+        return_2fstat: bool = False,
         # **kwargs
     ):
         self._require_shared_memory_backend(use_c_implementation, "get_fstat_ll")
@@ -1397,7 +1401,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
                 )
 
                 self._xp_sync()
-                self.backend.sharedmem.SharedMemoryFstatLikeComp_wrap(*tuple_in)
+                self.sharedmem_backend.SharedMemoryFstatLikeComp_wrap(*tuple_in)
                 inputs_in.append([gpu, inds_here, tuple_in])
                 self._xp_sync()
 
@@ -1420,7 +1424,10 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         a_coeffs = self.xp.linalg.solve(M_mat, N_arr[..., None])[..., 0]
 
         # Profile log-likelihood: F = 1/2 * (a . N) = 1/2 * (N^T * M^{-1} * N)
-        fstat_logl = 0.5 * self.xp.sum(a_coeffs * N_arr, axis=-1)
+        if return_2fstat:
+            fstat_logl = self.xp.sum(a_coeffs * N_arr, axis=-1)
+        else:
+            fstat_logl = 0.5 * self.xp.sum(a_coeffs * N_arr, axis=-1)
 
         a1, a2, a3, a4 = a_coeffs[:, 0], a_coeffs[:, 1], a_coeffs[:, 2], a_coeffs[:, 3]
 
@@ -1458,6 +1465,10 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
 
         self.psi_max  = (0.25 * (theta_plus + theta_minus)) % np.pi
         self.phi0_max = (0.50 * (theta_plus - theta_minus)) % (2.0 * np.pi)
+
+        if self.flip_ref_phase:
+            self.phi0_max = (-self.phi0_max) % (2.0 * np.pi)
+
 
         if return_cupy:
             return fstat_logl
@@ -2099,7 +2110,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
                 )
 
                 self._xp_sync()
-                self.backend.sharedmem.SharedMemoryGenerateGlobal_wrap(*tuple_in)
+                self.sharedmem_backend.SharedMemoryGenerateGlobal_wrap(*tuple_in)
                 inputs_in.append([gpu, tuple_in])
                 self._xp_sync()
 
@@ -2378,7 +2389,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
                 )
 
                 self._xp_sync()
-                self.backend.sharedmem.SharedMemorySwapLikeComp_wrap(*tuple_in)
+                self.sharedmem_backend.SharedMemorySwapLikeComp_wrap(*tuple_in)
                 inputs_in.append([gpu, inds_here, tuple_in])
                 self._xp_sync()
 
@@ -2735,7 +2746,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
                         )
 
                         self._xp_sync()
-                        self.backend.sharedmem.SharedMemoryInfoMatComp_wrap(*tuple_in)
+                        self.sharedmem_backend.SharedMemoryInfoMatComp_wrap(*tuple_in)
                         inputs_in.append([gpu, inds_here, tuple_in])
                         self._xp_sync()
 
