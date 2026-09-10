@@ -964,15 +964,36 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         res_full = xp.asarray(buffer_aca.linear_data_arr[0]).reshape(
             -1, nch, Nf_data, g["Nt_active"])
         psd_flat = xp.asarray(buffer_aca.linear_psd_arr[0])
-        _cell = nch * nch * Nf_data * g["Nt_active"]
+        # Shared-psd MIRROR (2026-09-09): a buffer bound to the parent's psd
+        # mirror exposes ``psd_row_index`` and its ``linear_psd_arr[0]`` is
+        # the parent ACA's per-WALKER full-active-band invC plane, not a
+        # per-slot slab stack. Each slot then reads row psd_row_index[slot]
+        # at its own active-local layers (the slab origin on the narrow
+        # layout, the carrier window on the full-band one) -- the SAME bytes
+        # the per-slot fill used to copy into the slot, so the fold inputs
+        # are bit-identical either way.
+        psd_rows = getattr(buffer_aca, "psd_row_index", None)
+        Nf_psd = g["Nf_active"] if psd_rows is not None else Nf_data
+        _cell = nch * nch * Nf_psd * g["Nt_active"]
         if (psd_flat.size // _cell) * _cell != psd_flat.size:
             raise NotImplementedError(
                 "sig-het in-model setup currently supports the XYZ "
                 "cross-channel inverse covariance layout only.")
-        invC_full = psd_flat.reshape(-1, nch, nch, Nf_data, g["Nt_active"])
+        invC_full = psd_flat.reshape(-1, nch, nch, Nf_psd, g["Nt_active"])
         sl = xp.asarray(slots)
         ch = xp.arange(nch)
-        if slab_Nf is not None:
+        if psd_rows is not None:
+            _pr = xp.asarray(psd_rows)
+            rows = _pr[sl]
+            invC_w = invC_full[rows[:, None, None, None], ch[None, :, None, None],
+                               ch[None, None, :, None],
+                               layers[:, None, None, :], :]
+            if slab_Nf is not None:
+                res_w = res_full[sl]
+            else:
+                res_w = res_full[sl[:, None, None], ch[None, :, None],
+                                 layers[:, None, :], :]
+        elif slab_Nf is not None:
             # Slab == window: a plain slot pick copies only the narrow slabs.
             res_w = res_full[sl]
             invC_w = invC_full[sl]
@@ -1472,6 +1493,14 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         # ---- data-side windows from the holder's slabs --------------------
         di = int(data_index)
         ni = di if noise_index is None else int(noise_index)
+        # Shared-psd MIRROR: a holder exposing ``psd_row_index`` keeps the
+        # parent's per-walker full-band invC plane in ``linear_psd_arr[0]``;
+        # the slot's row is the map entry (full-band layout on both sides,
+        # so only the row pick changes).
+        _psd_rows = getattr(wdm_holder, "psd_row_index", None)
+        if _psd_rows is not None:
+            _pr = _psd_rows.get() if hasattr(_psd_rows, "get") else _psd_rows
+            ni = int(np.asarray(_pr)[ni])
         res_full = xp.asarray(wdm_holder.linear_data_arr[0]).reshape(
             -1, nch, g["Nf_active"], g["Nt_active"])[di]
         psd_flat = xp.asarray(wdm_holder.linear_psd_arr[0])

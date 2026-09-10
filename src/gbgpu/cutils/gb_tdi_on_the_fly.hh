@@ -310,7 +310,10 @@ class GBComputationGroup{
         int *group_m_lo, int *group_m_hi, int n_groups,
         int m_band_half_width,
         int Nf_slab = 0, int *slab_min_f = nullptr,   // task-b per-band slab
-        double *d_h_im_out = nullptr);                // fused phase-max quadrature
+        double *d_h_im_out = nullptr,                 // fused phase-max quadrature
+        // Shared-psd mirror (0 / null = off = per-slot invC slabs): invC is
+        // the parent's per-walker full-band plane, invC_row[slot] its row.
+        int invC_Nf = 0, int *invC_row = nullptr);
 
     void gb_wdm_het_swap_ll_wrap(
         double *d_h_add_out, double *d_h_remove_out,
@@ -336,7 +339,8 @@ class GBComputationGroup{
         int m_band_half_width,
         int Nf_slab = 0, int *slab_min_f = nullptr,   // task-b per-band slab
         double *d_h_add_im_out = nullptr,             // fused phase-max
-        double *add_remove_im_out = nullptr);         //   quadratures (ADD-linear)
+        double *add_remove_im_out = nullptr,          //   quadratures (ADD-linear)
+        int invC_Nf = 0, int *invC_row = nullptr);    // shared-psd mirror (0/null = off)
 
     // F-stat (chunked-heterodyne). Builds the 4 Cornish & Crowder '05 basis
     // filters per binary and writes:
@@ -372,7 +376,8 @@ class GBComputationGroup{
         // > 0 routes the basis TD-builds through the shared-mem cubic
         // spline cache, so the F-stat scores with the same orbit
         // approximation as the likelihood.
-        int N_cp_orbit = 0);
+        int N_cp_orbit = 0,
+        int invC_Nf = 0, int *invC_row = nullptr);    // shared-psd mirror (0/null = off)
 
     // Spline-path mirrors. `coarse_dt` (seconds) sets the coarse-grid spacing
     // for the cubic-spline window builder (smaller -> more accurate / more

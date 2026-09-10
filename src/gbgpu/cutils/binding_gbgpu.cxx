@@ -310,7 +310,8 @@ void GBComputationGroupWrap::gb_wdm_het_get_ll(
     array_type<int> group_m_lo, array_type<int> group_m_hi, int n_groups,
     int m_band_half_width,
     int Nf_slab, array_type<int> slab_min_f,   // task-b per-band slab (0/empty = off)
-    array_type<double> d_h_im_out)             // fused phase-max quadrature (empty = off)
+    array_type<double> d_h_im_out,             // fused phase-max quadrature (empty = off)
+    int invC_Nf, array_type<int> invC_row)     // shared-psd mirror (0/empty = off)
 {
     const int gn = (n_groups > 0) ? n_groups : 1;
     // Task-b: per-band slab covers Nf_slab layers (full Nf_active when Nf_slab<=0).
@@ -318,6 +319,9 @@ void GBComputationGroupWrap::gb_wdm_het_get_ll(
     const int Nf_active = (Nf_slab > 0)
         ? Nf_slab : wdm_settings_wrap->wdm_settings->Nf_active;
     const int Nt_active = wdm_settings_wrap->wdm_settings->Nt_active;
+    // Shared-psd mirror: invC rows span invC_Nf layers (the parent's full
+    // active band) instead of the per-slot slab extent.
+    const int Nf_invC = (invC_Nf > 0) ? invC_Nf : Nf_active;
     gb_wdm_het_get_ll_wrap(
         return_pointer_and_check_length(d_h_out, "d_h_out", num_bin, 1),
         return_pointer_and_check_length(h_h_out, "h_h_out", num_bin, 1),
@@ -341,13 +345,14 @@ void GBComputationGroupWrap::gb_wdm_het_get_ll(
                    "data_d: length must be a positive multiple of "
                    "nchannels * Nf_active * Nt_active.")),
         (invC.size() % ((tdi_type == TDI_XYZ)
-                            ? (size_t) nchannels * nchannels * Nf_active * Nt_active
-                            : (size_t) nchannels * Nf_active * Nt_active) == 0
+                            ? (size_t) nchannels * nchannels * Nf_invC * Nt_active
+                            : (size_t) nchannels * Nf_invC * Nt_active) == 0
              && invC.size() > 0
              ? return_pointer(invC, "invC")
              : throw std::invalid_argument(
                    "invC: length must be a positive multiple of the "
-                   "per-slab inverse-covariance size.")),
+                   "per-row inverse-covariance size (per-slot slab, or the "
+                   "per-walker full-band plane when invC_Nf > 0).")),
         n_chunks, num_bin, nparams,
         Nt_sub, log2_Nt_sub,
         N_sparse, log2_N_sparse,
@@ -365,7 +370,12 @@ void GBComputationGroupWrap::gb_wdm_het_get_ll(
         (d_h_im_out.size() > 0
              ? return_pointer_and_check_length(d_h_im_out, "d_h_im_out",
                                                num_bin, 1)
-             : nullptr));
+             : nullptr),
+        // Shared-psd mirror (empty row map = off; the kernel then reads
+        // per-slot slabs exactly as before).
+        invC_Nf,
+        (invC_row.size() > 0
+             ? return_pointer(invC_row, "invC_row") : nullptr));
 }
 
 void GBComputationGroupWrap::gb_wdm_het_swap_ll(
@@ -393,7 +403,8 @@ void GBComputationGroupWrap::gb_wdm_het_swap_ll(
     int m_band_half_width,
     int Nf_slab, array_type<int> slab_min_f,   // task-b per-band slab (0/empty = off)
     array_type<double> d_h_add_im_out,         // fused phase-max quadratures
-    array_type<double> add_remove_im_out)      //   (ADD-linear; empty = off)
+    array_type<double> add_remove_im_out,      //   (ADD-linear; empty = off)
+    int invC_Nf, array_type<int> invC_row)     // shared-psd mirror (0/empty = off)
 {
     const int gn = (n_groups > 0) ? n_groups : 1;
     // Task-b: per-band slab covers Nf_slab layers (full Nf_active when Nf_slab<=0).
@@ -401,6 +412,7 @@ void GBComputationGroupWrap::gb_wdm_het_swap_ll(
     const int Nf_active = (Nf_slab > 0)
         ? Nf_slab : wdm_settings_wrap->wdm_settings->Nf_active;
     const int Nt_active = wdm_settings_wrap->wdm_settings->Nt_active;
+    const int Nf_invC = (invC_Nf > 0) ? invC_Nf : Nf_active;   // shared-psd mirror
     gb_wdm_het_swap_ll_wrap(
         return_pointer_and_check_length(d_h_add_out,       "d_h_add_out",       num_bin, 1),
         return_pointer_and_check_length(d_h_remove_out,    "d_h_remove_out",    num_bin, 1),
@@ -428,13 +440,14 @@ void GBComputationGroupWrap::gb_wdm_het_swap_ll(
                    "data_d: length must be a positive multiple of "
                    "nchannels * Nf_active * Nt_active.")),
         (invC.size() % ((tdi_type == TDI_XYZ)
-                            ? (size_t) nchannels * nchannels * Nf_active * Nt_active
-                            : (size_t) nchannels * Nf_active * Nt_active) == 0
+                            ? (size_t) nchannels * nchannels * Nf_invC * Nt_active
+                            : (size_t) nchannels * Nf_invC * Nt_active) == 0
              && invC.size() > 0
              ? return_pointer(invC, "invC")
              : throw std::invalid_argument(
                    "invC: length must be a positive multiple of the "
-                   "per-slab inverse-covariance size.")),
+                   "per-row inverse-covariance size (per-slot slab, or the "
+                   "per-walker full-band plane when invC_Nf > 0).")),
         n_chunks, num_bin, nparams,
         Nt_sub, log2_Nt_sub,
         N_sparse, log2_N_sparse,
@@ -459,7 +472,10 @@ void GBComputationGroupWrap::gb_wdm_het_swap_ll(
         (add_remove_im_out.size() > 0
              ? return_pointer_and_check_length(add_remove_im_out,
                                                "add_remove_im_out", num_bin, 1)
-             : nullptr));
+             : nullptr),
+        invC_Nf,
+        (invC_row.size() > 0
+             ? return_pointer(invC_row, "invC_row") : nullptr));
 }
 
 void GBComputationGroupWrap::gb_wdm_het_get_fstat_ll(
@@ -482,13 +498,15 @@ void GBComputationGroupWrap::gb_wdm_het_get_fstat_ll(
     double tukey_alpha, int grid_dim, int m_band_half_width,
     int Nf_slab, array_type<int> slab_min_f,   // task-b per-band slab (0/empty = off)
     int fstat_fold,                            // basis-filter fold (0 = off = default)
-    int N_cp_orbit)                            // orbit spline cache (0 = off = default)
+    int N_cp_orbit,                            // orbit spline cache (0 = off = default)
+    int invC_Nf, array_type<int> invC_row)     // shared-psd mirror (0/empty = off)
 {
     // Task-b: per-band slab covers Nf_slab layers (full Nf_active when Nf_slab<=0).
     // The data_d/invC per-slab size checks below key off this extent.
     const int Nf_active = (Nf_slab > 0)
         ? Nf_slab : wdm_settings_wrap->wdm_settings->Nf_active;
     const int Nt_active = wdm_settings_wrap->wdm_settings->Nt_active;
+    const int Nf_invC = (invC_Nf > 0) ? invC_Nf : Nf_active;   // shared-psd mirror
     gb_wdm_het_get_fstat_ll_wrap(
         return_pointer_and_check_length(N_arr_re_out, "N_arr_re_out", num_bin, 4),
         return_pointer_and_check_length(N_arr_im_out, "N_arr_im_out", num_bin, 4),
@@ -514,13 +532,14 @@ void GBComputationGroupWrap::gb_wdm_het_get_fstat_ll(
                    "data_d: length must be a positive multiple of "
                    "nchannels * Nf_active * Nt_active.")),
         (invC.size() % ((tdi_type == TDI_XYZ)
-                            ? (size_t) nchannels * nchannels * Nf_active * Nt_active
-                            : (size_t) nchannels * Nf_active * Nt_active) == 0
+                            ? (size_t) nchannels * nchannels * Nf_invC * Nt_active
+                            : (size_t) nchannels * Nf_invC * Nt_active) == 0
              && invC.size() > 0
              ? return_pointer(invC, "invC")
              : throw std::invalid_argument(
                    "invC: length must be a positive multiple of the "
-                   "per-slab inverse-covariance size.")),
+                   "per-row inverse-covariance size (per-slot slab, or the "
+                   "per-walker full-band plane when invC_Nf > 0).")),
         n_chunks, num_bin, nparams,
         Nt_sub, log2_Nt_sub,
         N_sparse, log2_N_sparse,
@@ -530,7 +549,10 @@ void GBComputationGroupWrap::gb_wdm_het_get_fstat_ll(
         Nf_slab,
         (slab_min_f.size() > 0
              ? return_pointer(slab_min_f, "slab_min_f") : nullptr),
-        fstat_fold, N_cp_orbit);
+        fstat_fold, N_cp_orbit,
+        invC_Nf,
+        (invC_row.size() > 0
+             ? return_pointer(invC_row, "invC_row") : nullptr));
 }
 
 

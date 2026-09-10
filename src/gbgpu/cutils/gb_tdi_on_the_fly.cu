@@ -1908,7 +1908,8 @@ void GBComputationGroup::gb_wdm_het_get_ll_wrap(
     int *group_m_lo, int *group_m_hi, int n_groups,
     int m_band_half_width,
     int Nf_slab, int *slab_min_f,   // task-b per-band slab (0/null = off)
-    double *d_h_im_out)             // fused phase-max quadrature (null = off)
+    double *d_h_im_out,             // fused phase-max quadrature (null = off)
+    int invC_Nf, int *invC_row)     // shared-psd mirror (0/null = off)
 {
     wdm_het_get_ll_impl<GBTDIonTheFly>(
         d_h_out, h_h_out, orbits, tdi_config,
@@ -1923,7 +1924,7 @@ void GBComputationGroup::gb_wdm_het_get_ll_wrap(
         grid_dim, N_cp_sig, N_cp_orbit,
         binary_perm, group_starts, group_ends,
         group_m_lo, group_m_hi, n_groups, m_band_half_width,
-        Nf_slab, slab_min_f, d_h_im_out);
+        Nf_slab, slab_min_f, d_h_im_out, invC_Nf, invC_row);
 }
 
 void GBComputationGroup::gb_wdm_het_swap_ll_wrap(
@@ -1948,7 +1949,8 @@ void GBComputationGroup::gb_wdm_het_swap_ll_wrap(
     int m_band_half_width,
     int Nf_slab, int *slab_min_f,   // task-b per-band slab (0/null = off)
     double *d_h_add_im_out,         // fused phase-max quadratures
-    double *add_remove_im_out)      //   (ADD-linear terms; null = off)
+    double *add_remove_im_out,      //   (ADD-linear terms; null = off)
+    int invC_Nf, int *invC_row)     // shared-psd mirror (0/null = off)
 {
     wdm_het_swap_ll_impl<GBTDIonTheFly>(
         d_h_add_out, d_h_remove_out, add_add_out, remove_remove_out, add_remove_out,
@@ -1965,7 +1967,8 @@ void GBComputationGroup::gb_wdm_het_swap_ll_wrap(
         binary_perm, group_starts, group_ends,
         group_m_lo, group_m_hi, n_groups,
         pair_m_lo_b, pair_m_hi_b, m_band_half_width,
-        Nf_slab, slab_min_f, d_h_add_im_out, add_remove_im_out);
+        Nf_slab, slab_min_f, d_h_add_im_out, add_remove_im_out,
+        invC_Nf, invC_row);
 }
 
 
@@ -1989,7 +1992,8 @@ void GBComputationGroup::gb_wdm_het_get_fstat_ll_wrap(
     int grid_dim, int m_band_half_width,
     int Nf_slab, int *slab_min_f,   // task-b per-band slab (0/null = off)
     int fstat_fold,                 // basis-filter fold (0 = off = default)
-    int N_cp_orbit)                 // orbit spline cache (0 = off = default)
+    int N_cp_orbit,                 // orbit spline cache (0 = off = default)
+    int invC_Nf, int *invC_row)     // shared-psd mirror (0/null = off)
 {
     wdm_het_get_fstat_ll_impl<GBTDIonTheFly>(
         N_arr_re_out, N_arr_im_out, M_mat_re_out, M_mat_im_out,
@@ -2002,7 +2006,7 @@ void GBComputationGroup::gb_wdm_het_get_fstat_ll_wrap(
         nchannels, n_rfft_chunk,
         T_chunk, dt, T, t_ref, tdi_type, tukey_alpha,
         grid_dim, m_band_half_width,
-        Nf_slab, slab_min_f, fstat_fold, N_cp_orbit);
+        Nf_slab, slab_min_f, fstat_fold, N_cp_orbit, invC_Nf, invC_row);
 }
 
 

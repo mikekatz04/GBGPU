@@ -99,6 +99,12 @@ class GBWDMComputations(WDMComputationsBase):
     # boundary loud for the whole 09-01 kernel batch (per-m fold completion +
     # invC hoist ride the same recompile).
     _FSTAT_ORBIT_CACHE_KERNELS = True
+    # Shared-psd MIRROR trailing args (invC_Nf, invC_row) on get_ll / swap_ll
+    # / get_fstat_ll (2026-09-09; see WDMComputationsBase._PSD_MIRROR_KERNELS).
+    # Hard constant, passed unconditionally ((0, empty) = OFF = bit-identical
+    # per-slot addressing), so a stale .so is a loud TypeError -- this is the
+    # rebuild boundary for the psd-mirror kernel batch.
+    _PSD_MIRROR_KERNELS = True
     _WRAP_ATTR = "GBComputationGroupWrap"
     _METHOD_PREFIX = "gb_wdm_het"
     _NPARAMS = 9

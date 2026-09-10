@@ -723,7 +723,11 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         // task-b per-band slab (chunked_het.py always passes: 0 + empty = off).
         int Nf_slab, array_type<int> slab_min_f,
         // fused phase-max quadrature <d|h>(phi0+pi/2) (empty = off).
-        array_type<double> d_h_im_out);
+        array_type<double> d_h_im_out,
+        // shared-psd mirror (chunked_het.py always passes: 0 + empty = off).
+        // invC_Nf > 0: invC is the parent's per-walker full-band plane
+        // (invC_Nf layers, origin ind_min_f); invC_row[slot] = walker row.
+        int invC_Nf, array_type<int> invC_row);
 
     void gb_wdm_het_swap_ll(
         array_type<double> d_h_add_out, array_type<double> d_h_remove_out,
@@ -752,7 +756,9 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         int Nf_slab, array_type<int> slab_min_f,
         // fused phase-max quadratures (ADD-linear terms; empty = off).
         array_type<double> d_h_add_im_out,
-        array_type<double> add_remove_im_out);
+        array_type<double> add_remove_im_out,
+        // shared-psd mirror (chunked_het.py always passes: 0 + empty = off).
+        int invC_Nf, array_type<int> invC_row);
 
     void gb_wdm_het_get_fstat_ll(
         array_type<double> N_arr_re_out, array_type<double> N_arr_im_out,
@@ -781,7 +787,9 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         // Orbit spline-cache density per chunk (chunked_het.py always
         // passes; 0 = direct orbit lookups). Same contract as get_ll's
         // N_cp_orbit.
-        int N_cp_orbit);
+        int N_cp_orbit,
+        // shared-psd mirror (chunked_het.py always passes: 0 + empty = off).
+        int invC_Nf, array_type<int> invC_row);
 
     // Signal-heterodyne (v2 polyphase) -- Stage 1 (CPU-only):
     // takes precomputed rfft(Tukey * td_cand) as input. Production will move
