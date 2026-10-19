@@ -818,6 +818,18 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
         int rows_per_pass, array_type<int> start_freq_inds);
 
+    // info_out is num_bin * num_derivs^2, row-major, as for gb_stft_information_matrix.
+    void gb_dffr_information_matrix(
+        array_type<double> info_out,
+        KinematicsTableWrap *kinematics_wrap, STFTFresnelWrap *fresnel_wrap,
+        STFTDomainWrap *stft_wrap,
+        array_type<double> params_all, array_type<int> noise_index_all,
+        array_type<int> inds, array_type<double> param_eps,
+        int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins,
+        int tdi_generation, bool linear_envelope, bool first_order_delays,
+        double chirp_rate_floor, bool easy_central_difference, int rows_per_pass,
+        array_type<int> start_freq_inds);
+
     // Diagnostics of the DFFR response: the compact template and the segment table.
     void gb_dffr_fill_template(
         array_type<std::complex<double>> template_out, array_type<int> start_out,

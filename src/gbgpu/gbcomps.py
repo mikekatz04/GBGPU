@@ -1022,8 +1022,8 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
     or ``"dffr"``, the Direct Fast Fresnel Response, through the ``gb_dffr_*`` kernels on the
     kinematics table of the bound group (``cpp_kinematics``). DFFR takes ``first_order_delays``
     and ``chirp_rate_floor``, which the default response ignores. It computes the XYZ channels
-    only, needs the 1st or 2nd generation combinations of ``TDIConfig``, does not read ``T``,
-    ``window_factor``, ``freq_from_tdi_phase`` or ``use_midpoint``, and has no Fisher matrix yet.
+    only, needs the 1st or 2nd generation combinations of ``TDIConfig``, and does not read ``T``,
+    ``window_factor``, ``freq_from_tdi_phase``, ``use_midpoint`` or the Fisher's ``astro_track``.
     Usage and limits: ``docs/response/dffr/README.md`` in lisa-analysis-tools.
     """
 
@@ -1032,6 +1032,10 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
     # * F-statistic) on the GPU: the warp size. The CPU uses one row whatever this says.
     # TODO: the kernels are also built for 16 rows; timings on an A100 decide between the two.
     _DFFR_ROWS_PER_PASS = 32
+    # * Segment rows per pass of the DFFR Fisher matrix on the GPU: the tables of every stencil
+    # * template of 9 parameters fit an A100 block at 4 rows, not at 8. The CPU uses one row.
+    # TODO: the kernel is also built for 8 rows; timings on an A100 decide between the two.
+    _DFFR_FISHER_ROWS_PER_PASS = 4
 
     def __init__(self, stft_comps, T, t_ref=0.0, orbits=None, tdi_config=None,
                  force_backend=None, n_side_bins=2, window_factor=1.0,
@@ -1717,16 +1721,13 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         parameter ``k`` (zero row and column), and the returned matrices are exactly symmetric.
         ``linear_envelope`` as in :meth:`get_ll_grad_stft`.
 
+        For ``response="dffr"`` every stencil template equals the ``fill_global_stft`` template of
+        its shifted parameters bit for bit. DFFR has one chirp model, so ``astro_track`` does not
+        apply to it.
+
         Returns:
             ``(num_bin, num_derivs, num_derivs)`` real Fisher matrices.
-
-        Raises:
-            NotImplementedError: For ``response="dffr"``, which has no Fisher kernel yet.
         """
-        if self._dffr:
-            raise NotImplementedError(
-                "STFTGBComputations.information_matrix: the DFFR response has no Fisher matrix "
-                "yet; the TDI-on-the-fly response (response='tdi_on_the_fly') provides one.")
         linear_envelope = self._derivative_envelope(linear_envelope)
         if convert_to_ra_dec:
             raise ValueError(
@@ -1764,17 +1765,27 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         freq_from_tdi_phase = False if astro_track else bool(self.freq_from_tdi_phase)
         inds_arr = xp.asarray(inds, dtype=xp.int32)
         eps_arr = xp.ascontiguousarray(xp.asarray(eps_theta, dtype=xp.float64))
-        with self._envelope_context(linear_envelope, group=group):
-            self.backend.GBComputationGroupWrap().gb_stft_information_matrix(
+        if self._dffr:
+            self.backend.GBComputationGroupWrap().gb_dffr_information_matrix(
                 info_flat,
-                self.cpp_orbits, self.cpp_tdi_config,
-                group.cpp_fresnel, group.cpp_domain,
+                *self._dffr_grid(group),
                 p.reshape(-1), noise_index, inds_arr, eps_arr,
-                num_bin, nparams, num_derivs, self.T, self.t_ref,
-                self.n_side_bins, self.window_factor, freq_from_tdi_phase,
-                bool(easy_central_difference),
+                num_bin, nparams, num_derivs, *self._dffr_settings(linear_envelope, group),
+                bool(easy_central_difference), self._DFFR_FISHER_ROWS_PER_PASS,
                 self._resolve_start_freq_inds(start_freq_inds),
             )
+        else:
+            with self._envelope_context(linear_envelope, group=group):
+                self.backend.GBComputationGroupWrap().gb_stft_information_matrix(
+                    info_flat,
+                    self.cpp_orbits, self.cpp_tdi_config,
+                    group.cpp_fresnel, group.cpp_domain,
+                    p.reshape(-1), noise_index, inds_arr, eps_arr,
+                    num_bin, nparams, num_derivs, self.T, self.t_ref,
+                    self.n_side_bins, self.window_factor, freq_from_tdi_phase,
+                    bool(easy_central_difference),
+                    self._resolve_start_freq_inds(start_freq_inds),
+                )
 
         info = info_flat.reshape(num_bin, num_derivs, num_derivs)
         if scales is not None:

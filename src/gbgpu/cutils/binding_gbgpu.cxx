@@ -656,6 +656,29 @@ void GBComputationGroupWrap::gb_dffr_swap_ll_grad(
         rows_per_pass, stft_start_freq_pointer(start_freq_inds));
 }
 
+void GBComputationGroupWrap::gb_dffr_information_matrix(
+    array_type<double> info_out,
+    KinematicsTableWrap *kinematics_wrap, STFTFresnelWrap *fresnel_wrap,
+    STFTDomainWrap *stft_wrap,
+    array_type<double> params_all, array_type<int> noise_index_all,
+    array_type<int> inds, array_type<double> param_eps,
+    int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins,
+    int tdi_generation, bool linear_envelope, bool first_order_delays,
+    double chirp_rate_floor, bool easy_central_difference, int rows_per_pass,
+    array_type<int> start_freq_inds)
+{
+    gb_dffr_information_matrix_wrap(
+        return_pointer_and_check_length(info_out, "info_out", num_derivs * num_derivs, num_bin),
+        &kinematics_wrap->table, fresnel_wrap->fresnel, stft_wrap->domain,
+        return_pointer_and_check_length(params_all, "params_all", nparams, num_bin),
+        return_pointer_and_check_length(noise_index_all, "noise_index_all", num_bin, 1),
+        return_pointer_and_check_length(inds, "inds", num_derivs, 1),
+        return_pointer_and_check_length(param_eps, "param_eps", nparams, 1),
+        num_bin, nparams, num_derivs, t_ref, n_side_bins, tdi_generation,
+        linear_envelope, first_order_delays, chirp_rate_floor, easy_central_difference,
+        rows_per_pass, stft_start_freq_pointer(start_freq_inds));
+}
+
 void GBComputationGroupWrap::gb_dffr_fill_template(
     array_type<std::complex<double>> template_out, array_type<int> start_out,
     KinematicsTableWrap *kinematics_wrap, STFTFresnelWrap *fresnel_wrap,
@@ -1464,6 +1487,12 @@ void gbgpu_part(nb::module_ &m) {
     .def("gb_dffr_swap_ll_grad", &GBComputationGroupWrap::gb_dffr_swap_ll_grad,
          "DFFR GB swap_ll_grad: (grad_add, grad_remove) of the swap scalar, as "
          "gb_stft_swap_ll_grad. rows_per_pass (32 or 16) as for gb_dffr_swap_ll.")
+    .def("gb_dffr_information_matrix", &GBComputationGroupWrap::gb_dffr_information_matrix,
+         "DFFR GB Fisher matrix per source with the estimator of gb_stft_information_matrix: "
+         "four-point (or two-point) central differences of the DFFR template over the parameters "
+         "in inds, each stencil template equal to its fill_global template. info_out layout "
+         "[num_bin, num_derivs, num_derivs]; param_eps[inds[d]] <= 0 gives a zero row and column. "
+         "rows_per_pass (4 or 8) sets the segment rows per pass on the GPU.")
     .def("gb_dffr_fill_template", &GBComputationGroupWrap::gb_dffr_fill_template,
          "Diagnostic: the compact DFFR template (num_bin, 3, num_times, 2 n_side_bins + 1) of "
          "every binary from its band start per segment, and the band starts (num_bin, num_times). "

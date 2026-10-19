@@ -43,6 +43,15 @@ bool gb_dffr_half_rows(int rows_per_pass)
     return rows_per_pass == 16;
 }
 
+// * True for the 8-row Fisher tables, whose default is 4 rows; on the CPU both are one row.
+bool gb_dffr_fisher_double_rows(int rows_per_pass)
+{
+    if (rows_per_pass != 4 && rows_per_pass != 8)
+        throw std::invalid_argument("gb_dffr: rows_per_pass of the Fisher matrix must be 4 or 8, "
+                                    "got " + std::to_string(rows_per_pass) + ".");
+    return rows_per_pass == 8;
+}
+
 }  // namespace
 
 // ! Each entry point checks its arguments before it returns on an empty batch, and launches
@@ -189,6 +198,30 @@ void gb_dffr_swap_ll_grad_wrap(
             grad_add_out, grad_remove_out, inputs, stft_launch, params_add_all, params_remove_all,
             data_index_all, noise_index_all, param_eps_add, param_eps_remove, num_bin, nparams,
             n_side_bins, start_freq_inds);
+}
+
+void gb_dffr_information_matrix_wrap(
+    double *info_out,
+    KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
+    double *params_all, int *noise_index_all, int *inds, double *param_eps,
+    int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins, int tdi_generation,
+    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool easy_central_difference, int rows_per_pass, int *start_freq_inds)
+{
+    STFTDomain *stft_launch = nullptr;
+    const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
+                                       tdi_generation, linear_envelope, first_order_delays,
+                                       chirp_rate_floor, &stft_launch);
+    const bool double_rows = gb_dffr_fisher_double_rows(rows_per_pass);
+    // ? The launcher checks inds and the counts before it returns on an empty batch.
+    if (double_rows)
+        dffr_information_matrix<GBDFFRSource, DFFR_FISHER_ROWS_PER_PASS_DOUBLE>(
+            info_out, inputs, stft_launch, params_all, noise_index_all, inds, param_eps, num_bin,
+            nparams, num_derivs, easy_central_difference, start_freq_inds);
+    else
+        dffr_information_matrix<GBDFFRSource, DFFR_FISHER_ROWS_PER_PASS>(
+            info_out, inputs, stft_launch, params_all, noise_index_all, inds, param_eps, num_bin,
+            nparams, num_derivs, easy_central_difference, start_freq_inds);
 }
 
 void gb_dffr_fill_template_wrap(

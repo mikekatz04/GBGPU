@@ -573,6 +573,24 @@ class STFTGBFisherKernelTest(_STFTGBFixture):
         with self.assertRaises(ValueError):
             gb.information_matrix(params, group, inds=[0, 9], noise_index=noise_index)
 
+    def test_exact_amplitude_and_phase_entries(self):
+        """h is linear in A, and phi0 rotates its phase, so F_AA A^2 and F_phi0phi0 equal (h|h) and
+        F_A,phi0 vanishes. (h|h) comes from the astro track, the chirp the Fisher differences."""
+        gb, group = self._fisher_case()
+        params, noise_index = self._params(gb)
+        info = np.asarray(gb.information_matrix(params, group, inds=[0, 4], noise_index=noise_index))
+        astro = self._gb(group, n_side_bins=3, freq_from_tdi_phase=False)
+        astro.get_ll_stft(params, noise_index=noise_index)
+        h_h = np.asarray(astro.h_h_out).real
+        # ? The stencil is exact for a linear amplitude. The phase step of 1e-6 rad is added to
+        # ? phases of up to 1.4e4 rad on this fixture, whose rounding leaves the realised step off by
+        # ? up to 9e-7 of itself, and the TDI combination enlarges it: measured 1.4e-6 (2026-10-19).
+        bound = 1e-5
+        np.testing.assert_allclose(info[:, 0, 0] * params[:, 0] ** 2, h_h, rtol=bound, atol=0)
+        np.testing.assert_allclose(info[:, 1, 1], h_h, rtol=bound, atol=0)
+        cross = np.abs(info[:, 0, 1]) / np.sqrt(info[:, 0, 0] * info[:, 1, 1])
+        self.assertLess(float(cross.max()), bound)
+
     def test_carrier_crossing_does_not_inflate(self):
         gb, group = self._fisher_case()
         params, noise_index = self._boundary_pair()

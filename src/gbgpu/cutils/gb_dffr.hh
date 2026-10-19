@@ -67,6 +67,17 @@ void gb_dffr_swap_ll_grad_wrap(
     bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
     int rows_per_pass, int *start_freq_inds);
 
+// The Fisher matrices (num_bin, num_derivs, num_derivs) with the estimator of
+// gb_stft_information_matrix: steps param_eps[inds[d]], four-point stencil or two-point with
+// easy_central_difference. rows_per_pass is 4 or 8 on the GPU; the CPU uses one row.
+void gb_dffr_information_matrix_wrap(
+    double *info_out,
+    KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
+    double *params_all, int *noise_index_all, int *inds, double *param_eps,
+    int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins, int tdi_generation,
+    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool easy_central_difference, int rows_per_pass, int *start_freq_inds);
+
 // Diagnostics: the compact template (num_bin, 3, NT, 2 n_side_bins + 1) with the band starts
 // (num_bin, NT), and every bin-independent quantity of the segment table.
 void gb_dffr_fill_template_wrap(

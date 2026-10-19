@@ -16,18 +16,24 @@ compare them with the comp, to check their own arguments, and for the 16-row til
 * The envelope of the gradients, device replicas, and DFFR against the existing response on the
   same fixture, both TDI generations: a sign, a conjugation or a factor 2 in either would show in
   the overlap or the norm ratio.
+* The Fisher matrix against the reference Fisher of ``gbgpu.testing``, whose fill_global templates
+  each stencil template of the kernel equals bit for bit; its exact amplitude and phase entries;
+  subsets, window starts and frozen steps; a carrier crossing and a chirp that changes sign; and
+  the parameters the source model declares free of the reception states.
 * Argument checks, and the CUDA backend against the CPU backend (skipped without a usable GPU).
 """
 
 import unittest
 
 import numpy as np
+
 from lisatools.domaincomputation import KINEMATICS_TABLE_FIELDS
 from lisatools.domains import get_stft_settings
 from lisatools.response.tdiconfig import TDIConfig
 
 try:
     from gbgpu.gbcomps import STFTGBComputations
+    from gbgpu.testing import stft_information_matrix_reference
 
     HAVE_STFT_GB = True
 except (ImportError, ModuleNotFoundError):
@@ -60,6 +66,19 @@ OVERLAP_BOUND = 0.99
 NORM_RATIO_BOUNDS = (0.9, 1.1)
 # ? CUDA against CPU, provisional until a first GPU run measures the differences.
 GPU_RELATIVE_BOUND = 1e-12
+#: The parameters of the global fit's GB proposal: fddot is filled, not sampled.
+TEST_INDS = [0, 1, 2, 4, 5, 6, 7, 8]
+# ? The kernel and the reference Fisher difference the same templates, bit for bit, so only the
+# ? order of the contraction separates them; the existing kernel measured 2.9e-15 on its fixture.
+FISHER_BOUND = 1e-13
+# ? F_AA A^2 and F_phi0phi0 against (h|h). The stencil is exact for an amplitude that enters
+# ? linearly, but the phase step of 1e-6 rad is added to phases of up to 1.4e4 rad on this fixture,
+# ? whose rounding (half an ulp, 9e-13 rad) leaves the realised step off by up to 9e-7 of itself:
+# ? measured 2.1e-7 here and 1.4e-6 in the existing response (2026-10-19).
+EXACT_ENTRY_BOUND = 1e-5
+# ? CUDA Fisher against the CPU and the reference, provisional: a template that rounds differently
+# ? on the device enters the differences divided by the step, about 1e-9 in fdot on 8 parameters.
+GPU_FISHER_BOUND = 1e-7
 
 
 def _host(array):
@@ -83,16 +102,19 @@ def _settings(backend_name):
 
 class _StftCompsShim:
     """Stand-in for STFTComputationGroup: ``cpp_fresnel``, ``cpp_domain``, ``d_d``, the group's
-    ``linear_envelope`` and ``tdi_type``, and ``cpp_kinematics``, which returns a table built by
-    the test and records the orbits it was asked for."""
+    ``linear_envelope``, ``tdi_type`` and ``num_noise``, and ``cpp_kinematics``, which returns a
+    table built by the test and records the orbits it was asked for."""
 
-    def __init__(self, cpp_fresnel, cpp_domain, table, linear_envelope, tdi_type, d_d=None):
+    def __init__(
+        self, cpp_fresnel, cpp_domain, table, linear_envelope, tdi_type, d_d=None, num_noise=1
+    ):
         self.cpp_fresnel = cpp_fresnel
         self.cpp_domain = cpp_domain
         self.table = table
         self.linear_envelope = linear_envelope
         self.tdi_type = tdi_type
         self.d_d = d_d
+        self.num_noise = num_noise
         self.orbits_requested = None
 
     def cpp_kinematics(self, cpp_orbits):
@@ -373,6 +395,72 @@ class _DFFRCase:
         )
         return _host(grad_add).reshape(num_bin, 9), _host(grad_remove).reshape(num_bin, 9)
 
+    def entry_information_matrix(
+        self,
+        params,
+        eps,
+        inds=None,
+        noise_index=None,
+        easy_central_difference=False,
+        rows_per_pass=4,
+        starts=None,
+    ):
+        batch = self._params(params)
+        num_bin = batch.shape[0]
+        inds = list(range(9)) if inds is None else list(inds)
+        noise_index = np.zeros(num_bin) if noise_index is None else noise_index
+        info = self.xp.zeros(num_bin * len(inds) ** 2)
+        self.wrap.gb_dffr_information_matrix(
+            info,
+            *self._grid(),
+            batch.reshape(-1),
+            self.xp.asarray(np.asarray(noise_index, dtype=np.int32)),
+            self.xp.asarray(np.asarray(inds, dtype=np.int32)),
+            self.xp.asarray(eps, dtype=np.float64),
+            num_bin,
+            9,
+            len(inds),
+            *self.knobs,
+            easy_central_difference,
+            rows_per_pass,
+            self._cells(starts),
+        )
+        return _host(info).reshape(num_bin, len(inds), len(inds))
+
+    def segment_table(self, params):
+        """Effective frequencies, chirp rates (num_bin, NT, 3) and band starts (num_bin, NT)."""
+        batch = self._params(params)
+        num_bin = batch.shape[0]
+        segments = num_bin * self.settings.NT
+        outputs = dict(
+            effective_frequency=self.xp.zeros(segments * 3),
+            chirp_rate=self.xp.zeros(segments * 3),
+            reference_phasor=self.xp.zeros(segments * 3, dtype=np.complex128),
+            link_amplitude=self.xp.zeros(segments * 6, dtype=np.complex128),
+            envelope_slope=self.xp.zeros(segments * 6, dtype=np.complex128),
+            emission_phasor=self.xp.zeros(segments * 6, dtype=np.complex128),
+            emission_frequency=self.xp.zeros(segments * 6),
+            tdi_weights=self.xp.zeros(segments * 18, dtype=np.complex128),
+            start_freq_ind=self.xp.zeros(segments, dtype=np.int32),
+        )
+        self.wrap.gb_dffr_segment_table(
+            *outputs.values(), *self._grid(), batch.reshape(-1), num_bin, 9, *self.knobs
+        )
+
+        def per_segment(name, width):
+            values = _host(outputs[name]).reshape(num_bin, self.settings.NT, width)
+            return values[..., 0] if width == 1 else values
+
+        return {
+            name: per_segment(name, width)
+            for name, width in (
+                ("effective_frequency", 3),
+                ("chirp_rate", 3),
+                ("emission_frequency", 6),
+                ("start_freq_ind", 1),
+            )
+        }
+
     def fill_template(self, params):
         """Compact templates (num_bin, 3, NT, band) and band starts (num_bin, NT)."""
         batch = self._params(params)
@@ -470,6 +558,14 @@ class DFFRWiringTest(unittest.TestCase):
                     "swap_ll_grad": (
                         case.swap_ll_grad(batch, batch_remove, GRAD_EPS, GRAD_EPS, starts),
                         case.entry_swap_ll_grad(batch, batch_remove, GRAD_EPS, GRAD_EPS, starts),
+                    ),
+                    "information_matrix": (
+                        _host(case.comp.information_matrix(batch, start_freq_inds=starts)),
+                        case.entry_information_matrix(
+                            batch,
+                            case.comp._information_matrix_steps(9, None, None, 1e-6)[0],
+                            starts=starts,
+                        ),
                     ),
                 }
                 for name, (comp_values, entry_values) in pairs.items():
@@ -737,6 +833,275 @@ class DFFRAgainstExistingResponseTest(unittest.TestCase):
                 )
 
 
+class _FisherShim(_StftCompsShim):
+    """The shim plus what the reference Fisher reads from a computation group: the grid, the
+    inverse CSD rows it contracts against, and their count."""
+
+    def __init__(self, cpp_fresnel, cpp_domain, table, linear_envelope, inv_c, grid, num_noise):
+        super().__init__(
+            cpp_fresnel, cpp_domain, table, linear_envelope, "XYZ", num_noise=num_noise
+        )
+        self.invC_arr = inv_c
+        self.settings = grid
+        self.num_channels = 3
+
+    def _owned_cpp_array(self, name, arr, dtype):
+        return arr
+
+
+class _DFFRFisherCase(_DFFRCase):
+    """A DFFR case whose domain holds two random Hermitian positive-definite inverse CSDs, the
+    rows the Fisher matrix contracts against, on the full grid or on a window of it."""
+
+    NUM_NOISE = 2
+
+    def __init__(self, backend_name, start_bin=0, trim_bins=0, **options):
+        self.start_bin, self.trim_bins = start_bin, trim_bins
+        super().__init__(backend_name, **options)
+
+    def _shim(self, window_alpha, use_midpoint, tdi_type, linear_envelope):
+        settings, backend, xp = self.settings, self.comp.backend, self.xp
+        nt, nch, num_noise = settings.NT, 3, self.NUM_NOISE
+        nf_full = settings.NF_active
+        rng = np.random.default_rng(7)
+        raw = rng.standard_normal((num_noise, nt, nf_full, nch, nch)) + 1j * rng.standard_normal(
+            (num_noise, nt, nf_full, nch, nch)
+        )
+        hpd = raw @ np.conj(np.swapaxes(raw, -1, -2)) + nch * np.eye(nch)
+        nf = nf_full - self.start_bin - self.trim_bins
+        # * A window is the full-grid inverse CSD sliced in frequency.
+        inv_c = np.transpose(hpd, (0, 3, 4, 1, 2))[..., self.start_bin : self.start_bin + nf]
+        inv_c = xp.asarray(np.ascontiguousarray(inv_c))
+        data = xp.zeros((num_noise, nch, nt, nf), dtype=np.complex128)
+        domain = backend.STFTDomainWrap(
+            nt,
+            nf,
+            nch,
+            settings.t0,
+            settings.min_freq,
+            settings.max_freq,
+            settings.dt,
+            settings.df,
+            data.reshape(-1),
+            inv_c.reshape(-1),
+            num_noise,
+            num_noise,
+            backend.TDITypeDict[tdi_type],
+        )
+        fresnel = backend.STFTFresnelWrap(
+            nt,
+            nf,
+            nch,
+            settings.t0,
+            settings.min_freq,
+            settings.max_freq,
+            settings.dt,
+            settings.df,
+            window_alpha=window_alpha,
+            use_midpoint=use_midpoint,
+        )
+        grid = type("Grid", (), {"NT": nt, "NF_active": nf, "df": settings.df})()
+        shim = _FisherShim(fresnel, domain, self.table, linear_envelope, inv_c, grid, num_noise)
+        shim.keepalive = (data, inv_c)
+        shim.data = data
+        return shim
+
+    def fisher(self, params, noise_index, **options):
+        return _host(self.comp.information_matrix(params, noise_index=noise_index, **options))
+
+    def reference(self, params, noise_index, **options):
+        # * None keeps the group's envelope, which fill_global_stft applies for DFFR.
+        return _host(
+            stft_information_matrix_reference(
+                self.comp, params, noise_index=noise_index, linear_envelope=None, **options
+            )
+        )
+
+
+@unittest.skipUnless(HAVE_STFT_GB, "requires the GBGPU STFT-GB build")
+class DFFRFisherTest(unittest.TestCase):
+    """The DFFR Fisher matrix against the reference Fisher built from fill_global templates, its
+    exact entries, and the arguments it shares with the Fisher of the existing response. Random
+    Hermitian positive-definite inverse CSDs exercise the cross-channel contraction; the metric is
+    |F_kernel - F_ref| / sqrt(F_ii F_jj), because off-diagonal entries pass through zero."""
+
+    backend_name = "cpu"
+    # * Two settings that differ in the TDI generation, the window, the envelope and the delays.
+    SETTINGS = (
+        dict(tdi="2nd generation", window_alpha=0.5, linear_envelope=True, first_order_delays=True),
+        dict(
+            tdi="1st generation", window_alpha=0.0, linear_envelope=False, first_order_delays=False
+        ),
+    )
+
+    def _case(self, **options):
+        return _DFFRFisherCase(self.backend_name, **options)
+
+    def _sources(self):
+        return np.stack([GB_PARAMS, GB_PARAMS_B]), np.array([0, 1], dtype=np.int32)
+
+    def _steps(self, case):
+        return case.comp._information_matrix_steps(9, None, None, 1e-6)[0]
+
+    def _assert_parity(self, kernel, reference, bound=FISHER_BOUND):
+        diagonal = np.abs(np.diagonal(reference, axis1=1, axis2=2))
+        self.assertTrue(np.all(diagonal > 0.0))
+        scale = np.sqrt(diagonal[:, :, None] * diagonal[:, None, :])
+        worst = float(np.max(np.abs(kernel - reference) / scale))
+        self.assertLess(worst, bound, msg=f"kernel left the reference by {worst:.3e}")
+
+    def test_parity_with_reference(self):
+        params, noise_index = self._sources()
+        for setting in self.SETTINGS:
+            case = self._case(**setting)
+            for options in (
+                {},
+                {"inds": TEST_INDS},
+                {"inds": TEST_INDS, "easy_central_difference": True},
+            ):
+                with self.subTest(**setting, **{key: str(value) for key, value in options.items()}):
+                    kernel = case.fisher(params, noise_index, **options)
+                    self._assert_parity(kernel, case.reference(params, noise_index, **options))
+                    np.testing.assert_array_equal(kernel, np.swapaxes(kernel, 1, 2))
+
+    def test_subset_is_submatrix(self):
+        case = self._case(**self.SETTINGS[0])
+        params, noise_index = self._sources()
+        subset = [1, 4, 7]
+        full = case.fisher(params, noise_index)
+        sub = case.fisher(params, noise_index, inds=subset)
+        np.testing.assert_array_equal(sub, full[:, subset][:, :, subset])
+
+    def test_window_reproduces_full_grid(self):
+        """Both sources lie inside a window one bin shorter at each end."""
+        full_case = self._case(**self.SETTINGS[0])
+        window_case = self._case(start_bin=1, trim_bins=1, **self.SETTINGS[0])
+        params, noise_index = self._sources()
+        full = full_case.fisher(params, noise_index, inds=TEST_INDS)
+        windowed = window_case.fisher(
+            params, noise_index, inds=TEST_INDS, start_freq_inds=np.array([1, 1], dtype=np.int32)
+        )
+        np.testing.assert_array_equal(windowed, full)
+
+    def test_nonpositive_step_freezes(self):
+        case = self._case(**self.SETTINGS[0])
+        params, noise_index = self._sources()
+        eps = self._steps(case).copy()
+        eps[5] = 0.0
+        info = case.fisher(params, noise_index, inds=TEST_INDS, param_eps=eps)
+        row = TEST_INDS.index(5)
+        self.assertEqual(float(np.abs(info[:, row, :]).max()), 0.0)
+        self.assertEqual(float(np.abs(info[:, :, row]).max()), 0.0)
+        self.assertGreater(float(np.abs(info[:, 0, 0]).min()), 0.0)
+
+    def test_exact_amplitude_and_phase_entries(self):
+        """h is linear in A, and phi0 multiplies it by exp(-i phi0), so F_AA A^2 and F_phi0phi0
+        equal (h|h) of get_ll and F_A,phi0 vanishes."""
+        params, noise_index = self._sources()
+        for setting in self.SETTINGS:
+            with self.subTest(**setting):
+                case = self._case(**setting)
+                info = case.fisher(params, noise_index, inds=[0, 4])
+                case.comp.get_ll_stft(params, noise_index=noise_index)
+                h_h = _host(case.comp.h_h_out).real
+                np.testing.assert_allclose(
+                    info[:, 0, 0] * params[:, 0] ** 2, h_h, rtol=EXACT_ENTRY_BOUND, atol=0
+                )
+                np.testing.assert_allclose(info[:, 1, 1], h_h, rtol=EXACT_ENTRY_BOUND, atol=0)
+                cross = np.abs(info[:, 0, 1]) / np.sqrt(info[:, 0, 0] * info[:, 1, 1])
+                self.assertLess(float(cross.max()), EXACT_ENTRY_BOUND)
+
+    def test_carrier_crossing_does_not_inflate(self):
+        """A source whose carrier sits on a half-bin boundary in one segment, so that the stencil
+        moves it across the bin there, against the same source a quarter bin away. All templates
+        of a derivative share the union of their bands; with each on its own band the boundary
+        source was 1e3 to 2e4 times larger in the existing response."""
+        case = self._case(**self.SETTINGS[0])
+        settings = case.settings
+        segment = settings.NT // 2
+        # ? Receivers of the links 12, 23, 31, 13, 32, 21: the carrier of segment_table's build.
+        receivers = np.array([0, 1, 2, 0, 2, 1])
+        boundary = GB_PARAMS.copy()
+        for _ in range(4):
+            table = case.segment_table(boundary)
+            carrier = np.mean(
+                0.5
+                * (
+                    table["effective_frequency"][0, segment, receivers]
+                    + table["emission_frequency"][0, segment]
+                )
+            )
+            offset = (carrier - settings.min_freq) / settings.df
+            boundary[1] += settings.min_freq + (np.floor(offset) + 0.5) * settings.df - carrier
+        away = boundary.copy()
+        away[1] += 0.25 * settings.df
+        # * The f0 stencil must cross the bin in that segment, or the test checks nothing.
+        step = self._steps(case)[1]
+        shifted = np.stack([boundary + sign * step * np.eye(9)[1] for sign in (1.0, -1.0)])
+        band_starts = case.segment_table(shifted)["start_freq_ind"][:, segment]
+        self.assertNotEqual(band_starts[0], band_starts[1])
+
+        info = case.fisher(np.stack([boundary, away]), np.zeros(2, dtype=np.int32), inds=TEST_INDS)
+        ratio = np.abs(np.diagonal(info[0])) / np.abs(np.diagonal(info[1]))
+        for index, name in enumerate(("amp", "f0", "fdot", "phi0", "iota", "psi", "lam", "beta")):
+            with self.subTest(parameter=name):
+                self.assertGreater(ratio[index], 0.5, msg=f"{name} diagonal collapsed")
+                self.assertLess(ratio[index], 2.0, msg=f"{name} diagonal inflated: {ratio[index]}")
+
+    def test_chirp_sign_change(self):
+        """A source whose reception chirp changes sign inside the fixture still equals the
+        reference: rows of both chirp signs in one pass."""
+        case = self._case(**self.SETTINGS[0])
+        longitudes = np.linspace(0.0, 2.0 * np.pi, 128, endpoint=False)
+        candidates = np.repeat(GB_PARAMS[None, :], longitudes.size, axis=0)
+        candidates[:, 7] = longitudes
+        chirp = case.segment_table(candidates)["chirp_rate"]
+        changes = np.any(np.diff(np.sign(chirp), axis=1) != 0, axis=(1, 2))
+        self.assertTrue(changes.any(), msg="no longitude of the scan changes the chirp sign")
+        source = candidates[int(np.argmax(changes))][None, :]
+        noise_index = np.zeros(1, dtype=np.int32)
+        kernel = case.fisher(source, noise_index, inds=TEST_INDS)
+        self.assertTrue(np.all(np.isfinite(kernel)))
+        self._assert_parity(kernel, case.reference(source, noise_index, inds=TEST_INDS))
+
+    def test_reception_invariant_parameters(self):
+        """A, phi0, iota and psi, which GBDFFRSource declares, leave every reception state's
+        effective frequency, chirp rate and band start unchanged bit for bit; the other five
+        parameters move the effective frequencies."""
+        case = self._case(**self.SETTINGS[0])
+        shifts = np.array([1e-24, 1e-9, 1e-19, 1e-26, 0.1, 0.1, 0.1, 0.1, 0.1])
+        reference = case.segment_table(GB_PARAMS)
+        for parameter in range(9):
+            shifted = GB_PARAMS.copy()
+            shifted[parameter] += shifts[parameter]
+            table = case.segment_table(shifted)
+            with self.subTest(parameter=parameter):
+                if parameter in (0, 4, 5, 6):
+                    for name in ("effective_frequency", "chirp_rate", "start_freq_ind"):
+                        np.testing.assert_array_equal(table[name], reference[name])
+                else:
+                    self.assertFalse(
+                        np.array_equal(
+                            table["effective_frequency"], reference["effective_frequency"]
+                        )
+                    )
+
+    def test_rejects_bad_arguments(self):
+        case = self._case(**self.SETTINGS[0])
+        params, noise_index = self._sources()
+        with self.assertRaises(ValueError):
+            case.fisher(params, noise_index, inds=[0, 9])
+        # * The entry point checks the index itself, and its rows per pass.
+        with self.assertRaises(ValueError):
+            case.entry_information_matrix(
+                params, self._steps(case), inds=[0, 9], noise_index=noise_index
+            )
+        with self.assertRaises(ValueError):
+            case.entry_information_matrix(
+                params, self._steps(case), noise_index=noise_index, rows_per_pass=6
+            )
+
+
 class _AETGroup:
     """A group of another TDI set, as a construction-time check sees it."""
 
@@ -802,16 +1167,12 @@ class DFFRArgumentTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             case.comp.get_ll_stft(GB_PARAMS)
 
-    def test_information_matrix_raises(self):
-        case = _DFFRCase("cpu")
-        with self.assertRaises(NotImplementedError):
-            case.comp.information_matrix(GB_PARAMS)
-
 
 def _cuda_backend_name():
     """Name of a usable CUDA backend, or None."""
     try:
         import cupy
+
         import lisatools
 
         if cupy.cuda.runtime.getDeviceCount() < 1:
@@ -862,6 +1223,41 @@ class DFFRGPUTest(DFFRSelfConsistencyTest):
                 self.assertLessEqual(
                     np.abs(first - second).max(), GPU_RELATIVE_BOUND * np.abs(second).max()
                 )
+
+
+@unittest.skipUnless(HAVE_STFT_GB and _cuda_backend_name(), "requires a usable CUDA backend")
+class DFFRGPUFisherTest(unittest.TestCase):
+    """The DFFR Fisher matrix on the CUDA backend: against the reference and the CPU, and the
+    4-row tables against the 8-row ones, per entry relative to sqrt(F_ii F_jj), on the
+    8 parameters of the global fit."""
+
+    def _assert_close(self, first, second):
+        diagonal = np.abs(np.diagonal(second, axis1=1, axis2=2))
+        scale = np.sqrt(diagonal[:, :, None] * diagonal[:, None, :])
+        self.assertLess(float(np.max(np.abs(first - second) / scale)), GPU_FISHER_BOUND)
+
+    def test_gpu_matches_reference_and_cpu(self):
+        params, noise_index = np.stack([GB_PARAMS, GB_PARAMS_B]), np.array([0, 1], dtype=np.int32)
+        setting = DFFRFisherTest.SETTINGS[0]
+        gpu = _DFFRFisherCase("gpu", **setting)
+        cpu = _DFFRFisherCase("cpu", **setting)
+        eps = cpu.comp._information_matrix_steps(9, None, None, 1e-6)[0]
+        kernel = gpu.fisher(params, noise_index, inds=TEST_INDS)
+        pairs = {
+            "reference": (kernel, gpu.reference(params, noise_index, inds=TEST_INDS)),
+            "cpu": (kernel, cpu.fisher(params, noise_index, inds=TEST_INDS)),
+            "rows": (
+                gpu.entry_information_matrix(
+                    params, eps, inds=TEST_INDS, noise_index=noise_index, rows_per_pass=8
+                ),
+                gpu.entry_information_matrix(
+                    params, eps, inds=TEST_INDS, noise_index=noise_index, rows_per_pass=4
+                ),
+            ),
+        }
+        for name, (first, second) in pairs.items():
+            with self.subTest(quantity=name):
+                self._assert_close(first, second)
 
 
 if __name__ == "__main__":

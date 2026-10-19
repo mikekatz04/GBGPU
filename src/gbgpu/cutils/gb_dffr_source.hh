@@ -15,6 +15,9 @@
 struct GBDFFRSource {
   static constexpr int num_components = 1;
   static constexpr int num_params = 9;
+  // * A, phi0, iota and psi: the amplitude, polarisation weights and the phase offset enter only the
+  // * link amplitudes and the phasors, never a frequency or chirp rate.
+  static constexpr unsigned reception_invariant_params = (1u << 0) | (1u << 4) | (1u << 5) | (1u << 6);
 
   // The launch inputs of the model: the epoch of the parameters, in the time frame of the orbits.
   struct Model {
