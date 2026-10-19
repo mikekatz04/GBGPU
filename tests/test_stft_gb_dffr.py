@@ -1,17 +1,21 @@
-"""Tests of the DFFR response of galactic binaries: the gb_dffr_* entry points of the backend.
+"""Tests of the DFFR response of galactic binaries: ``STFTGBComputations(response="dffr")``.
 
 The response runs on the consumers of the existing STFT response (lat_stft_kernels.hh) with the
-DFFR tile (lat_dffr_kernels.hh) and GBDFFRSource. Until ``STFTGBComputations`` selects it, the tests
-call the entry points through ``_DFFRCase``, with the arguments the comp will pass.
+DFFR tile (lat_dffr_kernels.hh) and GBDFFRSource, through the gb_dffr_* entry points of the
+backend. ``_DFFRCase`` calls the comp's methods; it calls the entry points directly only to
+compare them with the comp, to check their own arguments, and for the 16-row tiles.
 
+* Wiring: every comp method equals its entry point called with the expected arguments, bit for
+  bit, so a misplaced or ignored setting cannot pass unseen.
 * Self-consistency, as ``test_stft_gb.py`` checks the existing response: fill_global then the
   domain inner product equals get_ll; swap(A, A) equals get_ll(A) and relabelling add and remove
   swaps the terms; the F-statistic's N and M equal the get_ll and swap terms; both gradients equal
   host central differences, and eps <= 0 freezes a component.
 * The compact template equals the fill_global grid bit for bit, and swap on a union band of several
   bins equals the inner products of compact templates on that band.
-* DFFR against the existing response on the same fixture, both TDI generations: a sign, a
-  conjugation or a factor 2 in either would show in the overlap or the norm ratio.
+* The envelope of the gradients, device replicas, and DFFR against the existing response on the
+  same fixture, both TDI generations: a sign, a conjugation or a factor 2 in either would show in
+  the overlap or the norm ratio.
 * Argument checks, and the CUDA backend against the CPU backend (skipped without a usable GPU).
 """
 
@@ -62,6 +66,11 @@ def _host(array):
     return array.get() if hasattr(array, "get") else np.asarray(array)
 
 
+def _arrays(values):
+    """The output arrays of one method, whether it returns one array or several."""
+    return list(values) if isinstance(values, (tuple, list)) else [values]
+
+
 def _settings(backend_name):
     return get_stft_settings(
         np.arange(NUM_SAMPLES) * SAMPLE_DT,
@@ -73,17 +82,28 @@ def _settings(backend_name):
 
 
 class _StftCompsShim:
-    """Stand-in for STFTComputationGroup: ``cpp_fresnel``, ``cpp_domain`` and ``d_d``."""
+    """Stand-in for STFTComputationGroup: ``cpp_fresnel``, ``cpp_domain``, ``d_d``, the group's
+    ``linear_envelope`` and ``tdi_type``, and ``cpp_kinematics``, which returns a table built by
+    the test and records the orbits it was asked for."""
 
-    def __init__(self, cpp_fresnel, cpp_domain, d_d=None):
+    def __init__(self, cpp_fresnel, cpp_domain, table, linear_envelope, tdi_type, d_d=None):
         self.cpp_fresnel = cpp_fresnel
         self.cpp_domain = cpp_domain
+        self.table = table
+        self.linear_envelope = linear_envelope
+        self.tdi_type = tdi_type
         self.d_d = d_d
+        self.orbits_requested = None
+
+    def cpp_kinematics(self, cpp_orbits):
+        self.orbits_requested = cpp_orbits
+        return self.table
 
 
 class _DFFRCase:
-    """One fixture on one backend: the comp, its domain and Fresnel shim, the kinematics table of
-    the grid, and the gb_dffr_* entry points with the arguments STFTGBComputations will pass."""
+    """One fixture on one backend: the DFFR comp bound to a domain and Fresnel shim with the
+    kinematics table of the grid, the comp's methods, and the gb_dffr_* entry points with the
+    arguments the comp must pass (``knobs``)."""
 
     def __init__(
         self,
@@ -92,39 +112,44 @@ class _DFFRCase:
         use_midpoint=False,
         tdi="1st generation",
         tdi_type="XYZ",
-        tdi_generation=None,
         first_midpoint=None,
         n_side_bins=N_SIDE_BINS,
         linear_envelope=True,
         first_order_delays=True,
+        chirp_rate_floor=CHIRP_RATE_FLOOR,
+        t_ref=0.0,
     ):
         self.settings = _settings(backend_name)
+        # * Bound after construction: the shim needs the comp's backend and orbits.
         self.comp = STFTGBComputations(
             stft_comps=None,
             T=NUM_SAMPLES * SAMPLE_DT,
-            t_ref=0.0,
+            t_ref=t_ref,
             orbits=None,
             tdi_config=TDIConfig(tdi, force_backend=backend_name),
             force_backend=backend_name,
             n_side_bins=n_side_bins,
+            response="dffr",
+            first_order_delays=first_order_delays,
+            chirp_rate_floor=chirp_rate_floor,
         )
         self.xp = self.comp.xp
-        self.shim = self._shim(window_alpha, use_midpoint, tdi_type)
-        self.comp.stft_comps = self.shim
         self.table = self._table(first_midpoint)
-        generation = self.comp.tdi_config.generation if tdi_generation is None else tdi_generation
+        self.shim = self._shim(window_alpha, use_midpoint, tdi_type, linear_envelope)
+        self.comp.stft_comps = self.shim
+        generation = {"1st generation": 1, "2nd generation": 2}[tdi]
         self.knobs = (
-            self.comp.t_ref,
+            t_ref,
             n_side_bins,
             generation,
             linear_envelope,
             first_order_delays,
-            CHIRP_RATE_FLOOR,
+            chirp_rate_floor,
         )
         self.n_side_bins = n_side_bins
         self.wrap = self.comp.backend.GBComputationGroupWrap()
 
-    def _shim(self, window_alpha, use_midpoint, tdi_type):
+    def _shim(self, window_alpha, use_midpoint, tdi_type, linear_envelope):
         """Domain (seeded data, identity inverse covariance) and Fresnel object of the grid."""
         settings, backend, xp = self.settings, self.comp.backend, self.xp
         nt, nf, nch = settings.NT, settings.NF_active, 3
@@ -165,7 +190,7 @@ class _DFFRCase:
             window_alpha=window_alpha,
             use_midpoint=use_midpoint,
         )
-        shim = _StftCompsShim(fresnel, domain)
+        shim = _StftCompsShim(fresnel, domain, self.table, linear_envelope, tdi_type)
         shim.keepalive = (data, inv_c)
         shim.data = data
         return shim
@@ -193,10 +218,52 @@ class _DFFRCase:
     def _indices(self, num_bin):
         return (self.xp.zeros(num_bin, dtype=np.int32), self.xp.zeros(num_bin, dtype=np.int32))
 
-    def _no_cells(self):
-        return self.xp.zeros(0, dtype=np.int32)
+    def _cells(self, starts):
+        """Window starts per cell for the entry points; None is the full grid (empty array)."""
+        if starts is None:
+            return self.xp.zeros(0, dtype=np.int32)
+        return self.xp.asarray(np.asarray(starts, dtype=np.int32))
 
-    def get_ll(self, params):
+    # ---- the comp ----------------------------------------------------------------------------
+
+    def get_ll(self, params, starts=None):
+        self.comp.get_ll_stft(params, start_freq_inds=starts)
+        return _host(self.comp.d_h_out), _host(self.comp.h_h_out)
+
+    def swap(self, params_add, params_remove, starts=None):
+        terms = self.comp.get_swap_ll_stft(params_add, params_remove, start_freq_inds=starts)[2:]
+        return [_host(term) for term in terms]
+
+    def fstat(self, params, starts=None):
+        self.comp.get_fstat_ll_stft(params, start_freq_inds=starts)
+        return _host(self.comp.N_arr_cmplx), _host(self.comp.M_mat_cmplx)
+
+    def fill_global(self, params, starts=None):
+        """The template grid (1, 3, NT, NF_active) of the sources, all with factor one."""
+        settings = self.settings
+        templates = self.xp.zeros((1, 3, settings.NT, settings.NF_active), dtype=np.complex128)
+        self.comp.fill_global_stft(params, templates, start_freq_inds=starts)
+        return templates
+
+    def get_ll_grad(self, params, eps, starts=None, **options):
+        return _host(
+            self.comp.get_ll_grad_stft(params, param_eps=eps, start_freq_inds=starts, **options)
+        )
+
+    def swap_ll_grad(self, params_add, params_remove, eps_add, eps_remove, starts=None, **options):
+        grads = self.comp.get_swap_ll_grad_stft(
+            params_add,
+            params_remove,
+            param_eps_add=eps_add,
+            param_eps_remove=eps_remove,
+            start_freq_inds=starts,
+            **options,
+        )
+        return tuple(_host(grad) for grad in grads)
+
+    # ---- the entry points, with the arguments the comp must pass -------------------------------
+
+    def entry_get_ll(self, params, starts=None, knobs=None):
         batch = self._params(params)
         num_bin = batch.shape[0]
         d_h = self.xp.zeros(num_bin, dtype=np.complex128)
@@ -209,12 +276,12 @@ class _DFFRCase:
             *self._indices(num_bin),
             num_bin,
             9,
-            *self.knobs,
-            self._no_cells(),
+            *(self.knobs if knobs is None else knobs),
+            self._cells(starts),
         )
         return _host(d_h), _host(h_h)
 
-    def swap(self, params_add, params_remove, rows_per_pass=32):
+    def entry_swap(self, params_add, params_remove, rows_per_pass=32, starts=None):
         batch_add, batch_remove = self._params(params_add), self._params(params_remove)
         num_bin = batch_add.shape[0]
         terms = [self.xp.zeros(num_bin, dtype=np.complex128) for _ in range(5)]
@@ -228,11 +295,11 @@ class _DFFRCase:
             9,
             *self.knobs,
             rows_per_pass,
-            self._no_cells(),
+            self._cells(starts),
         )
         return [_host(term) for term in terms]
 
-    def fstat(self, params, rows_per_pass=32):
+    def entry_fstat(self, params, rows_per_pass=32, starts=None):
         batch = self._params(params)
         num_bin = batch.shape[0]
         outs = [self.xp.zeros(num_bin * size) for size in (4, 4, 10, 10)]
@@ -245,13 +312,12 @@ class _DFFRCase:
             9,
             *self.knobs,
             rows_per_pass,
-            self._no_cells(),
+            self._cells(starts),
         )
         n_re, n_im, m_re, m_im = (_host(out).reshape(num_bin, -1) for out in outs)
         return n_re + 1j * n_im, m_re + 1j * m_im
 
-    def fill_global(self, params):
-        """The template grid (1, 3, NT, NF_active) of the sources, all with factor one."""
+    def entry_fill_global(self, params, starts=None):
         settings = self.settings
         batch = self._params(params)
         num_bin = batch.shape[0]
@@ -265,11 +331,11 @@ class _DFFRCase:
             num_bin,
             9,
             *self.knobs,
-            self._no_cells(),
+            self._cells(starts),
         )
         return templates
 
-    def get_ll_grad(self, params, eps):
+    def entry_get_ll_grad(self, params, eps, starts=None):
         batch = self._params(params)
         num_bin = batch.shape[0]
         grad = self.xp.zeros(num_bin * 9)
@@ -282,11 +348,11 @@ class _DFFRCase:
             num_bin,
             9,
             *self.knobs,
-            self._no_cells(),
+            self._cells(starts),
         )
         return _host(grad).reshape(num_bin, 9)
 
-    def swap_ll_grad(self, params_add, params_remove, eps_add, eps_remove, rows_per_pass=32):
+    def entry_swap_ll_grad(self, params_add, params_remove, eps_add, eps_remove, starts=None):
         batch_add, batch_remove = self._params(params_add), self._params(params_remove)
         num_bin = batch_add.shape[0]
         grad_add, grad_remove = self.xp.zeros(num_bin * 9), self.xp.zeros(num_bin * 9)
@@ -302,8 +368,8 @@ class _DFFRCase:
             num_bin,
             9,
             *self.knobs,
-            rows_per_pass,
-            self._no_cells(),
+            32,
+            self._cells(starts),
         )
         return _host(grad_add).reshape(num_bin, 9), _host(grad_remove).reshape(num_bin, 9)
 
@@ -342,6 +408,77 @@ class _DFFRCase:
             False,
         )
         return _host(d_h), _host(h_h)
+
+
+@unittest.skipUnless(HAVE_STFT_GB, "requires the GBGPU STFT-GB build")
+class DFFRWiringTest(unittest.TestCase):
+    """Every comp method equals its entry point called with the expected arguments, bit for bit."""
+
+    backend_name = "cpu"
+
+    # * Two settings that differ in every argument the comp passes: generation, envelope, delays,
+    # * floor, t_ref, window and window starts. A floor of 1e-15 Hz/s moves (d|h) and (h|h) of
+    # * these sources by 6e-9 of their peak (measured 2026-10-19), so a misplaced floor would show.
+    SETTINGS = (
+        dict(
+            options=dict(
+                tdi="1st generation",
+                linear_envelope=False,
+                first_order_delays=False,
+                chirp_rate_floor=1.0e-15,
+                t_ref=1234.5,
+                window_alpha=0.0,
+            ),
+            starts=[2],
+        ),
+        dict(
+            options=dict(
+                tdi="2nd generation",
+                linear_envelope=True,
+                first_order_delays=True,
+                chirp_rate_floor=CHIRP_RATE_FLOOR,
+                t_ref=0.0,
+                window_alpha=0.5,
+                use_midpoint=True,
+            ),
+            starts=None,
+        ),
+    )
+
+    def test_comp_methods_equal_entry_points(self):
+        batch = np.stack([GB_PARAMS, GB_PARAMS_B])
+        batch_remove = np.stack([GB_PARAMS_B, GB_PARAMS_C])
+        for setting in self.SETTINGS:
+            options, starts = setting["options"], setting["starts"]
+            with self.subTest(**options):
+                case = _DFFRCase(self.backend_name, **options)
+                pairs = {
+                    "get_ll": (case.get_ll(batch, starts), case.entry_get_ll(batch, starts)),
+                    "swap": (
+                        case.swap(batch, batch_remove, starts),
+                        case.entry_swap(batch, batch_remove, starts=starts),
+                    ),
+                    "fstat": (case.fstat(batch, starts), case.entry_fstat(batch, starts=starts)),
+                    "fill_global": (
+                        _host(case.fill_global(batch, starts)),
+                        _host(case.entry_fill_global(batch, starts)),
+                    ),
+                    "get_ll_grad": (
+                        case.get_ll_grad(batch, GRAD_EPS, starts),
+                        case.entry_get_ll_grad(batch, GRAD_EPS, starts),
+                    ),
+                    "swap_ll_grad": (
+                        case.swap_ll_grad(batch, batch_remove, GRAD_EPS, GRAD_EPS, starts),
+                        case.entry_swap_ll_grad(batch, batch_remove, GRAD_EPS, GRAD_EPS, starts),
+                    ),
+                }
+                for name, (comp_values, entry_values) in pairs.items():
+                    for comp_value, entry_value in zip(_arrays(comp_values), _arrays(entry_values)):
+                        with self.subTest(method=name):
+                            self.assertGreater(np.abs(entry_value).max(), 0.0)
+                            np.testing.assert_array_equal(comp_value, entry_value)
+                # ! The table must come from the comp's own orbits.
+                self.assertIs(case.shim.orbits_requested, case.comp.cpp_orbits)
 
 
 @unittest.skipUnless(HAVE_STFT_GB, "requires the GBGPU STFT-GB build")
@@ -500,6 +637,72 @@ class DFFRSelfConsistencyTest(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_STFT_GB, "requires the GBGPU STFT-GB build")
+class DFFREnvelopeAndReplicaTest(unittest.TestCase):
+    """The envelope setting of DFFR calls, and device replicas of a DFFR comp."""
+
+    def test_forward_methods_follow_the_group(self):
+        """get_ll reads the group's linear_envelope; the setting changes the templates."""
+        on = _DFFRCase("cpu", window_alpha=0.5, tdi="2nd generation", linear_envelope=True)
+        off = _DFFRCase("cpu", window_alpha=0.5, tdi="2nd generation", linear_envelope=False)
+        self.assertFalse(np.array_equal(on.get_ll(GB_PARAMS)[1], off.get_ll(GB_PARAMS)[1]))
+        np.testing.assert_array_equal(off.get_ll(GB_PARAMS)[1], off.entry_get_ll(GB_PARAMS)[1])
+
+    def test_gradient_default_is_the_group_setting(self):
+        """The default envelope of both gradients is the group's; an explicit value applies."""
+        on = _DFFRCase("cpu", window_alpha=0.5, tdi="2nd generation", linear_envelope=True)
+        off = _DFFRCase("cpu", window_alpha=0.5, tdi="2nd generation", linear_envelope=False)
+        default = on.get_ll_grad(GB_PARAMS, GRAD_EPS)
+        np.testing.assert_array_equal(
+            on.get_ll_grad(GB_PARAMS, GRAD_EPS, linear_envelope=None), default
+        )
+        np.testing.assert_array_equal(
+            on.get_ll_grad(GB_PARAMS, GRAD_EPS, linear_envelope=True), default
+        )
+        forced_off = on.get_ll_grad(GB_PARAMS, GRAD_EPS, linear_envelope=False)
+        self.assertFalse(np.array_equal(forced_off, default))
+        # * The envelope is a kernel argument, so forcing it off equals a group without it.
+        np.testing.assert_array_equal(forced_off, off.get_ll_grad(GB_PARAMS, GRAD_EPS))
+        np.testing.assert_array_equal(
+            off.get_ll_grad(GB_PARAMS, GRAD_EPS, linear_envelope=True), default
+        )
+        swap_default = on.swap_ll_grad(GB_PARAMS, GB_PARAMS_B, GRAD_EPS, GRAD_EPS)
+        swap_forced_off = on.swap_ll_grad(
+            GB_PARAMS, GB_PARAMS_B, GRAD_EPS, GRAD_EPS, linear_envelope=False
+        )
+        swap_off = off.swap_ll_grad(GB_PARAMS, GB_PARAMS_B, GRAD_EPS, GRAD_EPS)
+        for side in range(2):
+            self.assertFalse(np.array_equal(swap_default[side], swap_off[side]))
+            np.testing.assert_array_equal(swap_forced_off[side], swap_off[side])
+
+    def test_replica_keeps_the_response(self):
+        """A comp rebuilt from args and kwargs, directly and through LAT's replica builder,
+        keeps the response and its settings and gives the same outputs bit for bit."""
+        from lisatools.utils.devicereplicas import _build_gb_comp_replica
+
+        case = _DFFRCase(
+            "cpu", tdi="2nd generation", first_order_delays=False, chirp_rate_floor=1.0e-15
+        )
+        reference = case.get_ll(GB_PARAMS)
+        replicas = {
+            "args and kwargs": type(case.comp)(*case.comp.args, **case.comp.kwargs),
+            # * Device 1 against primary 0 takes the multi-GPU rebuild path; on numpy the
+            # * device contexts are no-ops.
+            "replica builder": _build_gb_comp_replica(case.comp, np, 1, 0),
+        }
+        for name, replica in replicas.items():
+            with self.subTest(replica=name):
+                self.assertIsNot(replica, case.comp)
+                self.assertEqual(replica.response, "dffr")
+                self.assertFalse(replica.first_order_delays)
+                self.assertEqual(replica.chirp_rate_floor, 1.0e-15)
+                self.assertEqual(replica.tdi_config.generation, 2)
+                replica.stft_comps = case.shim
+                replica.get_ll_stft(GB_PARAMS)
+                np.testing.assert_array_equal(_host(replica.d_h_out), reference[0])
+                np.testing.assert_array_equal(_host(replica.h_h_out), reference[1])
+
+
+@unittest.skipUnless(HAVE_STFT_GB, "requires the GBGPU STFT-GB build")
 class DFFRAgainstExistingResponseTest(unittest.TestCase):
     """DFFR and the existing response model the same source: their templates nearly agree."""
 
@@ -510,9 +713,18 @@ class DFFRAgainstExistingResponseTest(unittest.TestCase):
                     "cpu", window_alpha=0.5, use_midpoint=True, tdi=tdi, linear_envelope=False
                 )
                 settings = case.settings
+                existing = STFTGBComputations(
+                    stft_comps=case.shim,
+                    T=NUM_SAMPLES * SAMPLE_DT,
+                    t_ref=0.0,
+                    orbits=None,
+                    tdi_config=TDIConfig(tdi, force_backend="cpu"),
+                    force_backend="cpu",
+                    n_side_bins=N_SIDE_BINS,
+                )
                 dffr = _host(case.fill_global(GB_PARAMS)).ravel()
                 column = case.xp.zeros((1, 3, settings.NT, settings.NF_active), dtype=np.complex128)
-                case.comp.fill_global_stft(GB_PARAMS, column)
+                existing.fill_global_stft(GB_PARAMS, column)
                 column = _host(column).ravel()
                 overlap = np.vdot(dffr, column).real / np.sqrt(
                     np.vdot(dffr, dffr).real * np.vdot(column, column).real
@@ -525,21 +737,75 @@ class DFFRAgainstExistingResponseTest(unittest.TestCase):
                 )
 
 
+class _AETGroup:
+    """A group of another TDI set, as a construction-time check sees it."""
+
+    tdi_type = "AET"
+
+
 @unittest.skipUnless(HAVE_STFT_GB, "requires the GBGPU STFT-GB build")
 class DFFRArgumentTest(unittest.TestCase):
-    """Setups DFFR cannot represent raise ValueError instead of returning wrong values."""
+    """Setups DFFR cannot represent raise instead of returning wrong values."""
+
+    def _comp(self, **options):
+        return STFTGBComputations(
+            stft_comps=options.pop("stft_comps", None),
+            T=NUM_SAMPLES * SAMPLE_DT,
+            force_backend="cpu",
+            response="dffr",
+            **options,
+        )
 
     def test_unsupported_setups_raise(self):
+        """The checks of the entry points and of the kernels, reached through the comp."""
         with self.assertRaises(ValueError):
-            _DFFRCase("cpu").swap(GB_PARAMS, GB_PARAMS_B, rows_per_pass=24)
+            _DFFRCase("cpu").entry_swap(GB_PARAMS, GB_PARAMS_B, rows_per_pass=24)
+        case = _DFFRCase("cpu")
         with self.assertRaises(ValueError):
-            _DFFRCase("cpu", tdi_generation=3).get_ll(GB_PARAMS)
+            case.entry_get_ll(GB_PARAMS, knobs=(0.0, N_SIDE_BINS, 3, True, True, CHIRP_RATE_FLOOR))
         # ! A table of another grid would place every segment at the wrong time.
         settings = _settings("cpu")
         with self.assertRaises(ValueError):
             _DFFRCase("cpu", first_midpoint=settings.t0 + 3600.0).get_ll(GB_PARAMS)
+        # * Bound after construction, an AET domain reaches the kernel's own check.
         with self.assertRaises(ValueError):
             _DFFRCase("cpu", tdi_type="AET").get_ll(GB_PARAMS)
+
+    def test_construction_checks(self):
+        custom = TDIConfig("2nd generation", force_backend="cpu").tdi_combinations[:-1]
+        with self.assertRaises(ValueError):
+            self._comp(tdi_config=TDIConfig(custom, force_backend="cpu"))
+        with self.assertRaises(ValueError):
+            self._comp(chirp_rate_floor=0.0)
+        with self.assertRaises(ValueError):
+            self._comp(stft_comps=_AETGroup())
+        comp = self._comp(tdi_config="2nd generation")
+        with self.assertRaises(ValueError):
+            comp.tdi_config = TDIConfig(custom, force_backend="cpu")
+        # * The default response takes any combination, as before.
+        STFTGBComputations(
+            stft_comps=None,
+            T=1.0,
+            force_backend="cpu",
+            tdi_config=TDIConfig(custom, force_backend="cpu"),
+        )
+
+    def test_group_without_kinematics_raises(self):
+        case = _DFFRCase("cpu")
+        bare = type("BareGroup", (), {})()
+        bare.cpp_fresnel, bare.cpp_domain, bare.d_d = (
+            case.shim.cpp_fresnel,
+            case.shim.cpp_domain,
+            None,
+        )
+        case.comp.stft_comps = bare
+        with self.assertRaises(TypeError):
+            case.comp.get_ll_stft(GB_PARAMS)
+
+    def test_information_matrix_raises(self):
+        case = _DFFRCase("cpu")
+        with self.assertRaises(NotImplementedError):
+            case.comp.information_matrix(GB_PARAMS)
 
 
 def _cuda_backend_name():
@@ -560,6 +826,13 @@ def _cuda_backend_name():
 
 
 @unittest.skipUnless(HAVE_STFT_GB and _cuda_backend_name(), "requires a usable CUDA backend")
+class DFFRGPUWiringTest(DFFRWiringTest):
+    """The wiring test on the CUDA backend."""
+
+    backend_name = "gpu"
+
+
+@unittest.skipUnless(HAVE_STFT_GB and _cuda_backend_name(), "requires a usable CUDA backend")
 class DFFRGPUTest(DFFRSelfConsistencyTest):
     """The same tests on the CUDA backend, and the CUDA values against the CPU values."""
 
@@ -577,12 +850,12 @@ class DFFRGPUTest(DFFRSelfConsistencyTest):
                 np.concatenate(gpu.get_ll(GB_PARAMS)),
                 np.concatenate(cpu.get_ll(GB_PARAMS)),
             ),
-            "swap": (gpu.swap(GB_PARAMS, GB_PARAMS_B, 32)[4], cpu.swap(GB_PARAMS, GB_PARAMS_B)[4]),
+            "swap": (gpu.swap(GB_PARAMS, GB_PARAMS_B)[4], cpu.swap(GB_PARAMS, GB_PARAMS_B)[4]),
             "swap rows": (
-                gpu.swap(GB_PARAMS, GB_PARAMS_B, 16)[4],
-                gpu.swap(GB_PARAMS, GB_PARAMS_B, 32)[4],
+                gpu.entry_swap(GB_PARAMS, GB_PARAMS_B, 16)[4],
+                gpu.entry_swap(GB_PARAMS, GB_PARAMS_B, 32)[4],
             ),
-            "fstat rows": (gpu.fstat(GB_PARAMS, 16)[1], gpu.fstat(GB_PARAMS, 32)[1]),
+            "fstat rows": (gpu.entry_fstat(GB_PARAMS, 16)[1], gpu.entry_fstat(GB_PARAMS, 32)[1]),
         }
         for name, (first, second) in pairs.items():
             with self.subTest(quantity=name):

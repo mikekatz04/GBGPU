@@ -983,6 +983,22 @@ class GBFDComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         return info
 
 
+#: Responses of :class:`STFTGBComputations`; the first is the default.
+STFT_RESPONSES = ("tdi_on_the_fly", "dffr")
+
+
+class _ResponseDefault:
+    """Type of :data:`RESPONSE_DEFAULT`; the repr keeps signatures readable."""
+
+    def __repr__(self):
+        return "RESPONSE_DEFAULT"
+
+
+#: Default ``linear_envelope`` of the gradient and Fisher methods of :class:`STFTGBComputations`:
+#: ``False`` for the TDI-on-the-fly response, the bound group's setting for DFFR.
+RESPONSE_DEFAULT = _ResponseDefault()
+
+
 class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
     """Source-side STFT/Fresnel-domain GB likelihood (Fresnel transform path).
 
@@ -1001,15 +1017,43 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
     frequency / rate from the TDI phase, so the LISA orbital Doppler (whose rate
     typically exceeds the astrophysical fdot) is included; set ``False`` to
     recover the legacy astrophysical-``get_f``/``get_fdot`` behaviour.
+
+    ``response`` selects how the pixels are computed: ``"tdi_on_the_fly"`` (default), as above,
+    or ``"dffr"``, the Direct Fast Fresnel Response, through the ``gb_dffr_*`` kernels on the
+    kinematics table of the bound group (``cpp_kinematics``). DFFR takes ``first_order_delays``
+    and ``chirp_rate_floor``, which the default response ignores. It computes the XYZ channels
+    only, needs the 1st or 2nd generation combinations of ``TDIConfig``, does not read ``T``,
+    ``window_factor``, ``freq_from_tdi_phase`` or ``use_midpoint``, and has no Fisher matrix yet.
+    Usage and limits: ``docs/response/dffr/README.md`` in lisa-analysis-tools.
     """
 
     _BACKEND_PREFIX = "gbgpu"
+    # * Segment rows per pass of the two-template DFFR kernels (swap, its gradient, the
+    # * F-statistic) on the GPU: the warp size. The CPU uses one row whatever this says.
+    # TODO: the kernels are also built for 16 rows; timings on an A100 decide between the two.
+    _DFFR_ROWS_PER_PASS = 32
 
     def __init__(self, stft_comps, T, t_ref=0.0, orbits=None, tdi_config=None,
                  force_backend=None, n_side_bins=2, window_factor=1.0,
                  freq_from_tdi_phase=True, window_alpha=None, use_midpoint=None,
-                 linear_envelope=None):
+                 linear_envelope=None, response="tdi_on_the_fly",
+                 first_order_delays=True, chirp_rate_floor=1.0e-22):
         super().__init__(force_backend=force_backend)
+        if response not in STFT_RESPONSES:
+            raise ValueError(f"response must be one of {STFT_RESPONSES}, got {response!r}.")
+        # * Set before the tdi_config setter below, which checks the TDI generation for DFFR.
+        self.response = response
+        self.first_order_delays = bool(first_order_delays)
+        self.chirp_rate_floor = float(chirp_rate_floor)
+        if response == "dffr":
+            if not self.chirp_rate_floor > 0.0:
+                raise ValueError(
+                    f"chirp_rate_floor must be positive, got {self.chirp_rate_floor!r}.")
+            # ? A bound group is checked here to fail early; the kernels check every call.
+            tdi_type = getattr(stft_comps, "tdi_type", None)
+            if tdi_type is not None and tdi_type != "XYZ":
+                raise ValueError(
+                    f"response='dffr' computes the XYZ channels; the bound group holds {tdi_type}.")
 
         # ---- multi-GPU replica metadata ---------------------------------
         # ``cpp_orbits`` / ``cpp_tdi_config`` are built below on whatever CUDA
@@ -1038,7 +1082,8 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
             window_factor=window_factor,
             freq_from_tdi_phase=freq_from_tdi_phase,
             window_alpha=window_alpha, use_midpoint=use_midpoint,
-            linear_envelope=linear_envelope,
+            linear_envelope=linear_envelope, response=response,
+            first_order_delays=first_order_delays, chirp_rate_floor=chirp_rate_floor,
         )
 
         self.stft_comps = stft_comps
@@ -1123,6 +1168,14 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
             tc = TDIConfig(tc, force_backend=self.lat_backend_name())
         elif not isinstance(tc, TDIConfig):
             raise ValueError("tdi_config must be TDIConfig, str, or None.")
+        # ! DFFR has closed forms for the stock combinations only, so any other must fail here.
+        # * Kept, because TDIConfig.generation compares the combinations on every read.
+        generation = tc.generation
+        if self.response == "dffr" and generation not in (1, 2):
+            raise ValueError(
+                "response='dffr' needs the combinations of TDIConfig('1st generation') or "
+                "('2nd generation'); this TDIConfig holds others.")
+        self._tdi_generation = generation
         self._tdi_config = tc
         self.cpp_tdi_config = self.backend.TDIConfigWrap(*self._tdi_config.pytdiconfig_args)
 
@@ -1132,6 +1185,42 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
 
     def _prep_params(self, params):
         return self.xp.asarray(self.xp.atleast_2d(params)).copy()
+
+    @property
+    def _dffr(self):
+        return self.response == "dffr"
+
+    def _derivative_envelope(self, linear_envelope):
+        """``linear_envelope`` of a gradient or Fisher call, with :data:`RESPONSE_DEFAULT` resolved.
+
+        The default is ``False`` for the TDI-on-the-fly response, whose slope comes from the TDI
+        stencil and adds its rounding to the differences, and ``None`` (the bound group's
+        setting) for DFFR, whose slopes are closed forms in the source parameters.
+        """
+        if linear_envelope is RESPONSE_DEFAULT:
+            return None if self._dffr else False
+        return linear_envelope
+
+    def _dffr_grid(self, group):
+        """Kinematics table, Fresnel object and domain of ``group`` for the ``gb_dffr_*`` kernels."""
+        cpp_kinematics = getattr(group, "cpp_kinematics", None)
+        if cpp_kinematics is None:
+            raise TypeError(
+                "response='dffr' reads the kinematics table of the bound group, which "
+                f"{type(group).__name__} does not provide (cpp_kinematics(cpp_orbits)).")
+        return cpp_kinematics(self.cpp_orbits), group.cpp_fresnel, group.cpp_domain
+
+    def _dffr_settings(self, linear_envelope, group):
+        """The settings arguments of the ``gb_dffr_*`` kernels, from ``t_ref`` to the floor.
+
+        The envelope is a kernel argument, so ``True`` and ``False`` apply exactly, without the
+        evaluator swap of :meth:`_envelope_context`; ``None`` takes the group's setting, read as
+        that method reads it.
+        """
+        if linear_envelope is None:
+            linear_envelope = getattr(group, "linear_envelope", self.linear_envelope)
+        return (self.t_ref, self.n_side_bins, self._tdi_generation,
+                bool(linear_envelope), self.first_order_delays, self.chirp_rate_floor)
 
     def _envelope_context(self, linear_envelope, group=None):
         """Per-call `linear_envelope` override, best effort.
@@ -1199,15 +1288,24 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         h_h_out = self.xp.zeros(num_bin, dtype=self.xp.complex128)
         data_index, noise_index = self._resolve_indices(num_bin, data_index, noise_index)
 
-        self.backend.GBComputationGroupWrap().gb_stft_get_ll(
-            d_h_out, h_h_out,
-            self.cpp_orbits, self.cpp_tdi_config,
-            self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
-            p.flatten(), data_index, noise_index,
-            num_bin, self.num_params, self.T, self.t_ref,
-            self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
-            self._resolve_start_freq_inds(start_freq_inds),
-        )
+        if self._dffr:
+            self.backend.GBComputationGroupWrap().gb_dffr_get_ll(
+                d_h_out, h_h_out,
+                *self._dffr_grid(self.stft_comps),
+                p.flatten(), data_index, noise_index,
+                num_bin, self.num_params, *self._dffr_settings(None, self.stft_comps),
+                self._resolve_start_freq_inds(start_freq_inds),
+            )
+        else:
+            self.backend.GBComputationGroupWrap().gb_stft_get_ll(
+                d_h_out, h_h_out,
+                self.cpp_orbits, self.cpp_tdi_config,
+                self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                p.flatten(), data_index, noise_index,
+                num_bin, self.num_params, self.T, self.t_ref,
+                self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
+                self._resolve_start_freq_inds(start_freq_inds),
+            )
         self.d_h_out = d_h_out
         self.h_h_out = h_h_out
         d_d_arr = self.stft_comps.d_d
@@ -1242,16 +1340,26 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         ar = self.xp.zeros(num_bin, dtype=self.xp.complex128)
         data_index, noise_index = self._resolve_indices(num_bin, data_index, noise_index)
 
-        self.backend.GBComputationGroupWrap().gb_stft_swap_ll(
-            d_h_a, d_h_r, aa, rr, ar,
-            self.cpp_orbits, self.cpp_tdi_config,
-            self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
-            pa.flatten(), pr.flatten(),
-            data_index, noise_index,
-            num_bin, self.num_params, self.T, self.t_ref,
-            self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
-            self._resolve_start_freq_inds(start_freq_inds),
-        )
+        if self._dffr:
+            self.backend.GBComputationGroupWrap().gb_dffr_swap_ll(
+                d_h_a, d_h_r, aa, rr, ar,
+                *self._dffr_grid(self.stft_comps),
+                pa.flatten(), pr.flatten(),
+                data_index, noise_index,
+                num_bin, self.num_params, *self._dffr_settings(None, self.stft_comps),
+                self._DFFR_ROWS_PER_PASS, self._resolve_start_freq_inds(start_freq_inds),
+            )
+        else:
+            self.backend.GBComputationGroupWrap().gb_stft_swap_ll(
+                d_h_a, d_h_r, aa, rr, ar,
+                self.cpp_orbits, self.cpp_tdi_config,
+                self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                pa.flatten(), pr.flatten(),
+                data_index, noise_index,
+                num_bin, self.num_params, self.T, self.t_ref,
+                self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
+                self._resolve_start_freq_inds(start_freq_inds),
+            )
         self.d_h_add, self.d_h_remove = d_h_a, d_h_r
         self.add_add, self.remove_remove, self.add_remove = aa, rr, ar
         d_d_arr = self.stft_comps.d_d
@@ -1296,16 +1404,26 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         M_im = self.xp.zeros((num_bin, 10))
         data_index, noise_index = self._resolve_indices(num_bin, data_index, noise_index)
 
-        self.backend.GBComputationGroupWrap().gb_stft_get_fstat_ll(
-            N_re.reshape(-1), N_im.reshape(-1),
-            M_re.reshape(-1), M_im.reshape(-1),
-            self.cpp_orbits, self.cpp_tdi_config,
-            self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
-            p.flatten(), data_index, noise_index,
-            num_bin, self.num_params, self.T, self.t_ref,
-            self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
-            self._resolve_start_freq_inds(start_freq_inds),
-        )
+        if self._dffr:
+            self.backend.GBComputationGroupWrap().gb_dffr_get_fstat_ll(
+                N_re.reshape(-1), N_im.reshape(-1),
+                M_re.reshape(-1), M_im.reshape(-1),
+                *self._dffr_grid(self.stft_comps),
+                p.flatten(), data_index, noise_index,
+                num_bin, self.num_params, *self._dffr_settings(None, self.stft_comps),
+                self._DFFR_ROWS_PER_PASS, self._resolve_start_freq_inds(start_freq_inds),
+            )
+        else:
+            self.backend.GBComputationGroupWrap().gb_stft_get_fstat_ll(
+                N_re.reshape(-1), N_im.reshape(-1),
+                M_re.reshape(-1), M_im.reshape(-1),
+                self.cpp_orbits, self.cpp_tdi_config,
+                self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                p.flatten(), data_index, noise_index,
+                num_bin, self.num_params, self.T, self.t_ref,
+                self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
+                self._resolve_start_freq_inds(start_freq_inds),
+            )
         self.N_arr = N_re
         self.M_mat = M_re
         self.N_arr_cmplx = N_re + 1j * N_im
@@ -1359,6 +1477,17 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         else:
             factors = self.xp.asarray(factors, dtype=self.xp.float64)
 
+        if self._dffr:
+            # ? active_band has no DFFR argument: the STFT grid is the active band, and the
+            # ? kernels of the default response ignore it too.
+            self.backend.GBComputationGroupWrap().gb_dffr_fill_global(
+                templates.reshape(-1),
+                *self._dffr_grid(self.stft_comps),
+                p.flatten(), data_index, factors,
+                num_bin, self.num_params, *self._dffr_settings(None, self.stft_comps),
+                self._resolve_start_freq_inds(start_freq_inds),
+            )
+            return
         self.backend.GBComputationGroupWrap().gb_stft_fill_global(
             templates.reshape(-1),
             self.cpp_orbits, self.cpp_tdi_config,
@@ -1393,7 +1522,7 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
                          param_scales=None,
                          param_eps_relative=1.0e-6,
                          data_index=None, noise_index=None,
-                         linear_envelope: Optional[bool] = False,
+                         linear_envelope=RESPONSE_DEFAULT,
                          start_freq_inds=None):
         """Per-parameter central finite-difference gradient of
         :meth:`get_ll_stft` (logL = Re(d|h) - 0.5*(h|h); the -0.5*(d|d) constant
@@ -1406,10 +1535,11 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         evaluation, so it reproduces a host-side central difference of
         ``get_ll_stft`` to machine precision.
 
-        ``linear_envelope`` defaults to ``False`` here whatever the bound group
-        carries, because the first-moment slope is built from the same TDI stencil
-        and its round-off enters the difference. Pass ``True`` to force it on, 
-        ``None`` to inherit the group's setting.
+        ``linear_envelope``: ``True`` or ``False`` forces the envelope on or off, ``None``
+        inherits the group's setting. The default, :data:`RESPONSE_DEFAULT`, is ``False`` for
+        the TDI-on-the-fly response whatever the bound group carries, because its first-moment
+        slope is built from the same TDI stencil and its round-off enters the difference; for
+        DFFR it is the group's setting.
         """
         p = self._prep_params(params)
         num_bin = p.shape[0]
@@ -1418,19 +1548,30 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         eps_theta, scales = self._resolve_eps_and_scales(
             nparams, param_eps, param_scales, param_eps_relative,
         )
+        linear_envelope = self._derivative_envelope(linear_envelope)
 
         grad_out = self.xp.zeros(num_bin * nparams, dtype=self.xp.float64)
-        with self._envelope_context(linear_envelope):
-            self.backend.GBComputationGroupWrap().gb_stft_get_ll_grad(
+        if self._dffr:
+            self.backend.GBComputationGroupWrap().gb_dffr_get_ll_grad(
                 grad_out,
-                self.cpp_orbits, self.cpp_tdi_config,
-                self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                *self._dffr_grid(self.stft_comps),
                 p.flatten(), data_index, noise_index,
                 eps_theta,
-                num_bin, nparams, self.T, self.t_ref,
-                self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
+                num_bin, nparams, *self._dffr_settings(linear_envelope, self.stft_comps),
                 self._resolve_start_freq_inds(start_freq_inds),
             )
+        else:
+            with self._envelope_context(linear_envelope):
+                self.backend.GBComputationGroupWrap().gb_stft_get_ll_grad(
+                    grad_out,
+                    self.cpp_orbits, self.cpp_tdi_config,
+                    self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                    p.flatten(), data_index, noise_index,
+                    eps_theta,
+                    num_bin, nparams, self.T, self.t_ref,
+                    self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
+                    self._resolve_start_freq_inds(start_freq_inds),
+                )
         grad = grad_out.reshape(num_bin, nparams)
         if scales is not None:
             grad = grad * scales[None, :]
@@ -1441,7 +1582,7 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
                               param_scales_add=None, param_scales_remove=None,
                               param_eps_relative=1.0e-6,
                               data_index=None, noise_index=None,
-                              linear_envelope: Optional[bool] = False,
+                              linear_envelope=RESPONSE_DEFAULT,
                               start_freq_inds=None):
         """Central finite-difference gradients of the swap scalar
         ``S = Re(d|h_add) - Re(d|h_remove) - 0.5*(h_add|h_add)
@@ -1453,7 +1594,7 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         ``grad_add`` differentiates ``S`` w.r.t. ``theta_add`` (``theta_remove``
         held fixed); ``grad_remove`` w.r.t. ``theta_remove``. Rescaling
         semantics match :meth:`get_ll_grad_stft`; ``eps_k <= 0`` freezes the
-        component.
+        component. ``linear_envelope`` as in :meth:`get_ll_grad_stft`.
         """
         pa = self._prep_params(params_add)
         pr = self._prep_params(params_remove)
@@ -1472,20 +1613,32 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
 
         grad_add_out    = self.xp.zeros(num_bin * nparams, dtype=self.xp.float64)
         grad_remove_out = self.xp.zeros(num_bin * nparams, dtype=self.xp.float64)
-        # Envelope off by default, as in get_ll_grad_stft: same slope, same
-        # round-off, same amplification in a difference.
-        with self._envelope_context(linear_envelope):
-            self.backend.GBComputationGroupWrap().gb_stft_swap_ll_grad(
+        # Envelope off by default for the TDI-on-the-fly response, as in get_ll_grad_stft:
+        # same slope, same round-off, same amplification in a difference.
+        linear_envelope = self._derivative_envelope(linear_envelope)
+        if self._dffr:
+            self.backend.GBComputationGroupWrap().gb_dffr_swap_ll_grad(
                 grad_add_out, grad_remove_out,
-                self.cpp_orbits, self.cpp_tdi_config,
-                self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                *self._dffr_grid(self.stft_comps),
                 pa.flatten(), pr.flatten(),
                 data_index, noise_index,
                 eps_theta_add, eps_theta_remove,
-                num_bin, nparams, self.T, self.t_ref,
-                self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
-                self._resolve_start_freq_inds(start_freq_inds),
+                num_bin, nparams, *self._dffr_settings(linear_envelope, self.stft_comps),
+                self._DFFR_ROWS_PER_PASS, self._resolve_start_freq_inds(start_freq_inds),
             )
+        else:
+            with self._envelope_context(linear_envelope):
+                self.backend.GBComputationGroupWrap().gb_stft_swap_ll_grad(
+                    grad_add_out, grad_remove_out,
+                    self.cpp_orbits, self.cpp_tdi_config,
+                    self.stft_comps.cpp_fresnel, self.stft_comps.cpp_domain,
+                    pa.flatten(), pr.flatten(),
+                    data_index, noise_index,
+                    eps_theta_add, eps_theta_remove,
+                    num_bin, nparams, self.T, self.t_ref,
+                    self.n_side_bins, self.window_factor, self.freq_from_tdi_phase,
+                    self._resolve_start_freq_inds(start_freq_inds),
+                )
         grad_add = grad_add_out.reshape(num_bin, nparams)
         grad_remove = grad_remove_out.reshape(num_bin, nparams)
         if scales_add is not None:
@@ -1549,7 +1702,7 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
                            easy_central_difference: bool = False,
                            noise_index=None,
                            convert_to_ra_dec: Optional[bool] = None,
-                           linear_envelope: Optional[bool] = False,
+                           linear_envelope=RESPONSE_DEFAULT,
                            astro_track: bool = True,
                            start_freq_inds=None):
         """Per-source Fisher information matrix over the STFT (Fresnel) domain, from one kernel.
@@ -1562,10 +1715,19 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
         :func:`gbgpu.testing.stft_information_matrix_reference`, which is the numerical reference
         the tests check this against. Two differences from it: ``param_eps[k] <= 0`` freezes
         parameter ``k`` (zero row and column), and the returned matrices are exactly symmetric.
+        ``linear_envelope`` as in :meth:`get_ll_grad_stft`.
 
         Returns:
             ``(num_bin, num_derivs, num_derivs)`` real Fisher matrices.
+
+        Raises:
+            NotImplementedError: For ``response="dffr"``, which has no Fisher kernel yet.
         """
+        if self._dffr:
+            raise NotImplementedError(
+                "STFTGBComputations.information_matrix: the DFFR response has no Fisher matrix "
+                "yet; the TDI-on-the-fly response (response='tdi_on_the_fly') provides one.")
+        linear_envelope = self._derivative_envelope(linear_envelope)
         if convert_to_ra_dec:
             raise ValueError(
                 "STFTGBComputations.information_matrix takes run-frame "

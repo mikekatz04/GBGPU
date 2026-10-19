@@ -20,6 +20,7 @@ swaps the per-track terms and conjugates the cross term ``(h_add|h_remove)``
 """
 
 import unittest
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -29,7 +30,7 @@ from lisatools.utils.parallelbase import LISAToolsParallelModule
 from gbgpu.testing import stft_information_matrix_reference
 
 try:
-    from gbgpu.gbcomps import STFTGBComputations
+    from gbgpu.gbcomps import RESPONSE_DEFAULT, STFTGBComputations
 
     HAVE_STFT_GB = True
 except (ImportError, ModuleNotFoundError):
@@ -586,6 +587,98 @@ class STFTGBFisherKernelTest(_STFTGBFixture):
             with self.subTest(parameter=name):
                 self.assertGreater(ratio[k], 0.5, msg=f"{name} diagonal collapsed at a crossing")
                 self.assertLess(ratio[k], 2.0, msg=f"{name} diagonal inflated at a crossing: {ratio[k]:.3e}")
+
+
+class _EnvelopeGroupShim(_StftCompsShim):
+    """A group whose evaluator has the linear envelope on, with the evaluator swap of
+    ``STFTComputationGroup.envelope_override``."""
+
+    def __init__(self, fresnel_on, fresnel_off, cpp_domain):
+        super().__init__(fresnel_on, cpp_domain)
+        self.linear_envelope = True
+        self._fresnel_off = fresnel_off
+
+    @contextmanager
+    def envelope_override(self, linear_envelope):
+        if linear_envelope is None or bool(linear_envelope):
+            yield
+            return
+        saved, self.cpp_fresnel = self.cpp_fresnel, self._fresnel_off
+        try:
+            yield
+        finally:
+            self.cpp_fresnel = saved
+
+
+class STFTGBResponseTest(_STFTGBFixture):
+    """The response flag on the default response: it stays the TDI-on-the-fly response, bit for
+    bit, whatever the DFFR settings, and its derivative envelope stays off by default. The DFFR
+    response is tested in test_stft_gb_dffr.py."""
+
+    _fisher_case = STFTGBFisherKernelTest._fisher_case
+
+    def _explicit(self, group):
+        """The default response named explicitly, with DFFR settings it must ignore."""
+        return STFTGBComputations(
+            stft_comps=group, T=self.Tobs, t_ref=0.0, orbits=None, tdi_config=None,
+            force_backend="cpu", n_side_bins=3, response="tdi_on_the_fly",
+            first_order_delays=False, chirp_rate_floor=1.0e-15,
+        )
+
+    def _outputs(self, gb):
+        s = self.settings
+        gb.get_ll_stft(GB_PARAMS)
+        swap = gb.get_swap_ll_stft(GB_PARAMS, GB_PARAMS_B)
+        fstat = gb.get_fstat_ll_stft(GB_PARAMS)
+        templates = np.zeros((1, self.nch, s.NT, s.NF_active), dtype=np.complex128)
+        gb.fill_global_stft(GB_PARAMS, templates)
+        grad = gb.get_ll_grad_stft(GB_PARAMS, param_eps=GRAD_EPS)
+        swap_grad = gb.get_swap_ll_grad_stft(GB_PARAMS, GB_PARAMS_B,
+                                             param_eps_add=GRAD_EPS, param_eps_remove=GRAD_EPS)
+        return [gb.d_h_out.copy(), gb.h_h_out.copy(), *swap[2:], *fstat, templates, grad,
+                *swap_grad]
+
+    def test_default_response_unchanged(self):
+        shim = self._build_shim(window_alpha=0.5)
+        default = self._gb(shim, n_side_bins=3)
+        self.assertEqual(default.response, "tdi_on_the_fly")
+        self.assertEqual(default.kwargs["response"], "tdi_on_the_fly")
+        pairs = list(zip(self._outputs(default), self._outputs(self._explicit(shim))))
+        fisher_default, group = self._fisher_case()
+        params, noise_index = np.stack([GB_PARAMS, GB_PARAMS_B]), np.array([0, 1], dtype=np.int32)
+        pairs.append(tuple(gb.information_matrix(params, group, noise_index=noise_index)
+                           for gb in (fisher_default, self._explicit(group))))
+        for first, second in pairs:
+            self.assertGreater(np.abs(first).max(), 0.0)
+            np.testing.assert_array_equal(first, second)
+
+    def test_derivative_envelope_default_is_off(self):
+        """With the envelope on in the group, the default gradients equal an explicit False."""
+        s = self.settings
+        shim = self._build_shim(window_alpha=0.5)
+        fresnel_on = self.backend.STFTFresnelWrap(
+            s.NT, s.NF_active, self.nch, s.t0, s.min_freq, s.max_freq, s.dt, s.df,
+            window_alpha=0.5, use_midpoint=False, linear_envelope=True,
+        )
+        group = _EnvelopeGroupShim(fresnel_on, shim.cpp_fresnel, shim.cpp_domain)
+        group._keepalive = shim._keepalive
+        gb = self._gb(group, n_side_bins=3)
+        self.assertIs(gb._derivative_envelope(RESPONSE_DEFAULT), False)
+        default = gb.get_ll_grad_stft(GB_PARAMS, param_eps=GRAD_EPS)
+        np.testing.assert_array_equal(
+            default, gb.get_ll_grad_stft(GB_PARAMS, param_eps=GRAD_EPS, linear_envelope=False))
+        inherited = gb.get_ll_grad_stft(GB_PARAMS, param_eps=GRAD_EPS, linear_envelope=None)
+        self.assertFalse(np.array_equal(default, inherited))
+        swap_default = gb.get_swap_ll_grad_stft(GB_PARAMS, GB_PARAMS_B,
+                                                param_eps_add=GRAD_EPS, param_eps_remove=GRAD_EPS)
+        swap_off = gb.get_swap_ll_grad_stft(GB_PARAMS, GB_PARAMS_B, param_eps_add=GRAD_EPS,
+                                            param_eps_remove=GRAD_EPS, linear_envelope=False)
+        for first, second in zip(swap_default, swap_off):
+            np.testing.assert_array_equal(first, second)
+
+    def test_unknown_response_raises(self):
+        with self.assertRaises(ValueError):
+            STFTGBComputations(stft_comps=None, T=1.0, force_backend="cpu", response="tdi")
 
 
 def _time_domain_pixel(f0, fdot0, f, t0, dt, window_alpha, use_midpoint=True, sample=0.5):
