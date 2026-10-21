@@ -964,6 +964,16 @@ class DFFRFisherTest(unittest.TestCase):
                     self._assert_parity(kernel, case.reference(params, noise_index, **options))
                     np.testing.assert_array_equal(kernel, np.swapaxes(kernel, 1, 2))
 
+    def test_parity_on_one_set_of_states(self):
+        """A and phi0 leave the reception states unchanged, so their eight variants share one set:
+        the smallest layout, whose build grows the anchor space to hold one variant at a time."""
+        params, noise_index = self._sources()
+        for setting in self.SETTINGS:
+            with self.subTest(**setting):
+                case = self._case(**setting)
+                kernel = case.fisher(params, noise_index, inds=[0, 4])
+                self._assert_parity(kernel, case.reference(params, noise_index, inds=[0, 4]))
+
     def test_subset_is_submatrix(self):
         case = self._case(**self.SETTINGS[0])
         params, noise_index = self._sources()
@@ -1229,7 +1239,8 @@ class DFFRGPUTest(DFFRSelfConsistencyTest):
 class DFFRGPUFisherTest(unittest.TestCase):
     """The DFFR Fisher matrix on the CUDA backend: against the reference and the CPU, and the
     4-row tables against the 8-row ones, per entry relative to sqrt(F_ii F_jj), on the
-    8 parameters of the global fit."""
+    8 parameters of the global fit; and against the CPU on A and phi0 alone, whose variants share
+    one set of reception states."""
 
     def _assert_close(self, first, second):
         diagonal = np.abs(np.diagonal(second, axis1=1, axis2=2))
@@ -1253,6 +1264,10 @@ class DFFRGPUFisherTest(unittest.TestCase):
                 gpu.entry_information_matrix(
                     params, eps, inds=TEST_INDS, noise_index=noise_index, rows_per_pass=4
                 ),
+            ),
+            "one set of states": (
+                gpu.fisher(params, noise_index, inds=[0, 4]),
+                cpu.fisher(params, noise_index, inds=[0, 4]),
             ),
         }
         for name, (first, second) in pairs.items():
