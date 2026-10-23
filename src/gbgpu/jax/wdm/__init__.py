@@ -11,9 +11,16 @@ Exposes:
   :func:`fast_wdm_inner_heterodyne_jax`,
   :data:`ALPHA_AUTO`                 — fast_inner_heterodyne helpers.
 
+Not re-exported here (import the modules directly): the autograd gradient / Hessian
+variants in :mod:`gbgpu.jax.wdm.heterodyne_kernels`, the signal-heterodyne JAX mirror
+:mod:`gbgpu.jax.wdm.signal_het_kernels`, and the C++-API adapter
+:mod:`gbgpu.jax.wdm.computation_group`.
+
 Generic WDM infrastructure (WaveletLookupTableWrapJAX,
 WDMSettingsWrapJAX, WDMDomainWrapJAX, fast_wdm_inner_jax) lives in
-:mod:`lisatools.jax.wdm`. Subpackage import is gated on ``import jax``.
+:mod:`lisatools.jax.wdm`. Subpackage import is gated on ``import jax``
+(through :mod:`gbgpu.jax`). The JAX kernels are validation / autograd tools; the global
+fit runs the C++ / CUDA kernels.
 """
 from __future__ import annotations
 

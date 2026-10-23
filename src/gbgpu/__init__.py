@@ -1,4 +1,33 @@
-"""GBGPU."""
+"""GBGPU: galactic-binary waveforms and likelihoods for LISA on CPUs and GPUs.
+
+The GB-physics package of LISA Analysis Tools, built on ``lisatools`` (orbits, TDI, domains,
+the chunked-heterodyne base) and ``gpubackendtools`` (backend machinery). Main entry points:
+
+* :class:`gbgpu.gbgpu.GBGPU`: FastGB frequency-domain waveforms
+  (:meth:`~gbgpu.gbgpu.GBGPUBase.run_wave`) and the legacy FD likelihood / global-template
+  kernels;
+  :class:`gbgpu.thirdbody.GBGPUThirdBody` adds a third body.
+* :class:`gbgpu.gbcomps.GBWDMComputations`: the WDM-domain chunked-heterodyne GB likelihood
+  of the global fit; :class:`gbgpu.gbcomps.GBFDComputations` its FD analog.
+* :class:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations`: the signal-heterodyne
+  in-model scorer wrapped around the chunked comp (``for_band_engine``).
+* :class:`gbgpu.gblookupcomputations.GBLookupComputations`: the direct-to-WDM lookup scorer
+  (reference, anchor and information matrix of the sig-het engine).
+
+Importing the package registers the backends ``gbgpu_cpu``, ``gbgpu_cuda11x``,
+``gbgpu_cuda12x`` and ``gbgpu_cuda13x`` (:mod:`gbgpu.cutils`) with the gpubackendtools
+registry. :func:`get_backend`, :func:`has_backend` and :func:`get_first_backend` are
+``gbgpu_``-prefixing facades over the gpubackendtools functions; :func:`get_include` and
+:func:`get_cmake_module_path` locate the C++/CUDA headers for downstream builds.
+
+Example:
+    .. code-block:: python
+
+        import gbgpu
+
+        gbgpu.get_backend("cpu").name  # "gbgpu_cpu"
+        gbgpu.has_backend("gbgpu_cuda13x")
+"""
 
 # ruff: noqa: E402
 try:
@@ -33,7 +62,7 @@ def get_include() -> str:
     """Absolute path to GBGPU's public C++/CUDA header directory.
 
     Downstream sprint packages and lisa-on-gpu (during the Phase 3L.7
-    transition) add this to their compiler include path so that
+    transition) add this to their compiler include path so that::
 
         #include "gb_tdi_on_the_fly.hh"    // GBTDIonTheFly + GBComputationGroup
 
@@ -45,6 +74,14 @@ def get_include() -> str:
     LAT for ``Detector.hpp`` + ``lat_chunked_het_kernels.hh`` + base
     classes, GBGPU for the GB source-class-specific machinery
     (``GBTDIonTheFly``, ``GBComputationGroup``, ``gb_run_wave_tdi_wrap``).
+
+    Returns:
+        str: The ``cutils`` directory of the installed ``gbgpu`` package.
+
+    Example:
+        .. code-block:: bash
+
+            nvcc -I"$(python -c 'import gbgpu; print(gbgpu.get_include())')" ...
     """
     import os.path
     return os.path.join(os.path.dirname(__file__), "cutils")
@@ -60,7 +97,8 @@ def get_cmake_module_path() -> str:
     just won't find the package and they fall through to the shell-out
     form).
 
-    Returns the same directory as :func:`get_include`.
+    Returns:
+        str: The same directory as :func:`get_include`.
     """
     import os.path
     return os.path.join(os.path.dirname(__file__), "cutils")
@@ -99,6 +137,32 @@ from gpubackendtools.gpubackendtools import Backend
 
 
 def get_backend(backend: str) -> Backend:
+    """Get a GBGPU backend by flavor or full name.
+
+    A name without ``"gbgpu_"`` in it is prefixed (``"cpu"`` -> ``"gbgpu_cpu"``), then
+    passed to :func:`gpubackendtools.globals.get_backend`, which also resolves the
+    ``"gbgpu_cuda"`` / ``"gbgpu_gpu"`` aliases to the first available CUDA flavor. (The
+    ``__doc__ = ...`` line below only sets a local variable.)
+
+    Args:
+        backend: ``"cpu"``, ``"cuda11x"``, ``"cuda12x"``, ``"cuda13x"``, ``"cuda"``,
+            ``"gpu"``, or a full ``"gbgpu_*"`` name.
+
+    Returns:
+        Backend: The loaded backend singleton (``xp``, the LAT and GB native wraps).
+
+    Raises:
+        ValueError: If the resolved name is not registered.
+        BackendAccessException: If the backend is disabled or failed to load.
+
+    Example:
+        .. code-block:: python
+
+            import gbgpu
+
+            backend = gbgpu.get_backend("cpu")
+            backend.xp  # numpy
+    """
     __doc__ = _get_backend.__doc__
     if "gbgpu_" not in backend:
         return _get_backend("gbgpu_" + backend)
@@ -107,6 +171,22 @@ def get_backend(backend: str) -> Backend:
 
 
 def has_backend(backend: str) -> Backend:
+    """Test whether a GBGPU backend loads.
+
+    A name without ``"gbgpu_"`` is prefixed, then passed to
+    :func:`gpubackendtools.globals.has_backend` (loads it on first call).
+
+    Args:
+        backend: A flavor (``"cpu"``, ``"cuda13x"``, ...) or a full ``"gbgpu_*"`` name. The
+            ``"cuda"`` / ``"gpu"`` aliases are NOT resolved here (``"gbgpu_cuda"`` is not a
+            registry name and raises ``ValueError``).
+
+    Returns:
+        bool: ``True`` if the backend loaded (despite the ``Backend`` annotation).
+
+    Raises:
+        ValueError: If the resolved name is not a registry name.
+    """
     __doc__ = _has_backend.__doc__
     if "gbgpu_" not in backend:
         return _has_backend("gbgpu_" + backend)
@@ -115,6 +195,20 @@ def has_backend(backend: str) -> Backend:
 
         
 def get_first_backend(backend: str) -> Backend:
+    """Intended: the first available GBGPU backend of a candidate list (does not work).
+
+    Prefixes ``"gbgpu_"`` and calls :func:`gpubackendtools.globals.get_first_backend`,
+    which expects a SEQUENCE of names. As written a string argument becomes one prefixed
+    string that is iterated character by character (``"g"`` is not a backend name), and a
+    list argument fails at the ``"gbgpu_" + backend`` concatenation (``TypeError``). Use
+    ``gpubackendtools.get_first_backend(["gbgpu_cuda13x", "gbgpu_cpu"])`` instead.
+
+    Args:
+        backend: Candidate name(s).
+
+    Returns:
+        Backend: Not reached for valid inputs (see above).
+    """
     __doc__ = _get_first_backend.__doc__
     if "gbgpu_" not in backend:
         return _get_first_backend("gbgpu_" + backend)

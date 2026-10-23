@@ -1,3 +1,66 @@
+"""FastGB galactic-binary (GB) waveforms, injections and legacy frequency-domain likelihoods.
+
+:class:`GBGPU` builds the LISA TDI response of batches of circular, slowly chirping galactic
+binaries with the FastGB method (Cornish & Littenberg 2007, arXiv:0704.1808, following the LDC
+``ldc`` implementation): the slowly varying part of each link response is sampled on ``N``
+points over the observation time ``T`` and FFT'd, so each source occupies ``N`` frequency bins
+starting at ``start_inds = rint(f0 * T) - N / 2`` on the ``df = 1 / T`` grid.
+:class:`GBGPUBase` holds the machinery; a derived class adds astrophysics through four hooks
+(``prepare_additional_args``, ``special_get_N``, ``shift_frequency``, ``add_to_phasing``).
+:class:`GBGPU` is the identity case (plain circular binaries) and
+:class:`gbgpu.thirdbody.GBGPUThirdBody` the hierarchical-triple one.
+
+Main entry points: :meth:`GBGPUBase.run_wave` (Python / ``xp`` waveforms, or the shared-memory
+kernel with ``use_c_implementation=True``), :meth:`GBGPUBase.get_ll`,
+:meth:`GBGPUBase.get_fstat_ll`, :meth:`GBGPUBase.swap_likelihood_difference`,
+:meth:`GBGPUBase.generate_global_template`, :meth:`GBGPUBase.fill_global_template`,
+:meth:`GBGPUBase.inject_signal` and :meth:`GBGPUBase.information_matrix`. The likelihood
+methods, :meth:`GBGPUBase.generate_global_template` and the C paths of :meth:`GBGPUBase.run_wave`
+/ :meth:`GBGPUBase.information_matrix` run the legacy FD shared-memory kernels
+(``SharedMemoryGBGPU.cu``, reached through ``backend.sharedmem``), which need a GBGPU build with
+``GBGPU_WITH_SHAREDMEM=ON``; with it off they raise ``RuntimeError``.
+:meth:`GBGPUBase.fill_global_template` uses the gbgpu_utils ``fill_global`` kernel instead.
+
+GB parameters (the physical basis, in this column order everywhere in this module except the
+5-column intrinsic layout of :meth:`GBGPUBase.get_fstat_ll`): ``amp``
+(dimensionless strain amplitude), ``f0`` [Hz], ``fdot`` [Hz/s], ``fddot`` [Hz/s^2], ``phi0``,
+``iota``, ``psi`` [rad], and the sky longitude / latitude ``lam``, ``beta`` [rad]. ``f0``,
+``fdot``, ``fddot`` and ``phi0`` are defined at the start ``t0`` of the observation window. The
+sky angles are read in the frame of the spacecraft positions of the orbits object
+(:attr:`lisatools.detector.Orbits.frame`): with the ICRS L1 orbits of the global fit, ``lam`` is
+the right ascension and ``beta`` the declination. ``beta`` is converted internally to the polar
+angle ``theta = pi / 2 - beta``.
+
+The response forms the Michelson X, Y, Z combinations from the spacecraft positions with the arm
+unit vectors normalized by the constant ``orbits.armlength`` and one transfer frequency
+``C_SI / (2 pi armlength)`` (an equal-arm approximation of the response); ``tdi2=True``
+multiplies by the second-generation factor at ``f0``. The production (unequal-arm) GB likelihood
+is the WDM path in :mod:`gbgpu.gbcomps` / :mod:`gbgpu.gbsignalhetcomputations`, not this module.
+
+Pipeline: in the 9-month / 12-month global fits (WDM domain) the :class:`GBGPU` built by
+``lisatools.globalfit.recipe`` (``build_gb_moves`` / ``build_vgb_moves``) is a container only;
+the GB moves read its ``gpus``, ``orbits`` and ``backend`` (``d_d`` is set only by the FD-only
+F-stat MCMC / refit setups). Every GB likelihood goes
+through :class:`gbgpu.gbcomps.GBWDMComputations` wrapped by
+:meth:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations.for_band_engine`.
+:meth:`GBGPUBase.run_wave` itself runs in the head rank's warm-start match referee
+(``lisatools.globalfit.warmstart.match_referee``, CPU backend, ICRS L1 orbits, ``t0`` = data
+start; ``GB_WARM_SELF=1``) and on the monitor rank.
+
+Example:
+    .. code-block:: python
+
+        import numpy as np
+        from lisatools.detector import EqualArmlengthOrbits
+        from lisatools.utils.constants import YRSID_SI
+        from gbgpu.gbgpu import GBGPU
+
+        gb = GBGPU(orbits=EqualArmlengthOrbits(force_backend="cpu"), force_backend="cpu")
+        params = np.tile([2e-23, 2e-3, 7.5e-18, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5], (10, 1))
+        gb.run_wave(*params.T, T=1.0 * YRSID_SI, dt=10.0)
+        gb.XYZf.shape  # (10, 3, gb.N)
+"""
+
 from multiprocessing.sharedctypes import Value
 import time
 import warnings
@@ -25,45 +88,102 @@ from typing import Optional, Sequence, TypeVar, Union, Dict, Any
 
 from gpubackendtools.parallelbase import ParallelModuleBase
 
+# Integer codes of ``tdi_channel_setup`` / ``window`` passed to the shared-memory kernels.
 tdi_channel_setup_map = {"XYZ": 1, "AET": 2, "AE": 3}
 window_map = {"tukey": 1, "planck": 2} # None is mapped to 0
 
 class GBGPUBase(GBGPUParallelModule, abc.ABC):
-    """Generate Galactic Binary Waveforms
+    """FastGB waveform, injection and legacy FD-likelihood machinery for galactic binaries.
 
-    This class generates galactic binary waveforms in the frequency domain,
-    in the form of LISA TDI channels X, A, and E. It generates waveforms in batches.
-    It can also provide injection signals and calculate likelihoods in batches.
-    These batches are run on GPUs or CPUs. When CPUs are used, all available threads
-    are leveraged with OpenMP. To adjust the available threads, use ``OMP_NUM_THREADS``
-    environmental variable or :func:`gbgpu.utils.set_omp_num_threads`.
+    Generates the frequency-domain TDI response (X, Y, Z and A, E, T) of batches of GBs and,
+    through the legacy shared-memory kernels, batched FD log-likelihoods, F-statistics,
+    swap-likelihood differences and global templates; information matrices come from
+    finite differences of :meth:`run_wave` (or, on the C path, a shared-memory kernel).
+    Everything runs on the backend picked at construction (``numpy`` on ``gbgpu_cpu``, ``cupy`` on
+    ``gbgpu_cuda*``). Parameter conventions and the response approximation are described in
+    the module docstring (:mod:`gbgpu.gbgpu`).
 
-    This class can generate waveforms for two different types of GB sources:
-
-        * Circular Galactic binaries
-        * Circular Galactic binaries with an eccentric third body (inherited)
+    A derived class supplies four hooks that :meth:`run_wave` calls by name:
+    ``prepare_additional_args(*args)`` (extra source parameters, after the 9 base ones),
+    ``special_get_N(amp, f0, T, *args, oversample=...)`` (points per waveform),
+    ``shift_frequency(fi, xi, *add_args)`` and
+    ``add_to_phasing(arg_phasing, f0, fdot, fddot, xi, *add_args)``. :class:`GBGPU`
+    implements them as identities (circular binaries);
+    :class:`gbgpu.thirdbody.GBGPUThirdBody` adds a third body. :class:`GBGPUBase` itself
+    defines none of them, so instantiate a subclass.
 
     Args:
-        force_backend (str, optional): Change to general backend in use. Example options are ``'cpu'`` and ``'gpu'``.
-            Default is ``None``. 
+        orbits: :class:`~lisatools.detector.Orbits` instance (e.g.
+            :class:`~lisatools.detector.EqualArmlengthOrbits` or the global fit's
+            :class:`~lisatools.detector.L1Orbits`) giving the spacecraft positions and
+            ``armlength``. Configured on assignment (``orbits._ensure_configured()``). Despite
+            the ``Optional`` annotation, ``None`` raises ``ValueError``.
+        force_backend (str | Backend | tuple, optional): Backend to run on. A bare flavor
+            (``"cpu"``, ``"cuda11x"``, ``"cuda12x"``, ``"cuda13x"``, or the ``"cuda"`` /
+            ``"gpu"`` aliases for the first available CUDA flavor) is prefixed with
+            ``gbgpu_``; full names (``"gbgpu_cuda13x"``), a backend object or a
+            ``(package, flavor)`` tuple are also accepted (see
+            :class:`gbgpu.parallelbase.GBGPUParallelModule`). The backend must carry the
+            GB ``sharedmem`` wrap. Default ``None`` takes the first loadable entry of
+            :meth:`supported_backends`; those are bare flavors, which resolve to the first
+            registered backend of that flavor (``gbt_*`` when gpubackendtools registered
+            first), not necessarily a ``gbgpu_*`` one, so pass a flavor explicitly.
+        t0 (float, optional): Absolute time [s] of the start of the observation window:
+            spacecraft positions are evaluated at ``t0 + linspace(0, T, N, endpoint=False)``
+            and the source parameters are defined there. Default ``None`` uses
+            ``orbits.sc_t0`` when the orbits have it (:class:`~lisatools.detector.L1Orbits`),
+            else ``0.0`` (``Orbits.t0`` is not read).
+        flip_ref_phase (bool, optional): If ``True``, negate ``phi0`` before generating
+            (the JaxGB phase convention). Without it the templates carry ``exp(+i phi0)``,
+            the opposite of the LDC / JaxGB ``exp(-i phi0)`` of the LAT analysis side (see
+            ``lisatools.sources.gb.waveform``). Default ``False``; the global-fit callers do
+            not set it (the LAT GB transform container owns the phase sign).
+
+    Raises:
+        ValueError: If ``orbits`` is not an :class:`~lisatools.detector.Orbits` instance.
+        AttributeError: If the resolved backend has no ``sharedmem`` attribute (a
+            non-GBGPU backend).
 
     Attributes:
-        get_basis_tensors (obj): Cython function.
-        GenWave (obj): Cython function.
-        GenWaveThird (obj): Cython function.
-        unpack_data_1 (obj): Cython function.
-        XYZ (obj): Cython function.
-        num_bin (int): Number of binaries in the current calculation.
-        N_max (int): Maximum points in a waveform based on maximum harmonic mode considered.
-        start_inds (list of 1D int xp.ndarray): Start indices into data stream array. q - N/2.
-        df (double): Fourier bin spacing.
-        X_out, A_out, E_out (1D complex xp.ndarrays): X, A, or E channel TDI templates.
-            Each array is a 2D complex array
-            of shape (number of points, number of binaries) that is flattened. These can be
-            accessed in python with the properties ``X``, ``A``, ``E``.
-        N (int): Last N value used.
-        d_d (double): <d|d> term in the likelihood.
+        gpus (list[int] or None): CUDA device ids for multi-GPU dispatch in
+            :meth:`get_ll`, :meth:`get_fstat_ll`, :meth:`generate_global_template`,
+            :meth:`swap_likelihood_difference` and the C path of
+            :meth:`information_matrix`. ``None`` (default) means one device / CPU. Set it
+            after construction (``lisatools.globalfit.recipe`` sets the rank's GPU list).
+        d_d (float or xp.ndarray or None): ``<d|d>`` term added in :meth:`get_ll`; must be
+            set by the caller first. Default ``None``.
+        t0_abs (float): Resolved absolute start time [s] (see ``t0``).
+        flip_ref_phase (bool): See the argument.
+        force_backend: The ``force_backend`` argument as given.
+        shared_mem_backend: ``backend.sharedmem``, the ``GBGPUComputationWrap`` instance
+            holding the shared-memory kernels.
+        XYZf (xp.ndarray): Set by :meth:`run_wave`: complex FD X, Y, Z templates, shape
+            ``(num_bin, 3, N)`` (Python path). See :meth:`run_wave` for the C path.
+        AETf (xp.ndarray): Set by :meth:`run_wave`: complex FD A, E, T templates,
+            ``A = (Z - X) / sqrt(2)``, ``E = (X - 2 Y + Z) / sqrt(6)``,
+            ``T = (X + Y + Z) / sqrt(3)``, shape ``(num_bin, 3, N)`` (Python path).
+        start_inds (xp.ndarray): Set by :meth:`run_wave`: per-binary index of the first
+            template bin on the ``df = 1 / T`` grid, ``rint(f0 * T) - N / 2``, shape
+            ``(num_bin,)``. ``kmin`` is the same array.
+        N (int): Points per template of the last :meth:`run_wave` call.
+        num_bin (int): Number of binaries of the last call.
+        df (float): Frequency resolution ``1 / T`` [Hz] of the last call.
+        d_h, h_h (xp.ndarray): Complex per-binary ``<d|h>`` and ``<h|h>`` of the last
+            :meth:`get_ll` (``d_h`` is ``|<d|h>|`` with ``phase_maximize=True``).
+        phase_angle (xp.ndarray or None): Phase-maximizing rotation of the last
+            :meth:`get_ll` / :meth:`swap_likelihood_difference` with ``phase_maximize``.
+        A_max, psi_max, iota_max, phi0_max (xp.ndarray): F-statistic maximized extrinsic
+            parameters of the last :meth:`get_fstat_ll`.
 
+    Example:
+        .. code-block:: python
+
+            from lisatools.detector import EqualArmlengthOrbits
+            from gbgpu.gbgpu import GBGPU
+
+            gb = GBGPU(orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                       force_backend="cpu")
+            gb.backend.name  # "gbgpu_cpu"
     """
 
     def __init__(self, orbits: Optional[Orbits | L1Orbits] = None, force_backend = None, t0 = None, flip_ref_phase=False):
@@ -104,6 +224,14 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
 
     @classmethod
     def supported_backends(cls):
+        """Backend candidates for ``force_backend=None``, most preferred first.
+
+        Returns:
+            list[str]: The BARE flavors ``["cuda13x", "cuda12x", "cuda11x", "cpu"]``
+            (:meth:`~gpubackendtools.parallelbase.ParallelModuleBase.GPU_RECOMMENDED`),
+            without the ``gbgpu_`` prefix, so the default pick can land on another
+            package's backend (see the class ``force_backend`` argument).
+        """
         return cls.GPU_RECOMMENDED()
 
     # ---- CPU/GPU dispatch helpers ----
@@ -113,17 +241,17 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
     # unconditionally without crashing on numpy.
 
     def _xp_set_device(self, device) -> None:
-        """No-op on CPU; cuda.runtime.setDevice on GPU."""
+        """Set the current CUDA device (``cupy.cuda.runtime.setDevice``); no-op on CPU."""
         if hasattr(self.xp, "cuda"):
             self.xp.cuda.runtime.setDevice(device)
 
     def _xp_sync(self) -> None:
-        """No-op on CPU; cuda.runtime.deviceSynchronize on GPU."""
+        """Synchronize the current CUDA device (``deviceSynchronize``); no-op on CPU."""
         if hasattr(self.xp, "cuda"):
             self.xp.cuda.runtime.deviceSynchronize()
 
     def _xp_device(self, device):
-        """cuda.Device context manager on GPU; nullcontext on CPU."""
+        """Return a ``cupy.cuda.Device(device)`` context manager on GPU, a null context on CPU."""
         if hasattr(self.xp, "cuda"):
             return self.xp.cuda.Device(device)
         import contextlib
@@ -139,6 +267,16 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         ``% num_per_gpu`` block trick misindexes every shard after the first.
         The modulo fallback only remains for callers passing no
         ``data_splits`` (single-buffer path, where rank == global index).
+
+        Args:
+            index_arr (xp.ndarray): Global row indices (into the full template / data set)
+                of the binaries routed to ``gpu``.
+            data_splits (xp.ndarray or None): Device id of every global row.
+            gpu (int): The shard's device id.
+            num_per_gpu (int): Block size for the modulo fallback.
+
+        Returns:
+            xp.ndarray: ``int32`` row indices local to the shard, same shape as ``index_arr``.
         """
         xp = self.xp
         if data_splits is None:
@@ -148,17 +286,23 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
 
     @property
     def get_ll_func(self):
-        """get_ll c func."""
+        """Backend ``get_ll`` kernel (``GBGPUComputationWrap.get_ll``, gbgpu_utils); unused here."""
         return getattr(self.backend, 'get_ll')
 
     @property
     def fill_global_func(self):
-        """fill_global c func."""
+        """Backend ``fill_global`` kernel (gbgpu_utils), used by :meth:`fill_global_template`."""
         return getattr(self.backend, 'fill_global')
 
     @property
     def orbits(self) -> Orbits:
-        """Orbits class."""
+        """The :class:`~lisatools.detector.Orbits` object giving positions and ``armlength``.
+
+        The setter stores the object and calls ``orbits._ensure_configured()``; ``None``
+        stores a default :class:`~lisatools.detector.EqualArmlengthOrbits` (unreachable
+        from the constructor, which rejects ``None``) and a non-``Orbits`` value raises
+        ``ValueError``.
+        """
         return self._orbits
 
     @orbits.setter
@@ -175,7 +319,8 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
 
     @property
     def citation(self):
-        """Get citations for this class"""
+        """str: BibTeX entries to cite: the GBGPU Zenodo record, Cornish & Littenberg 2007
+        (FastGB) and Robson et al. 2018 (third body)."""
         return zenodo + cornish_fastb + robson_triple
 
     def run_wave(
@@ -200,55 +345,91 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         window: Optional[str] = None,
         window_alpha: float = 0.0
     ):
-        """Create waveforms in batches.
+        """Generate the FD TDI templates of a batch of binaries (FastGB).
 
-        This call creates the TDI templates in batches.
-
-        The parameters and code below are based on an implementation of Fast GB
-        in the LISA Data Challenges' ``ldc`` package.
-
-        This class can be inherited to build fast waveforms for systems
-        with additional astrophysical effects.
+        Based on the FastGB implementation of the LISA Data Challenges' ``ldc`` package.
+        Python / ``xp`` path (default): the slow part of the six link responses is built on
+        the ``N`` times ``linspace(0, T, N, endpoint=False)`` (positions from
+        ``orbits.get_pos`` at ``t0_abs`` plus those times), optionally windowed, FFT'd and
+        combined into X, Y, Z;
+        A, E, T follow from :func:`gbgpu.utils.utility.AET`. Each template covers the ``N``
+        bins starting at ``start_inds = rint(f0 * T) - N / 2`` on the ``df = 1 / T`` grid and
+        is scaled by ``0.5 * T / N`` (times the TDI-2 factor when ``tdi2``). Results are
+        stored on the object (nothing is returned). Derived classes extend the model through
+        the hooks listed in the class docstring.
 
         Args:
-            amp (double or 1D double np.ndarray): Amplitude parameter.
-            f0 (double or 1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            fdot (double or 1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz/s.
-            fddot (double or 1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz/s^2.
-            phi0 (double or 1D double np.ndarray): Initial phase angle of gravitational
-                wave given in radians.
-            iota (double or 1D double np.ndarray): Inclination of the Galactic binary
-                orbit given in radians.
-            psi (double or 1D double np.ndarray): Polarization angle of the Galactic
-                binary orbit in radians.
-            lam (double or 1D double np.ndarray): Ecliptic longitutude of the source
-                given in radians.
-            beta (double or 1D double np.ndarray): Ecliptic Latitude of the source
-                given in radians. This is converted to the spherical polar angle.
-            *args (tuple, optional): Flexible parameter to allow for a flexible
-                number of argmuments when inherited by other classes.
-                If running a circular Galactic binarys, ``args = ()``.
-                If ``len(args) != 0``, then the inheriting class must have a
-                ``prepare_additional_args`` method.
-            N (int, optional): Number of points in waveform.
-                This should be determined by the initial frequency, ``f0``. Default is ``None``.
-                If ``None``, will use :func:`gbgpu.utils.utility.get_N` function to determine proper ``N``.
-            T (double, optional): Observation time in seconds. Default is ``4 * YRSID_SI``.
-            dt (double, optional): Observation cadence in seconds. Default is ``10.0`` seconds.
-            oversample(int, optional): Oversampling factor compared to the determined ``N``
-                value. Final N will be ``oversample * N``. This is only used if N is
-                not provided. Default is ``1``.
-            tdi2 (bool, optional): If ``True``, produce the TDI channels for TDI 2nd-generation.
-                If ``False``, produce TDI 1st-generation. Technically, the current TDI computation
-                is not valid for generic LISA orbits, which are dealth with with 2nd-generation TDI,
-                only those with an "equal-arm length" condition. Default is ``False``.
+            amp (float or np.ndarray): Dimensionless strain amplitude, scalar or shape
+                ``(num_bin,)``. All parameters are made at least 1D and copied to the
+                backend (``xp.asarray``).
+            f0 (float or np.ndarray): GW frequency at ``t0_abs`` [Hz].
+            fdot (float or np.ndarray): First frequency derivative [Hz/s].
+            fddot (float or np.ndarray): Second frequency derivative [Hz/s^2].
+            phi0 (float or np.ndarray): Initial GW phase [rad] (negated first when
+                ``flip_ref_phase``).
+            iota (float or np.ndarray): Inclination [rad].
+            psi (float or np.ndarray): Polarization angle [rad].
+            lam (float or np.ndarray): Sky longitude [rad] in the orbits frame (ICRS right
+                ascension with the global fit's L1 orbits).
+            beta (float or np.ndarray): Sky latitude [rad] in the orbits frame (ICRS
+                declination with L1 orbits); converted to ``theta = pi / 2 - beta``.
+            *args: Extra per-binary parameters of a derived class, passed to its
+                ``prepare_additional_args`` / ``special_get_N`` (e.g. ``A2, varpi, e2, P2, T2``
+                for :class:`gbgpu.thirdbody.GBGPUThirdBody`). Empty for :class:`GBGPU`.
+            N: Points per template, shared by the whole batch. Default ``None`` takes the
+                maximum of ``special_get_N(amp, f0, T, *args, oversample=oversample)``
+                (:func:`gbgpu.utils.utility.get_N` for :class:`GBGPU`).
+            T: Observation time [s]. Truncated first to ``int(T / dt) * dt``. Default
+                ``4 * YRSID_SI``.
+            dt: Data sampling cadence [s]; on the Python path it only enters the
+                truncation of ``T``. Default ``10.0``.
+            oversample: Multiplier on the automatic ``N`` (only used when ``N`` is
+                ``None``). Default ``1``.
+            tdi2: Multiply by the second-generation TDI factor
+                ``2i sin(2 omega L) exp(-2i omega L)``, ``omega L = 2 pi f0 L / c``, evaluated
+                at ``f0``. Default ``False`` (first generation).
+            tdi_channel_setup: ``"AE"``, ``"AET"`` or ``"XYZ"``. Used only by the C path
+                (the Python path always fills both ``XYZf`` and ``AETf`` with 3 channels).
+                Default ``"AE"``.
+            use_c_implementation: Run ``backend.sharedmem.SharedMemoryWaveComp_wrap``
+                instead of the Python path. Default ``False`` (every global-fit caller uses
+                the Python path).
+            window: Taper on the slow part, ``"tukey"``, ``"planck"`` or ``None``
+                (rectangular). Default ``None``.
+            window_alpha: Taper parameter (Tukey alpha / Planck epsilon); must be ``0.0``
+                when ``window`` is ``None``. Default ``0.0``.
 
-            Raises:
-                ValueError: Length of ``*args`` is not 0 or 5.
+        Raises:
+            ValueError: If ``[t0_abs, t0_abs + T]`` exceeds the orbit time range
+                (``orbits.sc_t_base`` when present, else ``orbits.t_base``).
+            KeyError: For an unknown ``window``.
+            AssertionError: If ``window`` is ``None`` and ``window_alpha != 0``.
+            TypeError: If ``*args`` is non-empty on :class:`GBGPU`, whose
+                ``prepare_additional_args`` returns (does not raise) a ``ValueError``.
 
+        Note:
+            Attributes set: ``XYZf`` and ``AETf``, complex ``xp`` arrays of shape
+            ``(num_bin, 3, N)``; ``start_inds`` (= ``kmin``), ``(num_bin,)`` ints; ``N``,
+            ``num_bin`` and ``df = 1 / T``. The C path instead sets ``start_inds`` from the
+            kernel and ONE of ``XYZf`` (``tdi_channel_setup="XYZ"``) or ``AETf``
+            (``"AE"`` / ``"AET"``), shape ``(num_bin, nchannels, N)`` with
+            ``nchannels = 2`` for ``"AE"``; it stops in ``breakpoint()`` for an empty batch.
+
+        Example:
+            .. code-block:: python
+
+                import numpy as np
+                from lisatools.detector import EqualArmlengthOrbits
+                from lisatools.utils.constants import YRSID_SI
+                from gbgpu.gbgpu import GBGPU
+
+                gb = GBGPU(orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                           force_backend="cpu")
+                params = np.tile([2e-23, 2e-3, 7.5e-18, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+                                 (10, 1))  # (num_bin, 9)
+                gb.run_wave(*params.T, T=1.0 * YRSID_SI, dt=10.0, oversample=2)
+                A0 = gb.A[0]          # (N,) TDI A of the first binary
+                f0_bins = gb.freqs[0]  # (N,) its frequencies [Hz]
         """
 
         # get number of observation points and adjust T accordingly
@@ -466,39 +647,64 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
 
     @property
     def X_out(self):
-        """X channel."""
+        """xp.ndarray: X of the last run, ``XYZf[:, 0].T.flatten()``, shape ``(N * num_bin,)``."""
         return self.XYZf[:, 0].T.flatten()
 
     @property
     def Y_out(self):
-        """Y channel."""
+        """xp.ndarray: Y of the last run, ``XYZf[:, 1].T.flatten()``, shape ``(N * num_bin,)``."""
         return self.XYZf[:, 1].T.flatten()
 
     @property
     def Z_out(self):
-        """Z channel."""
+        """xp.ndarray: Z of the last run, ``XYZf[:, 2].T.flatten()``, shape ``(N * num_bin,)``."""
         return self.XYZf[:, 2].T.flatten()
 
     @property
     def A_out(self):
-        """A channel."""
+        """xp.ndarray: A of the last run, ``AETf[:, 0].T.flatten()``, shape ``(N * num_bin,)``.
+
+        This is the 1D layout :meth:`fill_global_template` accepts.
+        """
         return self.AETf[:, 0].T.flatten()
 
     @property
     def E_out(self):
-        """E channel."""
+        """xp.ndarray: E of the last run, ``AETf[:, 1].T.flatten()``, shape ``(N * num_bin,)``."""
         return self.AETf[:, 1].T.flatten()
 
     @property
     def T_out(self):
-        """T channel."""
+        """xp.ndarray: T of the last run, ``AETf[:, 2].T.flatten()``, shape ``(N * num_bin,)``.
+
+        Raises:
+            ValueError: If ``AETf`` holds only A and E (C path with ``"AE"``).
+        """
         if self.AETf.shape[1] == 2: # TODO: can this be removed?
             raise ValueError("Requesting T channel when AE was generated.")
 
         return self.AETf[:, 2].T.flatten()
 
     def _computeXYZ(self, T, Gs, f0, fdot, fddot, fstar, ampl, q, tm):
-        """Compute TDI X, Y, Z from y_sr"""
+        """Combine the link transfer functions into FD Michelson X, Y, Z (LDC FastGB).
+
+        Args:
+            T (float): Observation time [s].
+            Gs (dict): Slow-part link responses from :meth:`_construct_slow_part`, keys
+                ``"12"``, ``"23"``, ``"31"``, ``"21"``, ``"32"``, ``"13"``, each
+                ``(num_bin, N)`` complex.
+            f0, fdot, fddot (xp.ndarray): ``(num_bin,)`` frequency parameters.
+            fstar (float): Transfer frequency ``C_SI / (2 pi armlength)`` [Hz].
+            ampl (xp.ndarray): ``(num_bin,)`` amplitudes (factored out of the transfer
+                function and restored after the FFT).
+            q (np.ndarray): ``(num_bin,)`` carrier bin ``rint(f0 * T)``.
+            tm (xp.ndarray): ``(N,)`` times relative to ``t0_abs`` [s].
+
+        Returns:
+            tuple: ``(XYZf, f_min)``: the fftshifted length-``N`` FFT of the slow X, Y, Z,
+            ``(num_bin, 3, N)`` complex (before the ``0.5 T / N`` scaling of
+            :meth:`run_wave`), and the frequency of the first bin ``(q - N / 2) / T`` [Hz].
+        """
 
         # get true frequency as a function of time
         f = (
@@ -540,7 +746,14 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         return XYZf, f0
 
     def _spacecraft(self, t):
-        """Compute space craft positions as a function of time"""
+        """Spacecraft positions at absolute times ``t`` [s].
+
+        Args:
+            t (xp.ndarray): ``(N,)`` absolute times [s].
+
+        Returns:
+            list: ``[P1, P2, P3]``, each ``(N, 3)`` positions [m] from ``orbits.get_pos``.
+        """
 
         # output arrays
         P1 = self.orbits.get_pos(t, self.xp.full_like(t, 1).astype(self.xp.int32))
@@ -566,7 +779,30 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         ecross,
         *add_args,
     ):
-        """Construct the time-domain function for the slow part of the waveform."""
+        """Build the slow (heterodyned) part of the six link responses in the time domain.
+
+        Computes the delayed times ``xi = tm - k.P_i / c`` at each spacecraft, the
+        instantaneous frequencies (passed through ``shift_frequency``), the polarization
+        projections onto each arm and the phase ``om k.P_i / c - argS`` (passed through
+        ``add_to_phasing``), then the LDC FastGB transfer functions ``G_ij``.
+
+        Args:
+            T (float): Observation time [s].
+            arm_length (float): Constant arm length [m] normalizing the arm unit vectors.
+            Ps (list): ``[P1, P2, P3]`` spacecraft positions, each ``(N, 3)`` [m].
+            tm (xp.ndarray): ``(N,)`` times relative to ``t0_abs`` [s].
+            f0, fdot, fddot, phi0 (xp.ndarray): ``(num_bin,)`` source parameters.
+            fstar (float): Transfer frequency [Hz].
+            k (xp.ndarray): ``(num_bin, 1, 3)`` propagation direction.
+            DP, DC (xp.ndarray): ``(num_bin,)`` complex plus / cross polarization amplitudes.
+            eplus, ecross (xp.ndarray): ``(num_bin, 3, 3)`` polarization tensors.
+            *add_args: Output of ``prepare_additional_args`` (derived classes).
+
+        Returns:
+            tuple: ``(Gs, q)``: dict of ``(num_bin, N)`` complex link responses keyed
+            ``"12"``, ``"23"``, ``"31"``, ``"21"``, ``"32"``, ``"13"``, and the carrier bins
+            ``q = rint(f0 * T)``.
+        """
 
         # these are the orbits (equal-arm lengths assumed)
         P1, P2, P3 = Ps
@@ -694,7 +930,20 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         return Gs, q
 
     def _get_window_array(self, window_type: int, window_alpha: float, N: int) -> Any:
-        """Generate window array"""
+        """Taper applied to the slow part by :meth:`run_wave` (Python path).
+
+        Args:
+            window_type: ``0`` rectangular, ``1`` Tukey (``window_alpha`` = alpha), ``2``
+                Planck (``window_alpha`` = epsilon); codes from ``window_map``.
+            window_alpha: Taper parameter; ``<= 0`` gives the rectangular window.
+            N: Number of samples.
+
+        Returns:
+            xp.ndarray: ``(N,)`` float64 window.
+
+        Raises:
+            ValueError: For an unknown ``window_type``.
+        """
         if window_type == 0 or window_alpha <= 0.0 or N <= 1:
             return self.xp.ones(N, dtype=self.xp.float64)
         
@@ -738,39 +987,46 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
     
     @property
     def A(self):
-        """return A channel reshaped based on number of binaries"""
+        """xp.ndarray: TDI A templates of the last :meth:`run_wave`, shape ``(num_bin, N)``."""
         return self.AETf[:, 0]
 
     @property
     def E(self):
-        """return E channel reshaped based on number of binaries"""
+        """xp.ndarray: TDI E templates of the last :meth:`run_wave`, shape ``(num_bin, N)``."""
         return self.AETf[:, 1]
 
     @property
     def T(self):
-        """return T channel reshaped based on number of binaries"""
+        """xp.ndarray: TDI T templates of the last :meth:`run_wave`, shape ``(num_bin, N)``.
+
+        Raises:
+            ValueError: If ``AETf`` holds only A and E (C path with ``"AE"``).
+        """
         if self.AETf.shape[1] == 2:
             raise ValueError("Requesting T channel when AE was generated.")
         return self.AETf[:, 2]
 
     @property
     def X(self):
-        """return X channel reshaped based on number of binaries"""
+        """xp.ndarray: TDI X templates of the last :meth:`run_wave`, shape ``(num_bin, N)``."""
         return self.X_out.reshape(self.N, self.num_bin).T
 
     @property
     def Y(self):
-        """return Y channel reshaped based on number of binaries"""
+        """xp.ndarray: TDI Y templates of the last :meth:`run_wave`, shape ``(num_bin, N)``."""
         return self.Y_out.reshape(self.N, self.num_bin).T
 
     @property
     def Z(self):
-        """return Z channel reshaped based on number of binaries"""
+        """xp.ndarray: TDI Z templates of the last :meth:`run_wave`, shape ``(num_bin, N)``."""
         return self.Z_out.reshape(self.N, self.num_bin).T
 
     @property
     def freqs(self):
-        """Return frequencies associated with each signal"""
+        """xp.ndarray: Frequencies [Hz] of each template bin, shape ``(num_bin, N)``.
+
+        Bin ``k`` of binary ``i`` sits at ``(start_inds[i] + k) * df``.
+        """
         freqs_out = (
             self.xp.arange(self.N)[None, :] + self.start_inds[:, None]
         ) * self.df
@@ -801,6 +1057,77 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         window_alpha: float = 0.0
         # **kwargs
     ):
+        """Batched FD log-likelihood of GB templates against residual data (legacy kernel).
+
+        Generates each binary's template inside ``backend.sharedmem.SharedMemoryLikeComp_wrap``
+        and accumulates ``<d|h> = 4 df sum_k conj(d_k) h_k psd_k`` and ``<h|h>`` (per channel
+        for ``"AE"`` / ``"AET"``, over the full channel matrix for ``"XYZ"``), ``df = 1 / T``.
+        Binaries are grouped by template length ``N`` and routed to devices by
+        ``data_splits[data_index]``. Not on the global-fit path (WDM runs use
+        :class:`gbgpu.gbcomps.GBWDMComputations`); the LAT callers are ``gathergalaxy`` and
+        the FD-only ``gbspecialstretch.para_log_like``.
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical parameters, columns
+                ``(amp, f0, fdot, fddot, phi0, iota, psi, lam, beta)`` (see the module
+                docstring).
+            data_minus_template (xp.ndarray or list): Complex residual data. One array, or a
+                list with one array per device of ``gpus``. Each is ``(nchannels,
+                data_length)`` (one data row), ``(num_data, nchannels, data_length)``, or the
+                flat 1D form of the latter (then ``data_length`` is required). ``nchannels`` is
+                2 for ``"AE"``, else 3.
+            psd (xp.ndarray or list): Noise weights multiplied into the inner product, i.e.
+                the INVERSE PSD (``"AE"`` / ``"AET"``: ``(nchannels, data_length)`` or
+                ``(num_psd, nchannels, data_length)``) or the inverse cross-spectral matrix
+                (``"XYZ"``: ``(3, 3, data_length)`` or ``(num_psd, 3, 3, data_length)``), or
+                flat 1D. Same list-per-device convention; cast to complex128.
+            start_freq_ind (int or xp.ndarray, optional): Index on the ``df`` grid of the
+                first bin of the data rows: an int for all rows, or an int32 array of length
+                ``num_data``. Default ``0``.
+            data_index (xp.ndarray, optional): ``(num_bin,)`` int32 data row of each binary.
+                Default ``None`` (all row 0).
+            noise_index (xp.ndarray, optional): ``(num_bin,)`` int32 psd row of each binary.
+                Default ``None`` (all row 0).
+            adjust_inplace (bool, optional): Ignored.
+            use_c_implementation (bool, optional): Ignored (always the kernel).
+            N (int or xp.ndarray, optional): Template length: one int, or ``(num_bin,)``.
+                Default ``None`` uses :func:`gbgpu.utils.utility.get_N` on ``(amp, f0)``.
+            T (float, optional): Observation time [s] (not truncated to ``dt``). Default
+                ``4 * YRSID_SI``.
+            dt (float, optional): Sampling cadence [s] passed to the kernel. Default ``10.0``.
+            data_length (int, optional): Bins per data row; required for flat 1D inputs,
+                otherwise read from the array shapes.
+            data_splits (xp.ndarray, optional): Device id of every data row. Default ``None``
+                puts all rows on one device (requires ``gpus`` to be ``None`` or one id).
+            phase_maximize (bool, optional): Replace ``<d|h>`` by ``|<d|h>|`` (analytic
+                maximization over ``phi0``); the rotation is stored on ``phase_angle`` and
+                the complex value on ``non_marg_d_h`` (host). Default ``False``.
+            tdi_channel_setup (str, optional): ``"AE"``, ``"AET"`` or ``"XYZ"``. Default
+                ``"AE"``.
+            num_per_gpu (int, optional): Must be ``None``.
+            oversample (int, optional): Multiplier on the automatic ``N``. Default ``1``.
+            return_cupy (bool, optional): Return the backend array instead of a host one.
+                Default ``False``.
+            tdi2: Second-generation TDI factor (as in :meth:`run_wave`). Default ``False``.
+            window: ``"tukey"``, ``"planck"`` or ``None``. Default ``None``.
+            window_alpha: Taper parameter; ``0.0`` when ``window`` is ``None``.
+
+        Returns:
+            np.ndarray: ``(num_bin,)`` float values of ``-0.5 * Re(d_d + <h|h> - 2 <d|h>)``
+            (an ``xp`` array with ``return_cupy=True``). The complex ``d_h`` / ``h_h`` are kept
+            on the object.
+
+        Raises:
+            ValueError: If ``self.d_d`` is ``None``, or an automatic ``N`` is zero.
+            NotImplementedError: If ``num_per_gpu`` is given.
+            KeyError: For an unknown ``window``.
+            AssertionError: For index arrays that are not int32 or inconsistent shapes.
+
+        Warning:
+            With ``flip_ref_phase=True`` the ``phi0`` column of the CALLER's ``params`` is
+            negated in place on every call. A ``ValueError`` raised by the kernel drops into
+            ``breakpoint()``.
+        """
         if self.d_d is None:
             raise ValueError(
                 "self.d_d attribute must be set before computing log-Likelihood. This attribute is the data with data inner product (<d|d>)."
@@ -1116,6 +1443,45 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         window_alpha: float = 0.0
         # **kwargs
     ):
+        """Batched FD F-statistic of GB templates against residual data (legacy kernel).
+
+        ``backend.sharedmem.SharedMemoryFstatLikeComp_wrap`` builds, per binary, the four
+        F-statistic basis filters ``A_i`` sharing its ``(f0, fdot, fddot, lam, beta)`` and
+        returns ``N_i = <d|A_i>`` and ``M_ij = <A_i|A_j>`` (inner product as in
+        :meth:`get_ll`). The statistic is ``N^T M^-1 N``; the amplitudes ``a = M^-1 N`` are
+        also turned into the maximizing ``A_max``, ``psi_max`` (mod pi), ``iota_max``
+        (mod pi) and ``phi0_max`` (mod 2 pi), stored on the object. FD-only: the LAT caller
+        (``gbspecialstretch.para_log_like``) refuses non-FD runs.
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 5)`` intrinsic parameters
+                ``(f0 [Hz], fdot [Hz/s], fddot [Hz/s^2], lam, beta)`` (sky in the orbits
+                frame). Not the 9-column layout of :meth:`get_ll`.
+            data_minus_template (xp.ndarray or list): As in :meth:`get_ll`.
+            psd (xp.ndarray or list): As in :meth:`get_ll`.
+            start_freq_ind, data_index, noise_index: As in :meth:`get_ll`.
+            T, dt, data_length, data_splits, tdi_channel_setup: As in :meth:`get_ll`.
+            num_per_gpu, return_cupy, tdi2, window, window_alpha: As in :meth:`get_ll`.
+            adjust_inplace, use_c_implementation, phase_maximize: Ignored.
+            N (int or xp.ndarray, optional): Template length. Default ``None`` uses
+                :func:`gbgpu.utils.utility.get_N` with ``amp = 1e-25`` and ``f0``.
+            oversample (int, optional): Multiplier on the automatic ``N``. Default ``1``.
+
+        Returns:
+            np.ndarray: ``(num_bin,)`` float ``N^T M^-1 N`` per binary (an ``xp`` array with
+            ``return_cupy=True``).
+
+        Raises:
+            NotImplementedError: If ``num_per_gpu`` is given.
+            ValueError: If an automatic ``N`` is zero.
+            KeyError: For an unknown ``window``.
+            AssertionError: For index arrays that are not int32 or inconsistent shapes.
+
+        Warning:
+            With ``flip_ref_phase=True`` this method negates column 4 of the caller's
+            ``params`` in place, which in this 5-column layout is ``beta``, not ``phi0``.
+            A ``ValueError`` raised by the kernel drops into ``breakpoint()``.
+        """
         if num_per_gpu is not None:
             raise NotImplementedError("Need to check this.")
 
@@ -1404,6 +1770,7 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         except AttributeError:
             return fstat_logl
 
+    # TODO check: keep/remove/document -- broken, never computes (NameError on gpu_i); no callers
     def get_chi_sqared(
         self,
         params,
@@ -1419,56 +1786,30 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         return_cupy=False,
         **kwargs,
     ):
-        """Get batched log likelihood
+        """Pairwise chi-squared between binaries (unfinished; does not compute anything).
 
-        Generate the individual log likelihood for a batched set of Galactic binaries.
-        This is also GPU/CPU agnostic.
+        Intended to give ``-1/2 <h1 - h2|h1 - h2>`` for every pair of binaries with the
+        ``SharedMemoryChiSquaredComp_wrap`` kernel. As written the kernel call is commented
+        out, both ``start_freq_ind`` branches index ``num_data[gpu_i]`` with an undefined
+        ``gpu_i`` (``NameError``), and nothing is returned. The original body is kept as
+        comments below the method.
 
         Args:
-            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
-                The shape is ``(number of parameters, number of binaries)``.
-            data (length 2 list of 1D or 2D complex128 xp.ndarrays): List of arrays representing the data
-                stream. These should be CuPy arrays if running on the GPU, NumPy
-                arrays if running on a CPU. The list should be [A channel, E channel].
-                Should be 1D if only one data stream is analyzed. If 2D, shape is
-                ``(number of data streams, data_length)``. If 2D,
-                user must also provide ``data_index`` kwarg.
-            psd (length 2 list of 1D or 2D double xp.ndarrays): List of arrays representing
-                the power spectral density (PSD) in the noise.
-                These should be CuPy arrays if running on the GPU, NumPy
-                arrays if running on a CPU. The list should be [A channel, E channel].
-                Should be 1D if only one PSD is analyzed. If 2D, shape is
-                ``(number of PSDs, data_length)``. If 2D,
-                user must also provide ``noise_index`` kwarg.
-            phase_maximize (bool, optional): If True, marginalize over the initial phase.
-                Default is False.
-            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
-                for the first entry of ``data``/``psd``. This is used if a subset of a full data stream
-                is presented for the computation. If providing mutliple data streams in ``data``, this single
-                start index value will apply to all of them.
-            data_index (1D xp.int32 array, optional): If providing 2D ``data``, need to provide ``data_index``
-                to indicate the data stream associated with each waveform for which the log-Likelihood
-                is being computed. For example, if you have 100 binaries with 5 different data streams,
-                ``data_index`` will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
-                data stream to use for each source.
-                If ``None``, this will be filled with zeros and only analyzed with the first
-                data stream given. Default is ``None``.
-            noise_index (1D xp.int32 array, optional): If providing 2D ``psd``, need to provide ``noise_index``
-                to indicate the PSD associated with each waveform for which the log-Likelihood
-                is being computed. For example, if you have 100 binaries with 5 different PSDs,
-                ``noise_index`` will be a length-100 xp.int32 array with values 0 to 4, indicating the specific
-                PSD to use for each source.
-                If ``None``, this will be filled with zeros and only analyzed with the first
-                PSD given. Default is ``None``.
-            return_cupy (bool, optional): If ``True``, return CuPy array. Default is ``False``.
-            **kwargs (dict, optional): Passes keyword arguments to the :func:`run_wave` method.
-
-        Raises:
-            TypeError: If data arrays are NumPy/CuPy while template arrays are CuPy/NumPy.
+            params (xp.ndarray): ``(num_bin, 9)`` parameters (only ``amp`` and ``f0`` are read,
+                for ``get_N``).
+            psd (xp.ndarray): ``(num_psd, nchannels, data_length)`` noise weights; a non-array
+                raises ``NotImplementedError``.
+            phase_maximize, use_c_implementation, return_cupy: Unused by the body as written.
+            oversample (int, optional): Multiplier on the automatic ``N``.
+            **kwargs: Unused.
+            start_freq_ind (int or xp.ndarray, optional): First-bin index of ``psd``.
+            noise_index (xp.ndarray, optional): ``(num_bin,)`` int32 psd rows.
+            N (int, optional): Template length (``get_N`` maximum when ``None``).
+            T (float, optional): Observation time [s], truncated to ``int(T / dt) * dt``.
+            dt (float, optional): Sampling cadence [s].
 
         Returns:
-            1D double np.ndarray: Log likelihood values associated with each binary.
-
+            None: Nothing (the method raises ``NameError`` before finishing).
         """
 
         if self.gpus is not None:
@@ -1676,41 +2017,33 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
     def fill_global_template(
         self, group_index, templates, A, E, start_inds, N=None, start_freq_ind=0
     ):
-        """Fill many global templates with waveforms
+        """Add already generated A / E waveforms into global template buffers.
 
-        This method takes already generated waveforms (``A, E, start_inds``)
-        and their associated grouping index (``group_index``) and fills
-        buffer tempalte arrays (``templates``).
-
-        This method combines waveforms that have already been created.
-        When a user does not have the waveforms in hand, they should
-        use the :func:`generate_global_template` method.
+        Takes waveforms in hand (``A``, ``E``, ``start_inds``, e.g. from :meth:`run_wave`)
+        and their grouping index and adds each one into its template row with the backend
+        ``fill_global`` kernel (gbgpu_utils). To build the waveforms as well, use
+        :meth:`generate_global_template`.
 
         Args:
-            group_index (1D double int32 xp.ndarray): Index indicating to which template each individual binary belongs.
-            templates (3D complex128 xp.ndarray): Buffer array for template output to filled in place.
-                The shape is ``(number of templates, 2, data_length)``. The ``2`` is
-                for the ``A`` and ``E`` TDI channels in that order.
-            A (1D or 2D complex128 xp.ndarray): TDI A channel template values for each individual binary.
-                The shape if 2D is ``(number of binaries, N)''. In 1D, the array should be arranged so that
-                it resembles ``(number of binaries, N).transpose().flatten()``.
-                After running waveforms, this is how ``self.A_out`` is arranged.
-            E (1D 2D complex128 xp.ndarray): TDI E channel template values for each individual binary.
-                The shape if 2D is ``(number of binaries, N)''. In 1D, the array should be arranged so that
-                it resembles ``(number of binaries, N).transpose().flatten()``.
-                After running waveforms, this is how ``self.E_out`` is arranged.
-            start_inds (1D int32 xp.ndarray): The start indices of each binary waveform
-                in the full Fourier transform: ``int(f0/T) - N/2``.
-            N (int, optional): The length of the A and E channels for each individual binary.
-                When ``A`` and ``E`` are 1D, ``N`` must be given. Default is ``None``.
-            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
-                for the first entry of ``templates``. This is used if a subset of a full data stream
-                is presented for the computation.
+            group_index (xp.ndarray): ``(num_bin,)`` template row each binary is added to
+                (cast to int32).
+            templates (xp.ndarray): Complex buffer ``(num_templates, nchannels,
+                data_length)`` on the backend, updated in place; only channels 0 and 1 (A, E)
+                are written (``nchannels > 2`` warns).
+            A (xp.ndarray): TDI A of each binary, ``(num_bin, N)``, or the 1D layout of
+                :attr:`A_out` (``(num_bin, N).T.flatten()``).
+            E (xp.ndarray): TDI E, same layout as ``A``.
+            start_inds (xp.ndarray): ``(num_bin,)`` index of each waveform's first bin on the
+                full ``df`` grid (:attr:`start_inds` after :meth:`run_wave`).
+            N (int, optional): Waveform length; required when ``A`` / ``E`` are 1D, read
+                from the shape when 2D. Default ``None``.
+            start_freq_ind (int, optional): Index on the full grid of the first bin of
+                ``templates``. Default ``0``.
 
         Raises:
-            TypeError: If data arrays are NumPy/CuPy while tempalte arrays are CuPy/NumPy.
-            ValueError: Inputs are not correctly provided.
-
+            ValueError: If ``nchannels < 2``, ``A`` / ``E`` have more than 2 dimensions, or
+                1D waveforms come without ``N``.
+            TypeError: If ``templates`` is not an array of this backend (numpy vs cupy).
         """
 
         # get shape of information
@@ -1797,24 +2130,84 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         window_alpha: float = 0.0,
         **kwargs,
     ):
-        """Generate global templates from binary parameters
+        """Generate FD templates from parameters and add them into global template buffers.
 
-        Generate waveforms in batches and then combine them into
-        global fit templates. This method wraps :func:`fill_global_template`
-        by building the waveforms first.
+        Runs ``backend.sharedmem.SharedMemoryGenerateGlobal_wrap``, which builds each
+        binary's template in the kernel and atomically adds ``factors[i] * h_i`` into row
+        ``group_index[i]`` of ``templates`` (``(row * nchannels + channel) * data_length +
+        bin`` layout, bins offset by ``start_freq_ind``). Binaries are grouped by template
+        length ``N``. With ``gpus`` set, binaries are routed to device buffers by
+        ``data_splits[group_index]`` and re-indexed to the shard's local rows; with
+        ``gpus=None`` a CPU backend runs one buffer. Used by the FD branches of
+        ``lisatools.globalfit.recipe`` and by ``lisatools.sources.gb.waveform.GBXYZTDIWaveform``;
+        not by the WDM global fit.
 
         Args:
-            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
-                The shape is ``(number of parameters, number of binaries)``.
-            group_index (1D double int32 xp.ndarray): Index indicating to which template each individual binary belongs.
-            templates (3D complex128 xp.ndarray): Buffer array for template output to filled in place.
-                The shape is ``(number of templates, 2, data_length)``. The ``2`` is
-                for the ``A`` and ``E`` TDI channels in that order.
-            start_freq_ind (int, optional): Starting index into the frequency-domain data stream
-                for the first entry of ``templates``. This is used if a subset of a full data stream
-                is presented for the computation.
-            **kwargs (dict, optional): Passes keyword arguments to :func:`run_wave` function above.
+            params (xp.ndarray): ``(num_bin, 9)`` physical parameters (module docstring).
+            group_index (xp.ndarray): ``(num_bin,)`` int32 template row of each binary.
+            templates (xp.ndarray or list): Complex128 buffer(s) updated in place: one
+                array, or one per device of ``gpus``. Each is ``(nchannels, data_length)``
+                (one template), ``(num_templates, nchannels, data_length)``, or flat 1D (then
+                ``data_length`` is required). Must be C-contiguous: the kernel writes into
+                ``t.ravel()``, which is a copy (and the writes are lost) otherwise. A list
+                argument has its entries replaced by the raveled views.
+            start_freq_ind (int or xp.ndarray, optional): Index on the ``df = 1 / T`` grid of
+                the first bin of the template rows: an int, or int32 ``(num_templates,)``.
+                Default ``0``.
+            use_c_implementation (bool, optional): Ignored.
+            N (int or xp.ndarray, optional): Template length, one int or ``(num_bin,)``.
+                Default ``None`` uses :func:`gbgpu.utils.utility.get_N` (stops in
+                ``breakpoint()`` if a value is zero).
+            T (float, optional): Observation time [s]; must be a ``float`` on the GPU branch.
+                Default ``4 * YRSID_SI``.
+            dt (float, optional): Sampling cadence [s]; must be a ``float`` on the GPU
+                branch. Default ``10.0``.
+            batch_size (int, optional): Ignored.
+            oversample (int, optional): Multiplier on the automatic ``N``. Default ``1``.
+            data_length (int, optional): Bins per template row; required for flat buffers.
+            tdi_channel_setup (str, optional): ``"AE"`` (2 channels), ``"AET"`` or
+                ``"XYZ"`` (3 channels). Default ``"AE"``.
+            data_splits (xp.ndarray, optional): Device id of every template row. Default
+                ``None``: one device (asserts a single entry in ``gpus``).
+            num_per_gpu (int, optional): Block size of the modulo fallback of
+                :meth:`_intra_split_index`; default ``None`` (asserts a single GPU on the GPU
+                branch).
+            factors (xp.ndarray, optional): ``(num_bin,)`` float64 multipliers. Default
+                ``None`` (ones).
+            tdi2: Second-generation TDI factor. Default ``False``.
+            window: ``"tukey"``, ``"planck"`` or ``None``. Default ``None``.
+            window_alpha: Taper parameter; ``0.0`` when ``window`` is ``None``.
+            **kwargs: Ignored.
 
+        Raises:
+            NotImplementedError: On a CuPy backend with ``gpus=None``.
+            KeyError: For an unknown ``window``.
+            AssertionError: For a non-int32 ``group_index``, non-float64 ``factors`` or
+                inconsistent shapes.
+
+        Warning:
+            With ``flip_ref_phase=True`` the ``phi0`` column of the caller's ``params`` is
+            negated in place.
+
+        Example:
+            .. code-block:: python
+
+                import numpy as np
+                from lisatools.detector import EqualArmlengthOrbits
+                from lisatools.utils.constants import YRSID_SI
+                from gbgpu.gbgpu import GBGPU
+
+                gb = GBGPU(orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                           force_backend="cpu")
+                Tobs, dt = 1.0 * YRSID_SI, 10.0
+                data_length = int(round(Tobs / dt)) // 2 + 1
+                params = np.array([[2e-23, 2e-3, 7.5e-18, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]])
+                template = np.zeros(3 * data_length, dtype=np.complex128)
+                gb.generate_global_template(
+                    params, np.zeros(1, dtype=np.int32), template, T=Tobs, dt=dt,
+                    tdi_channel_setup="XYZ", tdi2=True, data_length=data_length,
+                )
+                xyz = template.reshape(3, data_length)
         """
         if self.gpus is not None:
             # set first index gpu device to control main operations
@@ -2154,6 +2547,53 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         window_alpha: float = 0.0,
         **kwargs,
     ):
+        """Log-likelihood change of swapping one source for another, batched (legacy kernel).
+
+        ``backend.sharedmem.SharedMemorySwapLikeComp_wrap`` builds both templates per row
+        and returns ``<d|h_rem>``, ``<d|h_add>``, ``<h_rem|h_rem>``, ``<h_add|h_add>`` and
+        ``<h_add|h_rem>`` (inner product as in :meth:`get_ll`). With
+        ``data_minus_template`` the current residual ``r`` (data minus a model that
+        contains ``h_rem``), the result is the change from replacing ``h_rem`` by
+        ``h_add`` in the model:
+
+        ``-1/2 Re(<h_add|h_add> + <h_rem|h_rem> - 2 <h_add|h_rem> - 2 <r|h_add> + 2 <r|h_rem>)``.
+
+        GPU only: requires ``gpus`` set to ONE device (the defaults of ``data_splits`` and
+        ``num_per_gpu`` assert a single GPU, and ``num_per_gpu`` must be ``None``); with
+        ``gpus=None`` it raises ``NotImplementedError`` (the CPU fallback after the raise
+        is dead code). The LAT caller is ``gathergalaxy`` (not on the global-fit path).
+
+        Args:
+            params_remove (xp.ndarray): ``(num_bin, 9)`` parameters of the sources taken out.
+            params_add (xp.ndarray): ``(num_bin, 9)`` parameters of the sources put in.
+            data_minus_template, psd: As in :meth:`get_ll`.
+            start_freq_ind, data_index, noise_index, T, dt, data_length: As in
+                :meth:`get_ll`.
+            data_splits, tdi_channel_setup, tdi2, window, window_alpha: As in :meth:`get_ll`.
+            adjust_inplace, use_c_implementation (bool, optional): Ignored.
+            N (int or xp.ndarray, optional): Template length. Default ``None`` uses
+                :func:`gbgpu.utils.utility.get_N` on ``params_add``.
+            oversample (int, optional): Multiplier on the automatic ``N``. Default ``1``.
+            phase_maximize (bool, optional): Rotate the ``h_add`` terms by the phase
+                ``arg(<r|h_add> + <h_add|h_rem>)`` that maximizes the result (stored on
+                ``phase_angle``). Default ``False``.
+            num_per_gpu (int, optional): Must be ``None``.
+            **kwargs: Ignored on the GPU branch.
+
+        Returns:
+            np.ndarray: ``(num_bin,)`` float log-likelihood differences (host). The five
+            complex inner products stay on the object (``d_h_remove``, ``d_h_add``,
+            ``remove_remove``, ``add_add``, ``add_remove``).
+
+        Raises:
+            NotImplementedError: If ``gpus`` is ``None`` or ``num_per_gpu`` is given.
+            ValueError: If an automatic ``N`` is zero.
+            KeyError: For an unknown ``window``.
+
+        Warning:
+            With ``flip_ref_phase=True`` the ``phi0`` column of BOTH caller arrays is negated
+            in place. A ``ValueError`` raised by the kernel drops into ``breakpoint()``.
+        """
         if num_per_gpu is not None:
             raise NotImplementedError("Need to check this.")
 
@@ -2501,26 +2941,34 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
             return ll_diff
 
     def inject_signal(self, *args, fmax=None, T=4.0 * YRSID_SI, dt=10.0, **kwargs):
-        """Inject a single signal
+        """Place one binary's A and E templates on a zero-filled FD grid ``[0, fmax]``.
 
-        Provides the injection of a single signal into a data stream with frequencies
-        spanning from 0.0 to fmax with 1/T spacing (from Fourier transform).
+        Runs :meth:`run_wave` and writes the first binary's A / E (Python path) into
+        host arrays on the frequencies ``arange(0, fmax + df, df)``, ``df = 1 / T`` (``T``
+        truncated to ``int(T / dt) * dt``), at bins ``start_inds[0]`` to
+        ``start_inds[0] + N``.
 
         Args:
-            *args (list, tuple, or 1D double np.array): Arguments to provide to
-                :func:`run_wave` to build the TDI templates for injection.
-            fmax (double, optional): Maximum frequency to use in data stream.
-                If ``None``, will use ``1/(2 * dt)``.
-                Default is ``None``.
-            T (double, optional): Observation time in seconds. Default is ``4 * YRSID_SI``.
-            dt (double, optional): Observation cadence in seconds. Default is ``10.0`` seconds.
-            **kwargs (dict, optional): Passes kwargs to :func:`run_wave`.
+            *args: The source parameters of :meth:`run_wave` (``amp, f0, fdot, fddot, phi0,
+                iota, psi, lam, beta`` plus any derived-class extras), scalars or length-1
+                arrays.
+            fmax (float, optional): Highest frequency of the grid [Hz]. Default ``None``
+                means the Nyquist frequency ``1 / (2 dt)``.
+            T (float, optional): Observation time [s]. Default ``4 * YRSID_SI``.
+            dt (float, optional): Sampling cadence [s]. Default ``10.0``.
+            **kwargs: Forwarded to :meth:`run_wave` (``N``, ``oversample``, ``tdi2``, ...).
 
         Returns:
-            Tuple of 1D np.ndarrays: NumPy arrays for the A channel and
-                E channel: ``(A channel, E channel)``. Need to convert to CuPy if working
-                on GPU.
+            tuple[np.ndarray, np.ndarray]: ``(A, E)``, complex128 host arrays of length
+            ``len(arange(0, fmax + df, df))``.
 
+        Raises:
+            ValueError: If ``T`` exceeds ``orbits.t_base.max()``, or from :meth:`run_wave`.
+
+        Warning:
+            The host copy tests ``backend.name == "gpu"``, which no GBGPU backend name
+            matches (they are ``gbgpu_cuda*``), so on a CUDA backend the CuPy template is
+            assigned into a NumPy array and fails. Use a CPU backend.
         """
 
         # get binspacing
@@ -2570,7 +3018,17 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         return A_out, E_out
 
     def _apply_parameter_transforms(self, params, parameter_transforms):
-        """Apply parameter transformations to params for Information Matrix."""
+        """Apply ``parameter_transforms`` in place to a parameter array (information matrix).
+
+        Args:
+            params (xp.ndarray): ``(num_params, num_bin)`` parameters (rows = parameters).
+            parameter_transforms (dict): ``{index: fn}`` sets ``params[index] =
+                fn(params[index])``; ``{(i, j, ...): fn}`` sets ``params[[i, j, ...]] =
+                fn(params[i], params[j], ...)``.
+
+        Returns:
+            xp.ndarray: ``params`` (the same array, modified).
+        """
         for ind_trans, trans in parameter_transforms.items():
             if isinstance(ind_trans, int):
                 params[ind_trans] = trans(params[ind_trans])
@@ -2603,34 +3061,74 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
         batch_size: int = 50000,
         **kwargs
     ):
-        """Get the information matrix for a batch.
+        r"""Fisher information matrices of a batch of binaries by finite differences.
 
-        This function computes the Information matrix for a batch of Galactic binaries.
-        It uses a 2nd order calculation for the derivative if ``easy_central_difference`` is ``False``:
+        The waveform derivatives are 4th-order central differences by default,
 
-        ..math:: \\frac{dh}{d\\lambda_i} = \\frac{-h(\\lambda_i + 2\\epsilon) + h(\\lambda_i - 2\\epsilon) + 8(h(\\lambda_i + \\epsilon) - h(\\lambda_i - \\epsilon))}{12\\epsilson}
+        .. math::
 
-        Otherwise, it will just calculate the derivate with a first-order central difference.
-        
-        This function calculates the Information Matrix dynamically. It internally
-        handles memory-safe batching if running in Python, or dispatches the entire
-        array to the C++/CUDA backend if `use_c_implementation=True`.
-        
+            \frac{\partial h}{\partial \lambda_i} \approx
+            \frac{-h(\lambda_i + 2\epsilon) + h(\lambda_i - 2\epsilon)
+            + 8 [h(\lambda_i + \epsilon) - h(\lambda_i - \epsilon)]}{12 \epsilon},
+
+        or 2nd-order ``[h(+eps) - h(-eps)] / (2 eps)`` with ``easy_central_difference``. The
+        matrix is ``Gamma_ij = 4 df Re sum_k conj(dh_i[k]) psd[k] dh_j[k]`` (per channel for
+        ``"AE"`` / ``"AET"``, full channel matrix for ``"XYZ"``), ``df = 1 / T``. Steps are
+        taken in the coordinates of ``params``; ``parameter_transforms`` then maps each
+        stepped row to the physical basis before generating. The Python path (default)
+        calls :meth:`run_wave` four times per parameter (two with the 2nd-order rule), in
+        source batches of ``batch_size``; ``use_c_implementation=True`` runs
+        ``SharedMemoryInfoMatComp_wrap`` instead (GPU only).
+
         Args:
-            params (2D double np.ndarrays): Parameters of all binaries to be calculated.
-                Shape should be (num_sources, num_params).
-            psd (xp.ndarray): The 1D flattened linear_psd_arr from AnalysisContainerArray.
-            noise_index (1D int np.ndarray): Specific walker indices mapped to the binaries.
-            data_length (int): Length of the original time-domain data stream.
-            inds (1D int np.ndarray, optional): Indices of the parameters to test.
-            eps (double, optional): Step to take when calculating the derivative. Default is ``1e-9``.
-            parameter_transforms (dict, optional): Dictionary containing the parameter transform functions.
-            easy_central_difference (bool, optional): If ``True``, compute derivatives with a first-order difference.
-            use_c_implementation (bool): If True, invokes the C++/CUDA backend.
-            batch_size (int): Chunk size to use to prevent VRAM overflow when running the Python backend.
-            
+            params (xp.ndarray): ``(num_bin, num_params)`` parameters (rows = binaries; 1D
+                is promoted). With no transforms these are the 9 physical parameters.
+            psd (xp.ndarray or list): Inverse noise weights on the FULL ``df`` grid starting
+                at bin 0: flat, reshaped to ``(num_psd, nchannels, data_length)`` (``"AE"`` /
+                ``"AET"``) or ``(num_psd, 3, 3, data_length)`` (``"XYZ"``) on the Python path;
+                one array or a per-device list on the C path.
+            inds (xp.ndarray, optional): Parameter columns to differentiate, in output order.
+                Default ``None`` (all).
+            eps: Absolute step in every differentiated coordinate. Default ``1e-9``.
+            parameter_transforms: ``{index: fn}`` / ``{(i, j): fn}`` map from ``params`` to the
+                physical basis (see :meth:`_apply_parameter_transforms`). Default ``{}``.
+            easy_central_difference: Use the 2nd-order rule. Default ``False``.
+            noise_index (xp.ndarray, optional): ``(num_bin,)`` psd row of each binary.
+                Default ``None`` (row 0).
+            use_c_implementation: Run the shared-memory kernel (needs ``gpus`` and
+                ``data_length``). Default ``False``.
+            N (int or xp.ndarray, optional): Template length. Default ``None`` uses
+                :func:`gbgpu.utils.utility.get_N` on the physical ``(amp, f0)``; the Python
+                path then uses the batch maximum.
+            T: Observation time [s]. Default ``4 * YRSID_SI``.
+            dt: Sampling cadence [s]. Default ``10.0``.
+            data_length (int): Bins per psd row; required.
+            data_splits (xp.ndarray, optional): C path: device id per psd row.
+            tdi_channel_setup: ``"AE"``, ``"AET"`` or ``"XYZ"``. Default ``"AE"``.
+            num_per_gpu: C path: modulo block for the noise index. Default ``None``.
+            oversample: Multiplier on the automatic ``N``. Default ``1``.
+            return_cupy: Intended to keep the result on the GPU; see the Warning.
+            tdi2: Second-generation TDI factor. Default ``False``.
+            window: ``"tukey"``, ``"planck"`` or ``None``. Default ``None``.
+            window_alpha: Taper parameter; ``0.0`` when ``window`` is ``None``.
+            batch_size: Sources per batch (bounds the ``dh`` workspace). Default ``50000``.
+            **kwargs: Ignored.
+
         Returns:
-            3D xp.ndarray: Information Matrices for all binaries with shape: ``(num_sources, num_derivs, num_derivs)``.        
+            xp.ndarray: ``(num_bin, len(inds), len(inds))`` float64 matrices, entry
+            ``(a, b)`` in ``1 / (unit_a * unit_b)``.
+
+        Raises:
+            KeyError: For an unknown ``window``.
+            AssertionError: On the C path without ``gpus`` or ``data_length``, or if
+                ``window`` is ``None`` and ``window_alpha != 0``.
+
+        Warning:
+            The host copy tests ``backend.name == "gpu"``, which no GBGPU backend matches, so
+            the result always stays on the backend (cupy on GPU) whatever ``return_cupy``.
+            The psd rows are sliced from bin ``int(f0 * T) - N / 2`` (truncation) while
+            :meth:`run_wave` starts the template at ``rint(f0 * T) - N / 2``. With
+            ``flip_ref_phase=True`` the caller's ``phi0`` column is negated in place.
         """
         params = self.xp.atleast_2d(params)
         self.num_bin = num_bin = params.shape[0]
@@ -3114,26 +3612,66 @@ class GBGPUBase(GBGPUParallelModule, abc.ABC):
 
 
 class GBGPU(GBGPUBase):
-    """Inherit this class to expand on GBGPU waveforms.
+    """FastGB waveforms and legacy FD likelihoods for circular galactic binaries.
 
-    The required methods to be added are shown below.
+    The concrete class to instantiate: :class:`GBGPUBase` with the four model hooks as
+    identities (no extra parameters, ``N`` from :func:`gbgpu.utils.utility.get_N`, no
+    frequency shift, no extra phase). Methods, attributes and parameter conventions are
+    those of :class:`GBGPUBase` and the module docstring. To add astrophysics, subclass
+    :class:`GBGPUBase` and implement the hooks (as :class:`gbgpu.thirdbody.GBGPUThirdBody`
+    does).
 
+    In the global fit, ``lisatools.globalfit.recipe`` builds one per GB / VGB branch with
+    ``GBGPU(force_backend=..., orbits=general_info.gpu_orbits)`` and sets ``gpus``; on the
+    WDM path it is a container read by the GB moves. The warm-start match referee
+    (``match_referee.build_wave_gen``) builds one on the CPU backend with the run's ICRS
+    :class:`~lisatools.detector.L1Orbits` and ``t0`` = the data start, and calls
+    :meth:`run_wave`.
+
+    Args:
+        orbits: :class:`~lisatools.detector.Orbits` instance (required; ``None`` raises
+            ``ValueError``).
+        force_backend (str | Backend | tuple, optional): Backend flavor (``"cpu"``,
+            ``"cuda13x"``, ``"cuda"``, ...), prefixed with ``gbgpu_``. See
+            :class:`GBGPUBase` for the ``None`` default caveat.
+        t0 (float, optional): Absolute start time [s] of the observation window. Default
+            ``None`` uses ``orbits.sc_t0`` if present, else ``0.0``.
+        flip_ref_phase (bool, optional): Negate ``phi0`` before generating. Default
+            ``False``.
+
+    Example:
+        .. code-block:: python
+
+            import numpy as np
+            from lisatools.detector import EqualArmlengthOrbits
+            from lisatools.utils.constants import YRSID_SI
+            from gbgpu.gbgpu import GBGPU
+
+            gb = GBGPU(orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                       force_backend="cpu")
+            amp, f0, fdot, fddot = 2e-23, 2e-3, 7.5e-18, 0.0
+            phi0, iota, psi, lam, beta = 0.1, 0.2, 0.3, 0.4, 0.5
+            gb.run_wave(amp, f0, fdot, fddot, phi0, iota, psi, lam, beta,
+                        T=1.0 * YRSID_SI, dt=10.0)
+            X, freqs = gb.X[0], gb.freqs[0]  # (N,) X channel and frequencies [Hz]
     """
 
     def prepare_additional_args(self, *args):
-        """Prepare the arguments special to this class
+        """Hook: convert the extra :meth:`run_wave` arguments into ``add_args``.
 
-        This function must take in the extra ``args`` input
-        into :meth:`GBGPU.run_wave` and transform them as needed
-        to input into the rest of the code. If using GPUs,
-        this is where the parameters are copied to GPUs.
+        A derived class takes the extra ``*args`` given to :meth:`run_wave` (after the 9
+        base parameters), converts units, copies them to the backend and returns the tuple
+        that :meth:`_construct_slow_part`, :meth:`shift_frequency` and
+        :meth:`add_to_phasing` receive as ``*add_args``. :meth:`run_wave` only calls it
+        when ``args`` is non-empty.
 
         Args:
-            *args (tuple): Any additional args to be dealt with.
+            *args: The extra per-binary parameters.
 
         Returns:
-            Tuple: New args. In the rest of the code this is ``add_args``.
-
+            ValueError: :class:`GBGPU` has no extra parameters and RETURNS (does not raise)
+            a ``ValueError`` instance; unpacking it later in :meth:`run_wave` raises
+            ``TypeError``.
         """
         return ValueError(
             "If providing more args than the base args, must be a class derived from GBGPUBase with an adjusted 'prepare_additional_args' method."
@@ -3147,66 +3685,53 @@ class GBGPU(GBGPUBase):
         *args,
         oversample=1,
     ):
-        """Determine proper sampling rate in time domain for slow-part.
+        """Hook: number of slow-part samples ``N`` per binary when :meth:`run_wave` gets none.
 
         Args:
-            amp (double or 1D double np.ndarray): Amplitude parameter.
-            f0 (double or 1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            T (double): Observation time in seconds.
-            *args (tuple): Args input for beyond-GBGPU functionality.
-            oversample(int, optional): Oversampling factor compared to the determined ``N``
-                value. Final N will be ``oversample * N``. This is only used if N is
-                not provided. Default is ``1``.
-        Returns:
-            1D int32 xp.ndarray: Number of time-domain points recommended for each binary.
+            amp (float or np.ndarray): Amplitudes.
+            f0 (float or np.ndarray): Frequencies [Hz].
+            T (float): Observation time [s].
+            *args: The extra :meth:`run_wave` arguments (unused here).
+            oversample (int, optional): Multiplier on ``N``. Default ``1``.
 
+        Returns:
+            np.ndarray: ``(num_bin,)`` int32 ``N`` from :func:`gbgpu.utils.utility.get_N`
+            (frequency and observation-time bands, raised for loud sources when the LAT
+            sensitivity is available, times ``oversample``, capped at 2048).
         """
         return get_N(amp, f0, T, oversample=oversample)
     
     def shift_frequency(self, fi, xi, *args):
-        """Shift the evolution of the frequency in the slow part
+        """Hook: modify the instantaneous frequency at each spacecraft (identity here).
 
         Args:
-            fi (3D double xp.ndarray): Instantaneous frequencies of the
-                wave before applying third-body effect at each spacecraft as a function of time.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            xi (3D double xp.ndarray): Time at each spacecraft.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            *args (tuple): Args returned from :meth:`prepare_additional_args`.
+            fi (xp.ndarray): Instantaneous GW frequencies [Hz] at each spacecraft,
+                ``(num_bin, 3, N)``.
+            xi (xp.ndarray): Delayed times at each spacecraft [s], ``(num_bin, 3, N)``.
+            *args: The ``add_args`` from :meth:`prepare_additional_args`.
 
         Returns:
-            3D double xp.ndarray: Updated frequencies with third-body effect.
-
+            xp.ndarray: ``fi`` unchanged.
         """
         return fi
 
     def add_to_phasing(self, arg_phase, f0, fdot, fddot, xi, *args):
-        """Update ``argS`` in FastGB formalism for third-body effect
+        """Hook: add an extra phase to the link-response phasing (identity here).
 
-        ``argS`` is an effective phase that goes into ``kdotP`` in the construction
-        of the slow part of the waveform. ``kdotP`` is then included directly
-        in the transfer function. See :meth:`gbgpu.gbgpu.GBGPU._construct_slow_part`
-        for the use of argS in the larger code.
-
-        # TODO: need to check new C code against this
+        :meth:`_construct_slow_part` forms ``arg_phasing = om * kdotP - argS`` (``om = 2 pi
+        f0``, ``kdotP`` the propagation delay to each spacecraft, ``argS`` the source phase)
+        and passes it through this hook before building the transfer functions. (Original
+        author note: the new C code still needs checking against this.)
 
         Args:
-            arg_phase (3D double xp.ndarray): Special phase evaluation beyond ``kdotP``.
-                Shape is ``(num binaries, 3 spacecraft, N)``.
-            f0 (1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            fdot (1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz/s.
-            fddot (1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz/s^2.
-            xi (3D double xp.ndarray): Time at each spacecraft.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            T (double): Observation time in seconds.
-            *args (tuple): Args returned from :meth:`prepare_additional_args`.
+            arg_phase (xp.ndarray): Phasing ``(num_bin, 3, N)`` [rad].
+            f0 (xp.ndarray): ``(num_bin,)`` frequencies [Hz].
+            fdot (xp.ndarray): ``(num_bin,)`` frequency derivatives [Hz/s].
+            fddot (xp.ndarray): ``(num_bin,)`` second derivatives [Hz/s^2].
+            xi (xp.ndarray): Delayed times at each spacecraft [s], ``(num_bin, 3, N)``.
+            *args: The ``add_args`` from :meth:`prepare_additional_args`.
 
         Returns:
-            3D double xp.ndarray: Updated ``argS`` with third-body effect
-
+            xp.ndarray: ``arg_phase`` unchanged.
         """
         return arg_phase

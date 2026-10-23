@@ -1,8 +1,9 @@
-"""JAX analogues of ``gb_wdm_het_{fill_global,get_ll,swap_ll}``.
+"""JAX analogues of ``gb_wdm_het_{fill_global,get_ll,swap_ll}`` (chunked heterodyne).
 
-These mirror the C++ kernels in
-``../../cutils/TDIonthefly.cu`` (per the chunked-heterodyne pipeline
-laid out in ``CHUNKED_HET_DESIGN_NOTES.md``). The kernel-shaped code
+These mirror the C++ chunked-heterodyne kernels that
+:class:`gbgpu.gbcomps.GBWDMComputations` runs (LAT ``lat_chunked_het_kernels.hh`` and
+GBGPU ``cutils/gb_tdi_on_the_fly.cu``; design notes in LAT
+``scripts/notes/CHUNKED_HET_DESIGN_NOTES.md``). The kernel-shaped code
 becomes a ``jax.lax.scan`` over chunks (outer) and a ``jax.vmap`` over
 binaries (inner) -- functionally equivalent to the CUDA outer-block /
 inner-loop pattern, JIT-friendly, and ``jax.grad``-able.
@@ -22,8 +23,17 @@ structure. Specifically:
   * AET / AE: ``sum_c d[c] * h[c] * invC[c]``
   * XYZ:     ``sum_{c1,c2} d[c1] * h[c2] * invC[c1, c2]``
 
-Validated algorithm reference lives in ``check_shortened_wdm.py``
+Validated algorithm reference lives in LAT ``scripts/diagnostics/check_shortened_wdm.py``
 (``chunked_get_ll_python_reference`` -> ``Test L`` passes to ~5e-16).
+
+Chunk geometry (``chunk_t_starts``, ``chunk_keep_lo`` / ``chunk_keep_hi``,
+``chunk_n_global_lo``) and the ``Nt_sub``-long WDM window are the chunked comp's
+(:class:`lisatools.chunked_het.WDMComputationsBase`; window from
+:func:`lisatools.wdm_het.compute_wdm_window`). Parameters are the 9-column physical GB
+layout in the source's frame. The kernels take one data / invC slab: there is no
+``data_index`` routing. Callers: LAT ``scripts/validation`` / ``scripts/gb_chunked_het``
+parity scripts and the unwired
+:class:`gbgpu.jax.wdm.computation_group.GBComputationGroupWrapJAX`; not the global fit.
 """
 from __future__ import annotations
 
@@ -43,7 +53,7 @@ from .fast_inner_heterodyne import (
     gb_chunk_fd_to_wdm_jax,
 )
 
-# Mirror TDIonTheFly.hh:29-31.
+#: C++ tdi_type enum values (``TDI_XYZ`` / ``TDI_AET`` / ``TDI_AE``; ``backend.TDITypeDict``).
 TDI_XYZ = 1
 TDI_AET = 2
 TDI_AE  = 3
@@ -91,9 +101,38 @@ def gb_wdm_het_fill_global_jax(
     dt: float, T_chunk: float,
     tukey_alpha: float = ALPHA_AUTO,
 ) -> jnp.ndarray:
-    """fill_global accumulates into the FULL ``(nch, Nf, Nt)`` template
+    """Accumulate the stitched chunked-het WDM templates of a batch into one global template.
+
+    fill_global accumulates into the FULL ``(nch, Nf, Nt)`` template
     (NOT active-band). The active-band layout only applies to data /
-    invC on the inner-product paths (``get_ll`` / ``swap_ll``)."""
+    invC on the inner-product paths (``get_ll`` / ``swap_ll``). Each chunk's
+    ``Nt_sub``-long block is masked to its kept cells ``[keep_lo, keep_hi)`` and added at
+    global time offset ``n_global_lo - keep_lo`` (a ``jax.lax.scan`` over chunks, a
+    ``jax.vmap`` over binaries). The template is allocated with 3 channels.
+
+    Args:
+        params_batch: ``(num_bin, 9)`` physical parameters.
+        factors: ``(num_bin,)`` multipliers (``+1`` add, ``-1`` remove).
+        chunk_t_starts: ``(n_chunks,)`` chunk start times [s].
+        chunk_keep_lo: ``(n_chunks,)`` first kept local cell of each chunk.
+        chunk_keep_hi: ``(n_chunks,)`` one past the last kept local cell.
+        chunk_n_global_lo: ``(n_chunks,)`` global WDM time index of the first kept cell.
+        source: The amp / phase source.
+        orbits: JAX orbits.
+        tdi_config: JAX TDI configuration.
+        wdm_window: ``(Nt_sub,)`` WDM window sampled for one chunk.
+        Nf: WDM frequency layers.
+        Nt: WDM time pixels of the full grid.
+        Nt_sub: Time pixels per chunk.
+        N_sparse: Sparse heterodyne samples per chunk.
+        dt: Sampling cadence [s].
+        T_chunk: Chunk duration [s].
+        tukey_alpha: Per-chunk Tukey alpha; ``ALPHA_AUTO`` (-1) picks by ``N_sparse``.
+            Default ``ALPHA_AUTO``.
+
+    Returns:
+        jnp.ndarray: The template, ``(3, Nf, Nt)`` real.
+    """
     """Accumulate per-binary stitched WDM into a global template.
 
     Returns ``template`` of shape ``(nchannels, Nf, Nt)``.
@@ -194,6 +233,35 @@ def gb_wdm_het_get_ll_jax(
     ``tdi_type`` is treated as static metadata; the dispatch happens at
     trace time, so a JIT'd function specialises to one branch per
     backend choice (just like the C++ ``#ifdef`` switch).
+
+    Args:
+        params_batch: ``(num_bin, 9)`` physical parameters.
+        data_d: Active-band data (see above), one slab.
+        invC: Active-band inverse covariance (see above), one slab.
+        chunk_t_starts, chunk_keep_lo, chunk_keep_hi, chunk_n_global_lo: Chunk geometry,
+            as in :func:`gb_wdm_het_fill_global_jax`.
+        source: The amp / phase source.
+        orbits: JAX orbits.
+        tdi_config: JAX TDI configuration.
+        wdm_window: ``(Nt_sub,)`` WDM window of one chunk.
+        Nf: WDM frequency layers.
+        Nt: WDM time pixels of the full grid (unused here).
+        Nt_sub: Time pixels per chunk.
+        N_sparse: Sparse heterodyne samples per chunk.
+        dt: Sampling cadence [s].
+        T_chunk: Chunk duration [s].
+        ind_min_f: First active frequency layer.
+        ind_min_t: First active time pixel.
+        Nf_active: Active frequency layers.
+        Nt_active: Active time pixels.
+        tdi_type: ``TDI_XYZ`` (1, full cross-channel) or diagonal otherwise. Default
+            ``TDI_XYZ``.
+        tukey_alpha: Per-chunk Tukey alpha; ``ALPHA_AUTO`` (-1) picks by ``N_sparse``.
+            Default ``ALPHA_AUTO``.
+
+    Returns:
+        tuple[jnp.ndarray, jnp.ndarray]: ``(d_h, h_h)``, each ``(num_bin,)``; ln L is
+        ``d_h - 0.5 * h_h`` up to the ``d_d`` constant.
     """
     num_bin = params_batch.shape[0]
     nchannels = data_d.shape[0]
@@ -292,7 +360,16 @@ def gb_wdm_het_swap_ll_jax(
     """5-way swap-ll accumulator (chunked-heterodyne).
 
     Same data / invC layout, ``tdi_type`` dispatch and active-band
-    handling as :func:`gb_wdm_het_get_ll_jax` -- see its docstring.
+    handling as :func:`gb_wdm_het_get_ll_jax` -- see its docstring. Every argument after
+    ``params_rem`` has the name, meaning and default it has there.
+
+    Args:
+        params_add: ``(num_bin, 9)`` parameters of the added sources.
+        params_rem: ``(num_bin, 9)`` parameters of the removed sources.
+
+    Returns:
+        tuple: ``(d_h_add, d_h_remove, add_add, remove_remove, add_remove)``, each
+        ``(num_bin,)``.
     """
     num_bin = params_add.shape[0]
     nchannels = data_d.shape[0]
@@ -390,15 +467,15 @@ def gb_wdm_het_get_ll_grad_jax(
     tdi_type: int = TDI_XYZ,
     tukey_alpha: float = ALPHA_AUTO,
 ) -> jnp.ndarray:
-    """JAX-autograd gradient of L = sum_i (<d|h_i> - 0.5 <h_i|h_i>)
-    w.r.t. ``params_batch``.
-
-    Returns:
-        grad: ``(num_bin, nparams)`` -- same shape as ``params_batch``.
+    """JAX-autograd gradient of L = sum_i (<d|h_i> - 0.5 <h_i|h_i>) w.r.t. ``params_batch``.
 
     Per-binary L_i depends only on params_batch[i, :], so the Jacobian
     of sum_i L_i w.r.t. params_batch is block-diagonal and ``jax.grad``
     of the scalar sum recovers the per-binary gradients in one pass.
+    The arguments are those of :func:`gb_wdm_het_get_ll_jax`.
+
+    Returns:
+        jnp.ndarray: ``(num_bin, nparams)`` gradient -- same shape as ``params_batch``.
     """
     def scalar_loss(p):
         d_h, h_h = gb_wdm_het_get_ll_jax(
@@ -430,16 +507,21 @@ def gb_wdm_het_swap_ll_grad_jax(
     tdi_type: int = TDI_XYZ,
     tukey_alpha: float = ALPHA_AUTO,
 ):
-    """JAX-autograd gradients of all 5 swap_ll terms w.r.t. theta_add,
-    plus the combined "add-on-clean-data" likelihood gradient
+    """JAX-autograd gradients of all 5 swap_ll terms w.r.t. theta_add, plus ``L_add``.
+
+    The combined "add-on-clean-data" likelihood gradient is that of::
 
         L_add = <d - h_rem | h_add> - 0.5 <h_add|h_add>
               = dh_add - ar - 0.5 * aa,
 
-    matching the Python FD wrapper :meth:`GBWDMHeterodyne.swap_ll_grad`.
+    matching the Python FD wrapper ``GBWDMHeterodyne.swap_ll_grad`` of the LAT dev script
+    ``scripts/gb_chunked_het/gb_wdm_het.py``. The arguments are those of
+    :func:`gb_wdm_het_swap_ll_jax`. Each term costs one ``jax.grad`` pass (five in all).
 
-    Returns a dict with the same keys as the Python FD method:
-        grad_dh_add, grad_dh_rem, grad_aa, grad_rr, grad_ar, grad_L_add.
+    Returns:
+        dict: ``(num_bin, nparams)`` arrays under the keys ``grad_dh_add``,
+        ``grad_dh_rem``, ``grad_aa``, ``grad_rr``, ``grad_ar`` and ``grad_L_add`` (all
+        w.r.t. ``params_add``).
     """
     common_args = (data_d, invC, chunk_t_starts, chunk_keep_lo, chunk_keep_hi,
                     chunk_n_global_lo, source, orbits, tdi_config, wdm_window)
@@ -482,14 +564,17 @@ def gb_wdm_het_hessian_jax(
     tdi_type: int = TDI_XYZ,
     tukey_alpha: float = ALPHA_AUTO,
 ) -> jnp.ndarray:
-    """JAX-autograd per-binary Hessian of L_i = <d|h_i> - 0.5 <h_i|h_i>
-    w.r.t. ``params_batch[i, :]``.
+    """JAX-autograd per-binary Hessian of L_i = <d|h_i> - 0.5 <h_i|h_i> w.r.t. its params.
 
     Returns ``(num_bin, nparams, nparams)`` -- the per-binary Hessian
     block. Cross-binary entries are zero by construction (L_i depends
     only on params_batch[i, :]), so we ``vmap(hessian(per_binary_loss))``
     rather than ``hessian(sum_loss)`` to avoid materialising the
-    block-diagonal full Hessian.
+    block-diagonal full Hessian. The arguments are those of
+    :func:`gb_wdm_het_get_ll_jax`.
+
+    Returns:
+        jnp.ndarray: ``(num_bin, nparams, nparams)``.
     """
     def per_binary_loss(p_single):
         d_h, h_h = gb_wdm_het_get_ll_jax(

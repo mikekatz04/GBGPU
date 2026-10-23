@@ -13,6 +13,17 @@ This is the GBGPU-side counterpart to the post-Phase-3L.7k LAT backend
 extension; the previously-separate ``fastlisaresponse_<flavor>``
 backend family (defined in lisa-on-gpu) is being retired in favor of
 this composition.
+
+Contents: :class:`GBGPUBackendMethods` (the symbol container),
+:class:`GBGPUBackend` (the mixin copying it onto a backend), the concrete
+:class:`GBGPUCpuBackend`, :class:`GBGPUCuda11xBackend`, :class:`GBGPUCuda12xBackend`,
+:class:`GBGPUCuda13xBackend` (registered as ``gbgpu_cpu`` / ``gbgpu_cuda11x`` /
+``gbgpu_cuda12x`` / ``gbgpu_cuda13x`` by ``gbgpu/__init__.py``), and the loader helpers.
+Each loader also imports ``gbt_backend_<flavor>.interp`` for ``CubicSplineWrap`` (GBT is
+its single registrant) and instantiates one ``GBGPUComputationWrap`` (the legacy
+gbgpu_utils + shared-memory kernels, exposed as ``backend.sharedmem``). The global fit
+loads ``gbgpu_cuda13x`` on the compute ranks and ``gbgpu_cpu`` for the warm-start referee
+and the monitor.
 """
 
 from __future__ import annotations
@@ -40,20 +51,25 @@ class GBGPUBackendMethods(LISAToolsBackendMethods):
     """Container of native symbols exposed by a GBGPU backend.
 
     Extends :class:`lisatools.cutils.LISAToolsBackendMethods` with the
-    GB-specific Wraps that the chunked-het + FD pipelines need.
+    GB-specific Wraps that the chunked-het + FD pipelines need. Built by the loaders
+    below from :func:`_lat_methods_from_pycppdetector` + :func:`_gb_methods_from_cgbgpu`;
+    the LAT keyword-only optional fields (``sobbh_lookup``, ``gb_inmodel_gate_compact``,
+    ``gb_inmodel_accept_apply``, ``TDDenseTDIWaveformWrap``, ``wdm_lookup_sum``) are not
+    filled and stay ``None`` on GBGPU backends.
 
     Attributes:
-        GBTDIonTheFlyWrap: ``GBTDIonTheFlyWrap{CPU,GPU}`` -- the GB
+        GBTDIonTheFlyWrap (type): ``GBTDIonTheFlyWrap{CPU,GPU}`` -- the GB
             source-class wrap (carved to GBGPU at Phase 3L.7g).
-        GBComputationGroupWrap: ``GBComputationGroupWrap{CPU,GPU}`` --
-            the GB chunked-het + FD + signal-het computation group
+        GBComputationGroupWrap (type): ``GBComputationGroupWrap{CPU,GPU}`` --
+            the GB chunked-het + FD + signal-het + lookup computation group
             (carved to GBGPU at Phase 3L.7g).
-        get_ll / fill_global / sharedmem: Pass-through accessors onto the
-            ``GBGPUComputationWrap`` instance for the pre-existing
-            gbgpu_utils + SharedMemoryGBGPU surface. The single wrap
-            instance is exposed as ``sharedmem`` so existing call sites
-            (``self.backend.sharedmem.SharedMemoryWaveComp_wrap(...)``)
-            keep working.
+        get_ll (Callable): ``GBGPUComputationWrap.get_ll`` (gbgpu_utils) of the single
+            wrap instance.
+        fill_global (Callable): ``GBGPUComputationWrap.fill_global`` (gbgpu_utils).
+        sharedmem (object): The ``GBGPUComputationWrap{CPU,GPU}`` instance itself, so
+            existing call sites (``self.backend.sharedmem.SharedMemoryWaveComp_wrap(...)``)
+            keep working; its ``SharedMemory*_wrap`` methods raise ``RuntimeError`` in a
+            build with ``GBGPU_WITH_SHAREDMEM=OFF``.
     """
 
     GBTDIonTheFlyWrap: object
@@ -71,6 +87,13 @@ class GBGPUBackend(LISAToolsBackend):
     TDIConfigWrap, WDM/FD/Spline wraps, TDITypeDict) plus the
     GB-specific Wraps. Consumer code can do ``self.backend.OrbitsWrap``
     and ``self.backend.GBTDIonTheFlyWrap`` on the same object.
+
+    Args:
+        gbgpu_backend_methods (GBGPUBackendMethods): The loaded symbols; the LAT fields
+            are copied by ``LISAToolsBackend.__init__``, then the five GB ones.
+
+    Raises:
+        AssertionError: If ``gbgpu_backend_methods`` is not a :class:`GBGPUBackendMethods`.
     """
 
     GBTDIonTheFlyWrap: object
@@ -96,10 +119,23 @@ class GBGPUBackend(LISAToolsBackend):
 # --- module-loader helper ------------------------------------------------
 
 def _lat_methods_from_pycppdetector(_lat_pd, _gbt_interp, *, gpu: bool, xp):
-    """Build a LAT methods dict from a `lisatools_backend_*.pycppdetector` module.
+    """Build a LAT methods dict from a ``lisatools_backend_*.pycppdetector`` module.
 
     Pulled out so each GBGPU loader (cpu/cuda11x/cuda12x/cuda13x) can
-    share the populate code without copy-pasting 14 fields.
+    share the populate code without copy-pasting the fields.
+
+    Args:
+        _lat_pd (module): ``lisatools_backend_<flavor>.pycppdetector``.
+        _gbt_interp (module): ``gbt_backend_<flavor>.interp`` (``CubicSplineWrap``).
+        gpu (bool): Take the ``*GPU`` class variants (else ``*CPU``).
+        xp (module): ``numpy`` or ``cupy``.
+
+    Returns:
+        dict: The required :class:`lisatools.cutils.LISAToolsBackendMethods` fields
+        (``OrbitsWrap`` ... ``TDITypeDict``, ``xp``) as keyword arguments.
+
+    Raises:
+        AttributeError: If the native module lacks one of the symbols (a stale build).
     """
     suffix = "GPU" if gpu else "CPU"
     return {
@@ -138,7 +174,18 @@ def _lat_methods_from_pycppdetector(_lat_pd, _gbt_interp, *, gpu: bool, xp):
 
 
 def _gb_methods_from_cgbgpu(_cgbgpu, *, gpu: bool):
-    """Build the GB-specific portion of GBGPUBackendMethods."""
+    """Build the GB-specific portion of GBGPUBackendMethods.
+
+    Instantiates ONE ``GBGPUComputationWrap{CPU,GPU}`` per call (i.e. per backend load).
+
+    Args:
+        _cgbgpu (module): ``gbgpu_backend_<flavor>.cgbgpu``.
+        gpu (bool): Take the ``*GPU`` class variants (else ``*CPU``).
+
+    Returns:
+        dict: ``GBTDIonTheFlyWrap``, ``GBComputationGroupWrap``, ``get_ll``,
+        ``fill_global`` and ``sharedmem`` (the wrap instance).
+    """
     suffix = "GPU" if gpu else "CPU"
     _gbcomp = getattr(_cgbgpu, f"GBGPUComputationWrap{suffix}")()
     return {
@@ -155,7 +202,29 @@ def _gb_methods_from_cgbgpu(_cgbgpu, *, gpu: bool):
 
 class GBGPUCpuBackend(CpuBackend, GBGPUBackend):
     """CPU backend backed by ``lisatools_backend_cpu.pycppdetector`` +
-    ``gbgpu_backend_cpu.cgbgpu``."""
+    ``gbgpu_backend_cpu.cgbgpu``.
+
+    Registered as ``gbgpu_cpu``; reach it with ``gbgpu.get_backend("cpu")`` or
+    ``force_backend="cpu"`` on any GBGPU class. ``xp`` is ``numpy``. The registry
+    constructs it.
+
+    Args:
+        *args: Forwarded to :class:`gpubackendtools.gpubackendtools.CpuBackend`.
+        **kwargs: Forwarded to :class:`gpubackendtools.gpubackendtools.CpuBackend`.
+
+    Raises:
+        BackendUnavailableException: If a native module (``gbt_backend_cpu``,
+            ``gbgpu_backend_cpu`` or ``lisatools_backend_cpu``) cannot be imported.
+
+    Example:
+        .. code-block:: python
+
+            import gbgpu
+
+            backend = gbgpu.get_backend("cpu")
+            backend.name             # "gbgpu_cpu"
+            backend.sharedmem        # GBGPUComputationWrapCPU instance
+    """
 
     _backend_name = "gbgpu_backend_cpu"
     _name = "gbgpu_cpu"
@@ -166,6 +235,14 @@ class GBGPUCpuBackend(CpuBackend, GBGPUBackend):
 
     @staticmethod
     def cpu_methods_loader() -> GBGPUBackendMethods:
+        """Import the three CPU native modules and build the symbol container.
+
+        Returns:
+            GBGPUBackendMethods: CPU class variants, ``xp = numpy``.
+
+        Raises:
+            BackendUnavailableException: If a native module cannot be imported.
+        """
         try:
             import gbt_backend_cpu.interp
             import gbgpu_backend_cpu.cgbgpu
@@ -183,7 +260,19 @@ class GBGPUCpuBackend(CpuBackend, GBGPUBackend):
 
 
 def _make_cuda_loader(flavor):
-    """Generate the cuda*x_module_loader function body."""
+    """Generate the cuda*x_module_loader function body.
+
+    Args:
+        flavor (str): ``"cuda11x"``, ``"cuda12x"`` or ``"cuda13x"``.
+
+    Returns:
+        Callable[[], GBGPUBackendMethods]: Loader importing ``gbgpu_backend_<flavor>.cgbgpu``,
+        ``gbt_backend_<flavor>.interp`` and ``lisatools_backend_<flavor>.pycppdetector``,
+        then ``cupy``, and building the GPU-variant container with ``xp = cupy``. It raises
+        ``BackendUnavailableException`` if a native module is missing; a missing ``cupy``
+        reaches ``raise MissingDependencies(...)``, a name not defined in this module
+        (``NameError``).
+    """
 
     def _loader() -> GBGPUBackendMethods:
         gb_mod_name = f"gbgpu_backend_{flavor}"
@@ -216,7 +305,17 @@ def _make_cuda_loader(flavor):
 
 
 class GBGPUCuda11xBackend(Cuda11xBackend, GBGPUBackend):
-    """CUDA 11.x backend."""
+    """CUDA 11.x backend (``gbgpu_cuda11x``, ``xp = cupy``).
+
+    Native modules ``gbgpu_backend_cuda11x.cgbgpu``, ``lisatools_backend_cuda11x``,
+    ``gbt_backend_cuda11x``. Registered; not used by the production runs. Construction
+    runs the gpubackendtools CUDA checks (``Cuda11xBackend.__init__``), then the loader
+    from :func:`_make_cuda_loader`.
+
+    Args:
+        *args: Forwarded to :class:`gpubackendtools.gpubackendtools.Cuda11xBackend`.
+        **kwargs: Forwarded to :class:`gpubackendtools.gpubackendtools.Cuda11xBackend`.
+    """
 
     _backend_name: str = "gbgpu_backend_cuda11x"
     _name = "gbgpu_cuda11x"
@@ -228,7 +327,15 @@ class GBGPUCuda11xBackend(Cuda11xBackend, GBGPUBackend):
 
 
 class GBGPUCuda12xBackend(Cuda12xBackend, GBGPUBackend):
-    """CUDA 12.x backend."""
+    """CUDA 12.x backend (``gbgpu_cuda12x``, ``xp = cupy``).
+
+    Native modules ``gbgpu_backend_cuda12x.cgbgpu``, ``lisatools_backend_cuda12x``,
+    ``gbt_backend_cuda12x``. Registered; not used by the production runs.
+
+    Args:
+        *args: Forwarded to :class:`gpubackendtools.gpubackendtools.Cuda12xBackend`.
+        **kwargs: Forwarded to :class:`gpubackendtools.gpubackendtools.Cuda12xBackend`.
+    """
 
     _backend_name: str = "gbgpu_backend_cuda12x"
     _name = "gbgpu_cuda12x"
@@ -240,7 +347,24 @@ class GBGPUCuda12xBackend(Cuda12xBackend, GBGPUBackend):
 
 
 class GBGPUCuda13xBackend(Cuda13xBackend, GBGPUBackend):
-    """CUDA 13.x backend."""
+    """CUDA 13.x backend (``gbgpu_cuda13x``, ``xp = cupy``): the global-fit GPU backend.
+
+    Native modules ``gbgpu_backend_cuda13x.cgbgpu`` (built for sm_80 / sm_90 by default),
+    ``lisatools_backend_cuda13x``, ``gbt_backend_cuda13x``. The production launchers set
+    ``GPU_BACKEND=cuda13x``.
+
+    Args:
+        *args: Forwarded to :class:`gpubackendtools.gpubackendtools.Cuda13xBackend`.
+        **kwargs: Forwarded to :class:`gpubackendtools.gpubackendtools.Cuda13xBackend`.
+
+    Example:
+        .. code-block:: python
+
+            import gbgpu
+
+            backend = gbgpu.get_backend("cuda13x")  # or gbgpu.get_backend("cuda")
+            backend.set_cuda_device(0)
+    """
 
     _backend_name: str = "gbgpu_backend_cuda13x"
     _name = "gbgpu_cuda13x"

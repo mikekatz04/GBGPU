@@ -1,4 +1,14 @@
-"""Implementation of a centralized configuration management for GBGPU."""
+# TODO check: keep/remove/document -- unimportable (no KNOWN_BACKENDS in gbgpu.cutils); no importers
+"""Implementation of a centralized configuration management for GBGPU.
+
+Warning:
+    Not wired and not importable: the module imports ``KNOWN_BACKENDS`` from
+    :mod:`gbgpu.cutils`, which does not define it, and :meth:`Configuration._handle_verbosity`
+    / :func:`detect_cfg_file` import ``get_logger`` from a ``gbgpu.utils.globals`` module
+    that does not exist. Nothing in GBGPU imports it. A copy of the GPUBackendTools /
+    FastEMRIWaveforms configuration module (``GBGPU_*`` environment prefix, ``[gbgpu]``
+    INI section); the live backend configuration of GBGPU is the gpubackendtools one.
+"""
 
 from __future__ import annotations
 
@@ -51,6 +61,7 @@ T = TypeVar("T")
 ENVVAR_PREFIX: str = "GBGPU_"
 
 
+# TODO check: keep/remove/document -- dead module (unimportable, no importers)
 @dataclasses.dataclass
 class ConfigEntry(Generic[T]):
     """Description of a configuration entry."""
@@ -139,6 +150,7 @@ class ConfigItem(Generic[T]):
     source: ConfigSource  # Source of the item current value
 
 
+# TODO check: keep/remove/document -- dead module (unimportable, no importers)
 class ConfigConsumer(abc.ABC):
     """
     Base class for actual configs.
@@ -476,6 +488,7 @@ def userinput_to_strlist(user_input) -> List[str]:
     )
 
 
+# TODO check: keep/remove/document -- dead module (unimportable, no importers)
 class InitialConfigConsumer(ConfigConsumer):
     """
     Class implementing first-pass config consumer.
@@ -538,6 +551,7 @@ def get_package_basepath() -> pathlib.Path:
     return pathlib.Path(gbgpu.__file__).parent
 
 
+# TODO check: keep/remove/document -- dead module (unimportable); gbgpu.utils.globals missing
 class Configuration(ConfigConsumer):
     """
     Class implementing GBGPU complete configuration for the library.
@@ -769,6 +783,7 @@ class Configuration(ConfigConsumer):
         return [complete_parser]
 
 
+# TODO check: keep/remove/document -- dead module (unimportable); gbgpu.utils.globals missing
 def detect_cfg_file() -> Optional[pathlib.Path]:
     """Test common path locations for config and return highest-priority existing one (if any)."""
     import platformdirs

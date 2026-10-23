@@ -10,7 +10,7 @@ The C++ backend exposes objects like
                               n_params, nchannels)
 
 The JAX path needs the same API so the Python orchestration in
-``tdionfly.py`` doesn't need a per-backend branch. We provide functional
+:mod:`lisatools.response.tdionfly` doesn't need a per-backend branch. We provide functional
 return when called via the ``.run_wave_tdi`` (no ``_wrap`` suffix) entry
 point so autograd works, and a thin in-place adapter at
 ``.run_wave_tdi_wrap(...)`` that mutates the user-supplied buffers.
@@ -24,6 +24,11 @@ contract. For the autograd path users should call
 Each wrapper carries a reference to a default source class (``UCB``,
 ``SOBBH``) but the underlying functional kernel can accept any
 :class:`JaxAmpPhaseSource`.
+
+Not wired: nothing imports this module and GBGPU registers no ``gbgpu_jax`` backend that
+would expose these wrappers. :class:`SOBBHTDIonTheFlyWrapJAX` cannot be built here: its
+default source is imported from ``gbgpu.jax.sources.sobbh``, which does not exist (the
+JAX SOBBH source lives in ``bbhx.jax.sources.sobbh``).
 """
 from __future__ import annotations
 
@@ -55,6 +60,7 @@ def _copy_into(buf, value):
     buf[...] = arr
 
 
+# TODO check: keep/remove/document -- module imported by nothing; no gbgpu_jax backend exposes it
 class _BaseTDIonTheFlyWrapJAX:
     """Shared implementation for the GB/SOBBH JAX wrappers.
 
@@ -158,6 +164,7 @@ class _BaseTDIonTheFlyWrapJAX:
         )
 
 
+# TODO check: keep/remove/document -- module imported by nothing; no gbgpu_jax backend exposes it
 class GBTDIonTheFlyWrapJAX(_BaseTDIonTheFlyWrapJAX):
     """JAX analog of ``GBTDIonTheFlyWrapCPU/GPU``."""
 
@@ -169,6 +176,7 @@ class GBTDIonTheFlyWrapJAX(_BaseTDIonTheFlyWrapJAX):
     _n_params = 9
 
 
+# TODO check: keep/remove/document -- broken: imports gbgpu.jax.sources.sobbh, which does not exist
 class SOBBHTDIonTheFlyWrapJAX(_BaseTDIonTheFlyWrapJAX):
     """JAX analog of ``SOBBHTDIonTheFlyWrapCPU/GPU``."""
 

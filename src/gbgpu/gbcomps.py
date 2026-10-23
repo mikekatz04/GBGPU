@@ -15,6 +15,28 @@
 #   * GB-specific code     -> GBGPU
 #   * SOBBH-specific code  -> BBHx
 #   * Shared GB <-> SOBBH  -> LISAanalysistools (lisatools)
+"""GB source-side likelihood computations in the WDM and FD domains (chunked heterodyne).
+
+* :class:`GBWDMComputations`: the WDM-domain GB likelihood of the global fit, a thin
+  subclass of :class:`lisatools.chunked_het.WDMComputationsBase` that only sets the
+  GB routing constants (``gbgpu_<flavor>`` backends, ``GBComputationGroupWrap``,
+  ``gb_wdm_het_*`` kernels, 9 parameters, ``f0`` in column 1).
+* :class:`GBFDComputations`: the frequency-domain analog (``gb_fd_*`` kernels) for
+  FD-basis runs, the monitor rank's residual page and synthetic GB injections.
+
+Pipeline: ``lisatools.globalfit.stock.erebor.variants.gb_no_fg`` builds a
+:class:`GBWDMComputations` (or, with ``GB_LIKELIHOOD=lookup``,
+:class:`gbgpu.gblookupcomputations.GBLookupWDMComputations`) as ``gb_info.gb_wdm_comp``
+on the run's WDM grid and orbits; ``lisatools.globalfit.stock.erebor.gb.build_sighet_engine``
+wraps it with :meth:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations.for_band_engine`,
+whose chunked delegate it stays (fills, swaps, chunked F-stat, per-row scoring outside the
+in-model block). Knob read here: ``GB_INDEX_ASSERTS`` (``1`` turns on the index-bound
+asserts of the FD methods, one device sync each; read once at import).
+
+Parameters of every method: ``(num_bin, 9)`` rows ``(amp, f0 [Hz], fdot [Hz/s], fddot
+[Hz/s^2], phi0, iota, psi, lam, beta)``, angles in rad, sky in the orbits frame (ICRS on
+the stock runs; ``convert_to_ra_dec=True`` is the deprecated ecliptic -> ICRS conversion).
+"""
 import os
 from copy import deepcopy
 from typing import Optional
@@ -65,17 +87,56 @@ class GBWDMComputations(WDMComputationsBase):
     """Source-side WDM-domain GB likelihood (chunked-heterodyne path).
 
     Routes through the chunked-heterodyne kernel set
-    ``gb_wdm_het_{fill_global, get_ll, swap_ll}`` on the backend (C++
-    on CPU / CUDA, JAX on the ``jax`` backend).
+    ``gb_wdm_het_{fill_global, get_ll, swap_ll, get_fstat_ll}`` of
+    ``GBComputationGroupWrap`` on a ``gbgpu_<flavor>`` backend (C++ on CPU / CUDA; the
+    base class's JAX branch would need a ``gbgpu_jax`` backend, which GBGPU does not
+    register). This is the GB likelihood object of the 9-month / 12-month global fits
+    (``gb_info.gb_wdm_comp``), wrapped by
+    :meth:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations.for_band_engine`.
 
-    See :class:`lisatools.chunked_het.WDMComputationsBase` for the
-    full method surface (``fill_global_wdm`` / ``get_ll_wdm`` /
-    ``get_swap_ll_wdm`` / ``get_ll_grad_wdm`` / ``get_fstat_ll_wdm`` /
-    ``get_swap_ll_grad_wdm``). This sub-class only specifies the
-    GB-specific routing constants below; everything else is inherited.
+    See :class:`lisatools.chunked_het.WDMComputationsBase` for the constructor and the
+    full method surface (``fill_global_wdm`` / ``get_ll_wdm`` / ``get_swap_ll_wdm`` /
+    ``get_fstat_ll_wdm`` / ``information_matrix`` / ``get_ll_grad_wdm`` /
+    ``get_swap_ll_grad_wdm``). This subclass only sets the GB routing constants;
+    everything else is inherited. The gradient kernels are not bound in GBGPU's
+    ``binding_gbgpu.cxx``, so ``get_ll_grad_wdm`` / ``get_swap_ll_grad_wdm`` fail on the
+    C++ backends.
 
     Param order (matches ``GBTDIonTheFly``):
-        ``(amp, f0, fdot, fddot, phi0, inc, psi, lam, beta)``.
+        ``(amp, f0, fdot, fddot, phi0, inc, psi, lam, beta)``: ``f0`` [Hz], ``fdot``
+        [Hz/s], ``fddot`` [Hz/s^2], angles [rad], ``lam`` / ``beta`` the sky longitude /
+        latitude in the orbits frame (ICRS right ascension / declination on the stock
+        runs).
+
+    Args:
+        *args: Positional arguments of :class:`lisatools.chunked_het.WDMComputationsBase`
+            (``wdm_settings``, ``t_ref``).
+        **kwargs: Its keyword arguments (``Nt_sub``, ``n_pad``, ``N_sparse``,
+            ``tukey_alpha``, ``use_tukey``, ``N_cp_sig``, ``N_cp_orbit``, ``orbits``,
+            ``tdi_config``, ``force_backend``, ``d_d``, ``tdi_type``, ``t_obs_start``).
+            ``force_backend`` flavors are prefixed with ``gbgpu_``.
+
+    Example:
+        .. code-block:: python
+
+            import numpy as np
+            from lisatools.detector import ESAOrbits
+            from lisatools.domains import WDMSettings
+            from lisatools.utils.constants import YRSID_SI
+            from gbgpu.gbcomps import GBWDMComputations
+
+            dt, Nf, Nt = 10.0, 1460, 2560
+            t_start = int(0.5 * YRSID_SI / dt) * dt
+            wdm = WDMSettings(Nf, Nt, dt, t0=t_start, min_freq=1e-4, max_freq=35e-3)
+            chunked = GBWDMComputations(
+                wdm, t_ref=t_start, Nt_sub=256, n_pad=32, N_sparse=256,
+                orbits=ESAOrbits(), tdi_config="2nd generation", tdi_type="XYZ",
+                force_backend="cpu",
+            )
+            params = np.array([[6e-23, 14.22e-3, 1e-16, 0.0, 1.4, np.pi / 3, 0.7, 2.1, 0.5]])
+            template = np.zeros((3, Nf, Nt))
+            chunked.fill_global_wdm(params, template, convert_to_ra_dec=False)
+            # ll = chunked.get_ll_wdm(params, holder)  # holder: AnalysisContainer(Array)
     """
 
     # GB chunked-het uses gbgpu_<flavor> backends (carry
@@ -127,11 +188,87 @@ class GBFDComputations(FastLISAResponseParallelModule):
     """Frequency-domain heterodyne analog of :class:`GBWDMComputations`.
 
     Mirrors the WDM ``get_ll_wdm`` / ``get_swap_ll_wdm`` / ``fill_global``
-    surface for the sparse FD heterodyne kernel.  All inner products are
-    accumulated in C using the standard lisatools FD inner product
+    surface for the sparse FD heterodyne kernels (``gb_fd_*`` of
+    ``GBComputationGroupWrap``). All inner products are accumulated in C using the
+    standard lisatools FD inner product
     ``(a|b) = 4 Re sum_{c1,c2} sum_k conj(a_c1[k]) b_c2[k] invC[c1,c2][k] * df``,
     so calling :func:`lisatools.diagnostic.inner_product` on the same data /
     invC / template gives an identical answer up to floating-point round-off.
+
+    The comp is CONFIG-ONLY at construction: data / inverse-covariance holders (an
+    ``AnalysisContainerArray``, a single ``AnalysisContainer``, or, for :meth:`fill_global`
+    targets, a ``DomainBase`` signal or a raw array) are passed to each compute method at
+    call time. Used by FD-basis global fits (the GB move's FD prototype), the synthetic GB
+    injections (``lisatools.globalfit.stock.erebor.injections``) and the monitor rank's
+    residual page (CPU). The kernels do not need the legacy shared-memory build.
+
+    Args:
+        fd_settings (FDSettings): :class:`lisatools.domains.FDSettings` describing the
+            rfft grid (``N``, ``df``; ``T = 1 / df``) and the active band (``ind_min`` /
+            ``ind_max`` from ``min_freq`` / ``max_freq``).
+        t_ref (float): Source-phase reference time [s]: the epoch where ``f0`` / ``phi0``
+            are defined.
+        N_sparse (int, optional): Default heterodyne FFT length (power of two); the
+            per-call ``N_sparse=`` overrides it. Default ``256``.
+        orbits (Orbits or type, optional): :class:`~lisatools.detector.Orbits` instance or
+            class (instantiated), deep-copied. Default ``None``:
+            :class:`~lisatools.detector.EqualArmlengthOrbits`.
+        tdi_config (TDIConfig or str, optional): TDI configuration or generation string.
+            Default ``None``: ``TDIConfig("1st generation")``.
+        force_backend (str, optional): Backend flavor, prefixed with ``gbgpu_``. Default
+            ``None`` takes the first loadable of ``gbgpu_cuda13x``, ``gbgpu_cuda12x``,
+            ``gbgpu_cuda11x``, ``gbgpu_cpu``.
+        d_d (float, optional): Constant added inside the returned likelihoods. Default
+            ``0.0`` (source-only return).
+        tdi_type (str, optional): ``"XYZ"`` (full 3 x 3 invC), ``"AET"`` or ``"AE"``
+            (diagonal invC). Default ``"XYZ"``.
+        nchannels (int, optional): Channel count of the holders this comp is called with.
+            Default ``3``.
+        tukey_alpha (float, optional): Tukey alpha of the taper on the slow signal before
+            the sparse FFT (mirrors ``rfft(tukey * td)``); must match the window of the data
+            rows. Default ``0.0`` (rectangular, lisatools' unwindowed FD reference).
+        edge_frac (float, optional): Fraction of the sparse grid zeroed at each end, so the
+            template sees the same time span as a WDM grid with edge cuts. Default ``0.0``.
+        t_start (float, optional): Heterodyne start time; must equal ``t_ref``. Default
+            ``None`` means ``t_ref``.
+
+    Raises:
+        TypeError: If ``fd_settings`` is not an ``FDSettings`` (the retired legacy
+            constructor signature).
+        ValueError: If ``N_sparse`` is not a power of two, ``t_start != t_ref``,
+            ``tdi_type`` is unknown, or ``tdi_config`` is not a ``TDIConfig``, str or
+            ``None``.
+        AssertionError: If ``orbits`` is a class that is not an ``Orbits`` subclass (any
+            other non-``Orbits`` object fails in ``issubclass`` with ``TypeError``).
+
+    Attributes:
+        df (float): Grid spacing [Hz]; ``T`` (float) is ``1 / df`` [s].
+        ind_min, ind_max (int): Active-band bin bounds.
+        cpp_orbits, cpp_tdi_config: Backend wraps of the orbits and TDI configuration
+            (device-local to the device current at construction).
+        d_h_out, h_h_out, d_h_im_out: Per-binary ``<d|h>``, ``<h|h>`` and the fused
+            phase-max quadrature of the last :meth:`get_ll_fd`.
+
+    Example:
+        .. code-block:: python
+
+            import numpy as np
+            from lisatools.detector import EqualArmlengthOrbits
+            from lisatools.domains import FDSettings
+            from lisatools.utils.constants import YRSID_SI
+            from gbgpu.gbcomps import GBFDComputations
+
+            dt = 10.0
+            n_td = int(YRSID_SI / dt)
+            N, df = n_td // 2 + 1, 1.0 / (n_td * dt)  # rfft grid of one year
+            comp = GBFDComputations(
+                FDSettings(N, df, force_backend="cpu"), t_ref=0.0, N_sparse=2048,
+                orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                tdi_config="2nd generation", tdi_type="XYZ", force_backend="cpu",
+            )
+            params = np.array([[2e-23, 2e-3, 7.5e-18, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]])
+            buf = np.zeros((1, 3, N), dtype=np.complex128)
+            comp.fill_global(params, buf, convert_to_ra_dec=False)  # adds h into buf
     """
 
     def __init__(self, fd_settings, t_ref,
@@ -139,30 +276,7 @@ class GBFDComputations(FastLISAResponseParallelModule):
                  orbits=None, tdi_config=None, force_backend=None,
                  d_d=0.0, tdi_type="XYZ", nchannels=3,
                  tukey_alpha=0.0, edge_frac=0.0, t_start=None):
-        """Args:
-            fd_settings: :class:`lisatools.domains.FDSettings` instance
-                describing the rfft grid (``N``, ``df``) and the active
-                band (``ind_min`` / ``ind_max`` from ``min_freq`` /
-                ``max_freq``). Mirrors ``GBWDMComputations(wdm_settings,
-                t_ref, ...)`` -- the comp is CONFIG-ONLY at construction;
-                data / inverse-covariance holders (an
-                :class:`AnalysisContainerArray`, a single
-                :class:`AnalysisContainer`, or -- for ``fill_global``
-                targets -- a :class:`DomainBase` signal) are passed to
-                each compute method at call time.
-            t_ref: source-phase reference time in seconds.
-            N_sparse: default heterodyne FFT length (power of two);
-                per-call ``N_sparse=`` overrides remain available.
-            orbits, tdi_config, tdi_type, d_d, force_backend: as on
-                :class:`GBWDMComputations`.
-            nchannels: TDI channel count of the holders this comp will
-                be called with (default 3).
-            tukey_alpha, edge_frac: FD-het window controls (see the
-                attribute comments below).
-            t_start: heterodyne start time; must equal ``t_ref`` (the
-                kernels assume a unity phase factor). Default ``None``
-                means ``t_ref``.
-        """
+        """Validate the settings and build the orbit / TDI wraps (arguments: see the class)."""
         super().__init__(force_backend=force_backend)
         # Multi-GPU replica metadata -- the WDM twin's contract verbatim
         # (see ``lisatools.chunked_het.WDMComputationsBase.__init__``): the
@@ -280,9 +394,15 @@ class GBFDComputations(FastLISAResponseParallelModule):
 
     @classmethod
     def supported_backends(cls):
+        """list[str]: ``gbgpu_cuda13x``, ``gbgpu_cuda12x``, ``gbgpu_cuda11x``, ``gbgpu_cpu``."""
         return [cls._BACKEND_PREFIX + "_" + _t for _t in cls.GPU_RECOMMENDED()]
 
     def _prep_params(self, params, convert_to_ra_dec):
+        """Return a ``(num_bin, nparams)`` backend copy of ``params``.
+
+        With ``convert_to_ra_dec`` truthy, the last two columns are converted ecliptic ->
+        ICRS (deprecated; warns).
+        """
         p = self.xp.asarray(self.xp.atleast_2d(params)).copy()
         if convert_to_ra_dec:
             # Deprecated legacy path: sky coords are consumed in the
@@ -434,6 +554,33 @@ class GBFDComputations(FastLISAResponseParallelModule):
     def get_ll_fd(self, params, fd_holder, data_index=None, noise_index=None,
                   convert_to_ra_dec: Optional[bool] = None,
                   N_sparse: Optional[int] = None):
+        """Per-binary FD log-likelihood against the holder's residual rows (``gb_fd_get_ll``).
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical parameters (module docstring);
+                1D is promoted.
+            fd_holder (AnalysisContainerArray or AnalysisContainer): Single-shard holder:
+                complex128 data rows ``linear_data_arr[0]`` and invC rows
+                ``linear_psd_arr[0]`` (bound zero-copy, see :meth:`_fd_binding`).
+            data_index (xp.ndarray, optional): ``(num_bin,)`` data row per binary (cast to
+                int32). Default all row 0.
+            noise_index (xp.ndarray, optional): ``(num_bin,)`` invC row per binary. Default
+                all row 0.
+            convert_to_ra_dec: Deprecated ecliptic -> ICRS conversion of the sky columns.
+                Default ``None`` (off).
+            N_sparse: Heterodyne FFT length for this call. Default ``None``: the
+                constructor's value.
+
+        Returns:
+            xp.ndarray: ``(num_bin,)`` float ``-0.5 * (d_d + <h|h> - 2 <d|h>)``. The raw
+            ``<d|h>``, ``<h|h>`` and the fused phase-max quadrature (``<d|h>`` of the
+            template at ``phi0 + pi/2``) are stored on ``d_h_out``, ``h_h_out``,
+            ``d_h_im_out``.
+
+        Raises:
+            NotImplementedError: For a multi-shard holder.
+            ValueError: For data / invC sizes or dtypes that do not match the settings.
+        """
         b = self._fd_binding(fd_holder)
         p = self._prep_params(params, convert_to_ra_dec)
         num_bin = p.shape[0]
@@ -473,6 +620,24 @@ class GBFDComputations(FastLISAResponseParallelModule):
                        data_index=None, noise_index=None,
                        convert_to_ra_dec: Optional[bool] = None,
                        N_sparse: Optional[int] = None):
+        """FD likelihoods of an add / remove template pair per row (``gb_fd_swap_ll``).
+
+        Args:
+            params_add (xp.ndarray): ``(num_bin, 9)`` parameters of the added templates.
+            params_remove (xp.ndarray): ``(num_bin, 9)`` parameters of the removed ones.
+            fd_holder, data_index, noise_index, convert_to_ra_dec, N_sparse: As in
+                :meth:`get_ll_fd`.
+
+        Returns:
+            tuple: ``(like_add, like_rem, d_h_add, d_h_rem, add_add, rem_rem, add_rem)``,
+            each ``(num_bin,)`` float: ``like_add = -0.5 (d_d + <a|a> - 2 <d|a>)``,
+            ``like_rem`` likewise for the removed template, then the raw ``<d|a>``,
+            ``<d|r>``, ``<a|a>``, ``<r|r>`` and ``<a|r>``. The fused phase-max quadratures
+            of the add-linear terms go to ``d_h_add_im_out`` / ``add_remove_im_out``.
+
+        Raises:
+            AssertionError: If the two parameter arrays have different row counts.
+        """
         b = self._fd_binding(fd_holder)
         pa = self._prep_params(params_add, convert_to_ra_dec)
         pr = self._prep_params(params_remove, convert_to_ra_dec)
@@ -530,31 +695,34 @@ class GBFDComputations(FastLISAResponseParallelModule):
     def get_fstat_ll_fd(self, params, fd_holder, data_index=None,
                         noise_index=None,
                         convert_to_ra_dec: Optional[bool] = None):
-        """F-statistic over the FD domain (Cornish & Crowder '05 basis).
+        """F-statistic basis products over the FD domain (Cornish & Crowder '05 basis).
 
-        Single-template parity with :meth:`GBGPU.get_fstat_ll` and
+        Single-template parity with :meth:`gbgpu.gbgpu.GBGPUBase.get_fstat_ll` and
         ``GBWDMComputations.get_fstat_ll_wdm``. The 4 basis filters share the
         binary's ``(f0, fdot, fddot, lam, beta)`` with fixed
         ``(A, iota, psi, phi0) = (2, pi/2, {0, pi/4, 0, pi/4},
         {0, pi, 3 pi/2, pi/2})``.
 
-        Returns
-        -------
-        N_arr : ndarray, shape ``(num_bin, 4)``
-            Per-binary ``<d | A_i>``.
-        M_mat : ndarray, shape ``(num_bin, 10)``
-            Per-binary upper-triangle ``<A_i | A_j>`` (i <= j), row-major
-            ``[M00, M01, M02, M03, M11, M12, M13, M22, M23, M33]`` -- the
-            SAME flat layout as ``get_fstat_ll_wdm``. Compute
-            ``F = N^T M^{-1} N / 2`` on the Python side.
+        Composed from the existing FD kernels so the inner products match the FD
+        likelihood exactly: ``N_i`` / ``M_ii`` come from :meth:`get_ll_fd` (``d_h`` /
+        ``h_h``) and ``M_ij`` (i < j) from :meth:`get_swap_ll_fd`'s ``<A_i|A_j>`` (``ar``)
+        cross term, i.e. 4 + 6 kernel launches. A dedicated ``gb_fd_get_fstat_ll`` kernel
+        (mirroring ``wdm_het_get_fstat_ll_kernel``, building all 4 filters once per block)
+        could replace this for throughput.
 
-        Composed from the existing FD shared-memory kernels so the inner
-        products match the FD likelihood exactly: ``N_i`` / ``M_ii`` come from
-        :meth:`get_ll_fd` (``d_h`` / ``h_h``) and ``M_ij`` (i<j) from
-        :meth:`get_swap_ll_fd`'s ``<A_i|A_j>`` (``ar``) cross term. A dedicated
-        ``gb_fd_get_fstat_ll`` shared-memory kernel (mirroring
-        ``wdm_het_get_fstat_ll_kernel``, building all 4 filters once per block)
-        can replace this for throughput.
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` parameters; only ``f0``, ``fdot``,
+                ``fddot``, ``lam``, ``beta`` are used (the other columns are overwritten in
+                the filters).
+            fd_holder, data_index, noise_index, convert_to_ra_dec: As in :meth:`get_ll_fd`.
+
+        Returns:
+            tuple[xp.ndarray, xp.ndarray]: ``(N_arr, M_mat)``. ``N_arr``, shape
+            ``(num_bin, 4)``: per-binary ``<d|A_i>``. ``M_mat``, shape ``(num_bin, 10)``:
+            per-binary upper triangle ``<A_i|A_j>`` (i <= j), row-major
+            ``[M00, M01, M02, M03, M11, M12, M13, M22, M23, M33]``, the SAME flat layout as
+            ``get_fstat_ll_wdm``. Compute ``F = N^T M^{-1} N / 2`` on the caller side. Both
+            are also stored on ``self.N_arr`` / ``self.M_mat``.
         """
         p = self._prep_params(params, convert_to_ra_dec)
         num_bin = p.shape[0]
@@ -681,6 +849,28 @@ class GBFDComputations(FastLISAResponseParallelModule):
                     convert_to_ra_dec: Optional[bool] = None,
                     N_sparse: Optional[int] = None,
                     template_start_inds=None):
+        """Add ``factors[i] * h_i`` into the template rows of ``templates`` (``gb_fd_fill_global``).
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical parameters; an empty batch
+                returns immediately.
+            templates (AnalysisContainerArray, AnalysisContainer, DomainBase or xp.ndarray):
+                Fill target, see :meth:`_resolve_fill_target`: a holder (accumulates into
+                its live ``linear_data_arr[0]`` rows), a ``DomainBase`` signal of shape
+                ``(nchannels, n_bins)``, or a C-contiguous complex128 array
+                ``(num_templates, nchannels, n_bins)``; updated in place.
+            data_index (xp.ndarray, optional): ``(num_bin,)`` template row per binary.
+                Default all row 0.
+            factors (xp.ndarray, optional): ``(num_bin,)`` float multipliers. Default ones.
+            convert_to_ra_dec: Deprecated ecliptic -> ICRS conversion. Default ``None``.
+            N_sparse: Heterodyne FFT length for this call. Default the constructor's.
+            template_start_inds (xp.ndarray, optional): ``(num_templates,)`` int32
+                absolute first-bin index of each row (windowed rows; lifts the active-band
+                clip). Default ``None``: the target's own row starts.
+
+        Returns:
+            None
+        """
         p = self._prep_params(params, convert_to_ra_dec)
         num_bin = p.shape[0]
         # Empty batch (e.g. a sub-band cell with no live sources): nothing
@@ -741,6 +931,8 @@ class GBFDComputations(FastLISAResponseParallelModule):
     )
 
     def _default_param_eps(self, nparams=9):
+        """``(nparams,)`` backend float64 copy of ``_DEFAULT_PARAM_EPS`` (padded with its
+        last entry for ``nparams > 9``)."""
         eps = self.xp.asarray(self._DEFAULT_PARAM_EPS[:nparams],
                               dtype=self.xp.float64)
         if eps.shape[0] != nparams:
@@ -751,6 +943,14 @@ class GBFDComputations(FastLISAResponseParallelModule):
 
     def _resolve_eps_and_scales(self, nparams,
                                 param_eps, param_scales, param_eps_relative):
+        """Resolve the finite-difference steps of the gradient / Fisher methods.
+
+        Returns:
+            tuple: ``(eps_theta, scales)``. With ``param_scales`` given: ``eps_theta`` is
+            ``param_eps`` or ``param_scales * param_eps_relative`` and ``scales`` the
+            scales; otherwise ``eps_theta`` is ``param_eps`` or :meth:`_default_param_eps`
+            and ``scales`` is ``None``.
+        """
         if param_scales is not None:
             scales = self.xp.asarray(param_scales, dtype=self.xp.float64)
             assert scales.shape[0] == nparams, (
@@ -778,19 +978,28 @@ class GBFDComputations(FastLISAResponseParallelModule):
                        param_eps_relative=1.0e-6,
                        data_index=None, noise_index=None,
                        convert_to_ra_dec: Optional[bool] = None):
-        """Chain-rule gradient of :meth:`get_ll_fd`.
+        """Chain-rule gradient of :meth:`get_ll_fd` (``gb_fd_get_ll_grad``).
 
-        See :meth:`GBWDMComputations.get_ll_grad_wdm` for the meaning of
-        ``param_scales`` / ``param_eps_relative``: with ``param_scales``
+        See :meth:`lisatools.chunked_het.WDMComputationsBase.get_ll_grad_wdm` for the
+        meaning of ``param_scales`` / ``param_eps_relative``: with ``param_scales``
         provided the returned gradient is in rescaled coordinates
         ``eta_k = theta_k / Delta_theta_k`` and the kernel uses a uniform FD
         step ``eps_theta_k = param_eps_relative * Delta_theta_k``.
 
-        Returns
-        -------
-        grad : (num_bin, nparams) xp.ndarray
-            ``dL/dtheta_k`` (default) or ``dL/d(eta_k)`` when
-            ``param_scales`` is supplied.
+        Args:
+            params (xp.ndarray): ``(num_bin, nparams)`` physical parameters.
+            fd_holder (AnalysisContainerArray or AnalysisContainer): Data holder, as in
+                :meth:`get_ll_fd`.
+            param_eps (array-like, optional): ``(nparams,)`` steps. Default ``None``:
+                ``_DEFAULT_PARAM_EPS`` (or the relative rule with ``param_scales``).
+            param_scales (array-like, optional): ``(nparams,)`` scales ``Delta_theta``.
+            param_eps_relative (float, optional): Step as a fraction of
+                ``param_scales``. Default ``1e-6``.
+            data_index, noise_index, convert_to_ra_dec: As in :meth:`get_ll_fd`.
+
+        Returns:
+            xp.ndarray: ``(num_bin, nparams)`` ``dL/dtheta_k`` (default) or ``dL/d(eta_k)``
+            when ``param_scales`` is supplied.
         """
         b = self._fd_binding(fd_holder)
         p = self._prep_params(params, convert_to_ra_dec)
@@ -831,12 +1040,31 @@ class GBFDComputations(FastLISAResponseParallelModule):
                             param_eps_relative=1.0e-6,
                             data_index=None, noise_index=None,
                             convert_to_ra_dec: Optional[bool] = None):
-        """Chain-rule gradient of :meth:`get_swap_ll_fd`.
+        """Chain-rule gradient of :meth:`get_swap_ll_fd` (``gb_fd_swap_ll_grad``).
 
         Returns ``(grad_add, grad_remove)``, the per-binary derivatives of
         ``ll_diff = L(after swap) - L(before swap)`` with respect to
         ``theta_add`` and ``theta_remove`` respectively.  Rescaling
         semantics match :meth:`get_ll_grad_fd`.
+
+        Args:
+            params_add, params_remove (xp.ndarray): ``(num_bin, nparams)`` parameters of
+                the added / removed templates (same shape).
+            fd_holder (AnalysisContainerArray or AnalysisContainer): Data holder, as in
+                :meth:`get_ll_fd`.
+            param_eps_add, param_eps_remove (array-like, optional): Steps per side (see
+                :meth:`get_ll_grad_fd`). Default ``None``.
+            param_scales_add, param_scales_remove (array-like, optional): Scales per side.
+                Default ``None``.
+            param_eps_relative (float, optional): Relative step. Default ``1e-6``.
+            data_index, noise_index, convert_to_ra_dec: As in :meth:`get_ll_fd`.
+
+        Returns:
+            tuple[xp.ndarray, xp.ndarray]: ``(grad_add, grad_remove)``, each
+            ``(num_bin, nparams)``.
+
+        Raises:
+            AssertionError: If the two parameter arrays differ in shape.
         """
         b = self._fd_binding(fd_holder)
         pa = self._prep_params(params_add, convert_to_ra_dec)
@@ -893,8 +1121,9 @@ class GBFDComputations(FastLISAResponseParallelModule):
 
         Single-template parity with ``GBGPU.information_matrix`` (Python path):
         the waveform derivative ``dh/dtheta_i`` is built by central differences
-        of the on-the-fly FD template (2nd order by default; 1st order with
-        ``easy_central_difference=True``) and folded into the FD inner product
+        of the on-the-fly FD template (5-point, 4th-order accurate by default; 3-point
+        with ``easy_central_difference=True``), built with :meth:`fill_global`, and
+        folded into the FD inner product
 
         ``Gamma_ij = 4 df Re sum_k dh_i^*(k) invC(k) dh_j(k)``
 
@@ -906,23 +1135,27 @@ class GBFDComputations(FastLISAResponseParallelModule):
         ``eta = theta / Delta_theta`` (``Gamma_eta = S Gamma_theta S``).
 
         Args:
-            params: ``(num_bin, nparams)`` GB parameters (1D auto-promoted).
-            fd_holder: the data holder (:class:`AnalysisContainerArray` or
-                :class:`AnalysisContainer`) whose inverse-covariance rows
-                (keyed by ``noise_index``) the derivative templates are
-                contracted against. The ``dh`` workspace rows share the
-                holder rows' window starts so both sides of the contraction
-                are bin-aligned.
-            inds: parameter indices to include (default all ``nparams``).
-            param_eps / param_scales / param_eps_relative: finite-difference
-                steps, mirroring :meth:`get_ll_grad_fd`.
-            easy_central_difference: 1st-order derivative when ``True``.
-            noise_index: per-binary index into the invC slabs.
-            batch_size: source-batch size to bound the ``dh`` workspace
-                (default: all sources at once).
+            params (xp.ndarray): ``(num_bin, nparams)`` GB parameters (1D auto-promoted).
+            fd_holder (AnalysisContainerArray or AnalysisContainer): The data holder whose
+                inverse-covariance rows (keyed by ``noise_index``) the derivative templates
+                are contracted against. The ``dh`` workspace rows share the holder rows'
+                window starts so both sides of the contraction are bin-aligned.
+            inds (array-like, optional): Parameter indices to include (default all
+                ``nparams``).
+            param_eps, param_scales (array-like, optional): Finite-difference steps /
+                scales, mirroring :meth:`get_ll_grad_fd`. Default ``None``.
+            param_eps_relative (float, optional): Relative step. Default ``1e-6``.
+            easy_central_difference: 2nd-order (3-point) derivative when ``True``; the
+                default ``False`` uses the 4th-order 5-point rule.
+            noise_index (xp.ndarray, optional): Per-binary index into the invC slabs.
+                Default all row 0.
+            convert_to_ra_dec: Deprecated ecliptic -> ICRS conversion. Default ``None``.
+            batch_size: Source-batch size to bound the ``dh`` workspace
+                (default ``None``: all sources at once).
 
         Returns:
-            ``(num_bin, num_derivs, num_derivs)`` real Fisher matrices.
+            xp.ndarray: ``(num_bin, num_derivs, num_derivs)`` real Fisher matrices
+            (``num_derivs = len(inds)``).
         """
         b = self._fd_binding(fd_holder)
         n_rfft = b.n_rfft

@@ -1,3 +1,20 @@
+"""GB astrophysics helpers and constants for GBGPU.
+
+Re-exports every name of :mod:`lisatools.utils.constants` (``MSUN_SI``, ``G_SI``,
+``C_SI``, ``PC_SI``, ``YRSID_SI``, ``fstar``, ...; values from ``lisaconstants``), and
+provides:
+
+* :func:`get_N` -- waveform length ``N`` of the FastGB slow part (used by GBGPU's
+  ``run_wave`` and by the LAT global fit to size GB bands, e.g.
+  ``gbbands.band_support_halfwidths`` and ``stock.erebor.gb.get_n_based_band_edges``);
+* :func:`get_fdot`, :func:`get_chirp_mass_from_f_fdot`, :func:`get_amplitude`,
+  :func:`get_chirp_mass`, :func:`get_eta`, :func:`get_fGW` -- quadrupole GB relations
+  (used by the LAT GB transforms and F-stat tools);
+* :func:`AET` and :func:`cuda_set_device`.
+
+``tdi_available`` is True when :mod:`lisatools.sensitivity` imports (then :func:`get_N`
+includes its SNR criterion); ``setDevice`` is cupy's ``setDevice`` or ``None``.
+"""
 from ast import Mod
 import numpy as np
 import warnings
@@ -22,14 +39,25 @@ except (ModuleNotFoundError, ImportError):
 
 
 def AET(X, Y, Z):
-    """Return the A,E,T channels from X,Y,Z
+    """Return the A, E, T channels from X, Y, Z.
+
+    ``A = (Z - X) / sqrt(2)``, ``E = (X - 2Y + Z) / sqrt(6)``, ``T = (X + Y + Z) / sqrt(3)``
+    (the equal-noise orthogonal combination; exact noise orthogonality needs equal arms).
 
     Args:
-        X,Y,Z (xp.ndarray): Arrays holding ``XYZ`` TDI information. The signals can be in any domain.
+        X (xp.ndarray): ``X`` TDI channel, any domain.
+        Y (xp.ndarray): ``Y`` channel, same shape.
+        Z (xp.ndarray): ``Z`` channel, same shape.
 
     Returns:
-        Tuple: ``(A,E,T)`` with array shapes the same as the input ``XYZ``.
+        tuple: ``(A, E, T)`` with array shapes the same as the input ``XYZ``.
 
+    Example:
+        >>> import numpy as np
+        >>> from gbgpu.utils.utility import AET
+        >>> A, E, T = AET(np.ones(2), np.ones(2), np.ones(2))
+        >>> A.tolist(), E.tolist()
+        ([0.0, 0.0], [0.0, 0.0])
     """
     return (
         (Z - X) / np.sqrt(2.0),
@@ -39,18 +67,22 @@ def AET(X, Y, Z):
 
 
 def get_fGW(f0, fdot, fddot, t, xp=None):
-    """Get instantaneous frequency of gravitational wave
+    r"""Get instantaneous frequency of gravitational wave.
 
-    Computes :math:`f(t)\\approx f_0 + \\dot{f}_0 t + \\frac{1}{2}\\ddot{f}_0 t^2.`
+    Computes :math:`f(t)\approx f_0 + \dot{f}_0 t + \frac{1}{2}\ddot{f}_0 t^2.`
     This assumes the initial time is 0.
 
     Args:
-        f0 (1D xp.ndarray): Initial frequency of source in Hz. Shape is ``(num_bin_all,)``.
-        fdot (1D xp.ndarray): Initial frequency derivative of source in Hz/s. Shape is ``(num_bin_all,)``.
-        fddot (1D xp.ndarray): Initial second derivative of the frequency of source in Hz/s^2. Shape is ``(num_bin_all,)``.
+        f0 (xp.ndarray): Initial frequency of source in Hz. Shape is ``(num_bin_all,)``.
+        fdot (xp.ndarray): Initial frequency derivative of source in Hz/s. Shape is
+            ``(num_bin_all,)``.
+        fddot (xp.ndarray): Initial second derivative of the frequency of source in
+            Hz/s^2. Shape is ``(num_bin_all,)``.
         t (xp.ndarray): Time values at which to evaluate the frequencies.
             If ``t.ndim > 1``, it will cast the frequency information properly.
             In this case, ``t.shape[0]`` must be equal to ``num_bin_all``.
+        xp (module, optional): Array module (``numpy`` or ``cupy``) used for the
+            broadcasting. Default ``None`` = ``numpy``.
 
     Returns:
         xp.ndarray: All frequencies evaluated at the given times.
@@ -58,7 +90,12 @@ def get_fGW(f0, fdot, fddot, t, xp=None):
     Raises:
         AssertionError: ``t.shape[0] != num_bin_all and t.shape[0] != 1``.
 
-
+    Example:
+        >>> import numpy as np
+        >>> from gbgpu.utils.utility import get_fGW
+        >>> get_fGW(np.array([0.5]), np.array([0.25]), np.array([0.0]),
+        ...         np.array([0.0, 2.0])).tolist()
+        [0.5, 1.0]
     """
     if xp is None:
         xp = np
@@ -82,37 +119,40 @@ def get_fGW(f0, fdot, fddot, t, xp=None):
 
 
 def get_chirp_mass(m1, m2):
-    """Get chirp mass
+    """Get chirp mass ``(m1 m2)^(3/5) / (m1 + m2)^(1/5)``.
 
     Args:
-        m1 (xp.ndarray): Mass 1.
-        m2 (xp.ndarray): Mass 2.
+        m1 (xp.ndarray): Mass 1 (any mass unit).
+        m2 (xp.ndarray): Mass 2 (same unit).
 
     Returns:
-        xp.ndarray: Chirp mass.
-
-
+        xp.ndarray: Chirp mass, in the unit of the inputs.
     """
     return (m1 * m2) ** (3 / 5) / (m1 + m2) ** (1 / 5)
 
 
 def get_eta(m1, m2):
-    """Get symmetric mass ratio
+    """Get symmetric mass ratio ``eta = m1 m2 / (m1 + m2)^2``.
 
     Args:
         m1 (xp.ndarray): Mass 1.
-        m2 (xp.ndarray): Mass 2.
+        m2 (xp.ndarray): Mass 2 (same unit).
 
     Returns:
-        xp.ndarray: Symetric mass ratio.
-
-
+        xp.ndarray: Symmetric mass ratio (dimensionless, at most 0.25).
     """
     return (m1 * m2) / (m1 + m2) ** 2
 
 
 def get_amplitude(m1, m2, f, d):
-    """Get amplitude of GW
+    r"""Get the strain amplitude of a GB.
+
+    .. math::
+
+        A = \frac{2 (G \mathcal{M})^{5/3}}{c^4 d} (\pi f)^{2/3},
+
+    with :math:`\mathcal{M}` the chirp mass (:func:`get_chirp_mass`) in kg and ``d`` in
+    meters.
 
     Args:
         m1 (xp.ndarray): Mass 1 in solar masses.
@@ -121,8 +161,7 @@ def get_amplitude(m1, m2, f, d):
         d (xp.ndarray): Luminosity distance in kpc.
 
     Returns:
-        xp.ndarray: Amplitude.
-
+        xp.ndarray: Amplitude (dimensionless strain).
     """
     Mc = get_chirp_mass(m1, m2) * MSUN_SI
     d = d * 1e3 * PC_SI  # kpc to meters
@@ -131,23 +170,28 @@ def get_amplitude(m1, m2, f, d):
 
 
 def get_fdot(f, m1=None, m2=None, Mc=None):
-    """Get fdot of GW
+    r"""Get the GW frequency derivative of a quadrupole-driven inspiral.
 
-    Must provide either ``m1`` and ``m2`` or ``Mc``.
+    .. math::
+
+        \dot f = \frac{96}{5} \pi^{8/3} \left(\frac{G \mathcal{M}}{c^3}\right)^{5/3}
+        f^{11/3}.
+
+    Must provide either ``m1`` and ``m2`` or ``Mc`` (``m1`` / ``m2`` win when given).
+    The inputs are not modified in place.
 
     Args:
         f (xp.ndarray): Frequency of gravitational wave in Hz.
-        m1 (xp.ndarray, optional): Mass 1 in solar masses.
-        m2 (xp.ndarray, optional): Mass 2 in solar masses.
-        Mc (xp.ndarray, optional): Chirp mass in solar masses.
+        m1 (xp.ndarray, optional): Mass 1 in solar masses. Default ``None``.
+        m2 (xp.ndarray, optional): Mass 2 in solar masses. Default ``None``.
+        Mc (xp.ndarray, optional): Chirp mass in solar masses. Default ``None``.
 
     Returns:
-        xp.ndarray: fdot.
+        xp.ndarray: fdot in Hz/s.
 
     Raises:
-        ValueError: Inputs are incorrect.
-        AssertionError: Inputs are incorrect.
-
+        ValueError: None of ``m1``, ``m2``, ``Mc`` is given.
+        AssertionError: Only one of ``m1`` / ``m2`` is given.
     """
 
     # prepare inputs and convert to chirp mass if needed
@@ -171,15 +215,16 @@ def get_fdot(f, m1=None, m2=None, Mc=None):
 
 
 def get_chirp_mass_from_f_fdot(f, fdot):
-    """Get chirp mass from f and fdot of GW
+    """Get chirp mass from f and fdot of GW (the inverse of :func:`get_fdot`).
+
+    A negative ``fdot`` gives ``nan`` (fractional power of a negative number).
 
     Args:
         f (xp.ndarray): Frequency of gravitational wave in Hz.
         fdot (xp.ndarray): Frequency derivative of gravitational wave in Hz/s.
 
     Returns:
-        xp.ndarray: chirp mass.
-
+        xp.ndarray: Chirp mass in solar masses.
     """
 
     # backout
@@ -198,17 +243,34 @@ def get_chirp_mass_from_f_fdot(f, fdot):
 def get_N(amp, f0, Tobs, oversample=1):
     """Determine sampling rate for slow part of FastGB waveform.
 
+    The base length is ``32 * mult`` with ``mult`` = 1 / 2 / 4 / 8 for ``Tobs`` up to
+    1 / 2 / 4 / 8 years of ``YRSID_SI`` (8 beyond), raised to ``64 / 256 / 512 / 1024 * mult``
+    for ``f0`` in ``[1, 10)`` mHz / ``[10, 30)`` mHz / ``[30, 100)`` mHz / ``>= 100`` mHz.
+    When :mod:`lisatools.sensitivity` is available it is further raised to
+    ``2^ceil(log2(A_cut) + 1)`` with ``A_cut = amp * sqrt(Tobs / S_m)`` and
+    ``S_m = sqrt(S_X(f0)) / (4 sin^2(f0 / fstar))``, ``S_X`` the X-channel PSD of
+    :class:`lisatools.sensitivity.X1TDISens` (default model; note that the code
+    normalizes the square root of the PSD) -- louder sources get more points. The result
+    is multiplied by ``oversample`` and capped at 2048 (the CUDA kernels' maximum).
+
+    Called by GBGPU's ``run_wave`` when ``N`` is not given and by the LAT global fit to
+    size GB bands (``gbbands.band_support_halfwidths``, ``get_n_based_band_edges``).
+
     Args:
-        amp (xp.ndarray): Amplitude of gravitational wave.
+        amp (xp.ndarray): Amplitude of gravitational wave (dimensionless strain).
         f0 (xp.ndarray): Frequency of gravitational wave in Hz.
-        Tobs (double): Observation time in seconds.
+        Tobs (float): Observation time in seconds.
         oversample (int, optional): Oversampling factor. This function will return
             ``oversample * N``, if N is the determined sample number.
             (Default: ``1``).
 
     Returns:
-        int xp.ndarray: N values for each binary entered.
+        np.ndarray: int32 N values for each binary entered, shape ``(num_bin,)``
+        (scalars are promoted to 1-D). NumPy only: inputs are converted with
+        ``np.atleast_1d``.
 
+    Warns:
+        UserWarning: When the sensitivity module is unavailable (no SNR criterion).
     """
 
     # make sure they are arrays
@@ -278,11 +340,12 @@ def get_N(amp, f0, Tobs, oversample=1):
 
 
 def cuda_set_device(dev):
-    """Globally sets CUDA device
+    """Globally sets CUDA device (cupy's ``setDevice``).
+
+    Warns instead when cupy is not available.
 
     Args:
         dev (int): CUDA device number.
-
     """
     if setDevice is not None:
         setDevice(dev)

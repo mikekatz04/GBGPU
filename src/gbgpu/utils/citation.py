@@ -1,5 +1,12 @@
 
 
+"""Raw BibTeX strings for the GBGPU references.
+
+:attr:`gbgpu.gbgpu.GBGPUBase.citation` and :attr:`gbgpu.thirdbody.GBGPUThirdBody.citation`
+return ``zenodo + cornish_fastb + robson_triple`` (star-imported from here).
+"""
+
+#: FastGB (Cornish & Littenberg 2007, Phys. Rev. D 76, 083006).
 cornish_fastb = """
 @article{Cornish:2007if,
     author = "Cornish, Neil J. and Littenberg, Tyson B.",
@@ -15,6 +22,7 @@ cornish_fastb = """
 }
 """
 
+#: Hierarchical triples (Robson et al. 2018, Phys. Rev. D 98, 064012).
 robson_triple = """
 @article{Robson:2018svj,
     author = "Robson, Travis and Cornish, Neil J. and Tamanini, Nicola and Toonen, Silvia",
@@ -31,6 +39,7 @@ robson_triple = """
 }
 """
 
+#: The GBGPU software record (Zenodo, doi 10.5281/zenodo.6500434).
 zenodo = """
 @software{michael_l_katz_2022_6500434,
   author       = {Michael L. Katz},

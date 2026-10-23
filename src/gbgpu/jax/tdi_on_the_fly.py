@@ -6,6 +6,13 @@ tdi_config) -- they return new arrays rather than mutating buffers, so
 ``jax.grad`` / ``jax.jit`` / ``jax.vmap`` work without surprises. The
 ``GBTDIonTheFlyWrapJAX`` / ``SOBBHTDIonTheFlyWrapJAX`` thin objects in
 ``wrappers.py`` adapt this to the C++ wrapper API.
+
+Entry points: :func:`run_wave_tdi` (any :class:`JaxAmpPhaseSource`) and
+:func:`gb_run_wave_tdi` (the UCB source; used in the LATW tutorial
+``08_BackendsAndDevWorkflow``). ``orbits`` / ``tdi_config`` are the LAT JAX wraps
+:class:`lisatools.jax.orbits.OrbitsWrapJAX` /
+:class:`lisatools.jax.response.tdi_config.TDIConfigWrapJAX`; the sky angles are read in
+the orbits' frame.
 """
 from __future__ import annotations
 
@@ -36,10 +43,10 @@ def _run_single_binary(params: jnp.ndarray, t_arr: jnp.ndarray,
     """Generate the (M, tdi_amp, tdi_phase, phase_ref) block for one source.
 
     Returns:
-        M: complex (nchannels, N) -- the raw complex TDI samples.
-        tdi_amp: real (nchannels, N) -- signed amplitudes.
-        tdi_phase: real (nchannels, N) -- unwrapped phases.
-        phase_ref: real (N,) -- the SC1 reference phase.
+        tuple: ``(M, tdi_amp, tdi_phase, phase_ref)``: ``M`` complex ``(nchannels, N)``,
+        the raw complex TDI samples; ``tdi_amp`` real ``(nchannels, N)``, signed
+        amplitudes; ``tdi_phase`` real ``(nchannels, N)``, unwrapped phases;
+        ``phase_ref`` real ``(N,)``, the SC1 reference phase.
     """
     # Sky vectors (per-source, constant in t).
     k, u, v = get_sky_vectors(params, source)
@@ -65,14 +72,28 @@ def run_wave_tdi(params: jnp.ndarray, t_arr: jnp.ndarray,
                  ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Functional analog of ``LISATDIonTheFly::run_wave_tdi``.
 
-    ``params``: shape ``(num_bin, n_params)`` OR flat ``(num_bin * n_params,)``.
-    ``t_arr``: shape ``(num_bin, N)``  OR ``(N,)`` (will be broadcast).
+    Per binary (``jax.vmap``): the complex TDI samples ``M`` of the LAT JAX projection,
+    the spacecraft-1 reference phase, and the per-channel amplitude / unwrapped phase
+    extracted from ``M`` (:func:`lisatools.jax.response.amp_phase_extract.extract_and_unwrap`).
 
-    Returns ``(M, tdi_amp, tdi_phase, phase_ref)`` with shapes
-        M         : complex (num_bin, nchannels, N)
-        tdi_amp   : real    (num_bin, nchannels, N)
-        tdi_phase : real    (num_bin, nchannels, N)
-        phase_ref : real    (num_bin, N)
+    Args:
+        params: Shape ``(num_bin, n_params)`` OR flat ``(num_bin * n_params,)``, in
+            ``source``'s layout.
+        t_arr: Times [s], shape ``(num_bin, N)``, ``(1, N)`` or ``(N,)`` (broadcast to
+            every binary).
+        source: The amp / phase source (``source.n_params`` columns).
+        orbits: JAX orbits.
+        tdi_config: JAX TDI configuration.
+
+    Returns:
+        tuple: ``(M, tdi_amp, tdi_phase, phase_ref)`` with shapes ``M`` complex
+        ``(num_bin, nchannels, N)``, ``tdi_amp`` / ``tdi_phase`` real
+        ``(num_bin, nchannels, N)`` (signed amplitudes, unwrapped phases) and
+        ``phase_ref`` real ``(num_bin, N)``.
+
+    Raises:
+        ValueError: ``params`` or ``t_arr`` is not 1-D or 2-D.
+        AssertionError: Shapes inconsistent with ``source.n_params`` / ``num_bin``.
     """
     n_params = source.n_params
     params = jnp.asarray(params)
@@ -113,27 +134,41 @@ def gb_run_wave_tdi(params: jnp.ndarray, t_arr: jnp.ndarray,
                     orbits: OrbitsWrapJAX,
                     tdi_config: TDIConfigWrapJAX
                     ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """JAX analog of ``gb_run_wave_tdi_wrap``.
+    """JAX analog of ``gb_run_wave_tdi_wrap``: :func:`run_wave_tdi` with the UCB source.
 
-    Parameters
-    ----------
-    params : array (num_bin, 9) or (9*num_bin,)
-        UCB parameters per binary; layout from
-        :class:`JaxUCBSource`.
-    t_arr : array (num_bin, N) or (N,)
-        Times (seconds, SSB).
-    t_ref : float
-        UCB reference time.
-    orbits, tdi_config : JAX-side handles.
+    Builds a :class:`~gbgpu.jax.sources.ucb.JaxUCBSource` at ``t_ref`` on every call.
 
-    Returns ``(M, tdi_amp, tdi_phase, phase_ref)`` -- same shape contract
-    as :func:`run_wave_tdi`.
+    Args:
+        params: ``(num_bin, 9)`` or ``(9 * num_bin,)`` UCB parameters per binary; layout
+            from :class:`~gbgpu.jax.sources.ucb.JaxUCBSource`.
+        t_arr: Times [s], ``(num_bin, N)`` or ``(N,)``.
+        t_ref: UCB reference time [s].
+        orbits: JAX orbits (:class:`lisatools.jax.orbits.OrbitsWrapJAX`).
+        tdi_config: JAX TDI configuration
+            (:class:`lisatools.jax.response.tdi_config.TDIConfigWrapJAX`).
+
+    Returns:
+        tuple: ``(M, tdi_amp, tdi_phase, phase_ref)`` -- same shape contract as
+        :func:`run_wave_tdi`.
+
+    Example:
+        .. code-block:: python
+
+            import jax
+            from gbgpu.jax.tdi_on_the_fly import gb_run_wave_tdi
+
+            jax.config.update("jax_enable_x64", True)
+            # orbits_jax / tdi_jax: the JAX orbit and TDI wraps on the jax backend
+            M, amp, phase, phase_ref = gb_run_wave_tdi(theta[None, :], t_arr[None, :],
+                                                       t_ref, orbits_jax, tdi_jax)
+            h_td = M[0].real                     # (nchannels, N)
     """
     from .sources.ucb import JaxUCBSource
     source = JaxUCBSource(t_ref=t_ref)
     return run_wave_tdi(params, t_arr, source, orbits, tdi_config)
 
 
+# TODO check: keep/remove/document -- broken: imports gbgpu.jax.sources.sobbh, which does not exist
 def sobbh_run_wave_tdi(params: jnp.ndarray, t_arr: jnp.ndarray,
                        t_ref: float,
                        orbits: OrbitsWrapJAX,

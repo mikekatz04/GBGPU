@@ -5,35 +5,95 @@ with code in this repository.
 
 **LISA Analysis Tools–wide conventions:** [`../LISAanalysistools/docs/conventions.md`](../LISAanalysistools/docs/conventions.md) (canonical). **This repo's map:** [`docs/codebase-map.md`](docs/codebase-map.md).
 
-## LISA Analysis Tools reorg state (post-Phase-3F, 2026-06-02)
+## Role and current state (dev branch, checked 2026-10-22)
 
 GBGPU is the **GB-physics owner** in the LISA Analysis Tools layered architecture.
 LISAanalysistools (LAT) owns generic LISA infrastructure; GBGPU owns
 GB-specific physics on top of it.
 
-**Build infrastructure (post-2026-06-03):**
+The reorg work items this file used to list as "pending arrival" (the C++
+`GBTDIonTheFly` / `GBComputationGroup` carve-out, `gbcomps.py`, the
+signal-heterodyne port) have all landed. Current layout (details in
+`docs/codebase-map.md`):
+
+- **C++ / CUDA** (`src/gbgpu/cutils/`): `gb_tdi_on_the_fly.{hh,cu}` holds
+  `GBTDIonTheFly` (UCB amplitude / phase on top of LAT's `LISATDIonTheFly`)
+  and `GBComputationGroup` with every modern kernel family: `gb_fd_*`,
+  chunked-heterodyne `gb_wdm_het_*`, signal-heterodyne `gb_signal_het_*`
+  (v2 ... v5 scorers, carrier reference, sig-het F-stat) and the direct-to-WDM
+  lookup `gb_lookup_*`. The legacy FastGB kernels are `gbgpu_utils.cu` and
+  `SharedMemoryGBGPU.cu`. There are no separate `GBSignalHet.*` /
+  `GBAbsoluteFD.*` / `binding_gbsignalhet.cxx` files.
+- **Bindings**: `binding_gbgpu.{hpp,cxx}` is a **nanobind** module
+  (`NB_MODULE(cgbgpu, m)`; the "pybind11" wording in its comments predates the
+  Phase 3M pybind11 -> nanobind migration). It exposes
+  `GBGPUComputationWrap{CPU,GPU}` (legacy kernels), `GBTDIonTheFlyWrap{CPU,GPU}`
+  and `GBComputationGroupWrap{CPU,GPU}`, shipped as
+  `gbgpu_backend_{cpu,cuda11x,cuda12x,cuda13x}.cgbgpu`. `pyproject.toml`
+  pins `nanobind==2.12.0` in `build-system.requires` (sprint-wide ABI pin).
+  Cython is fully retired (no `.pyx`; the old rules are commented out in
+  `cutils/CMakeLists.txt`).
+- **Python**: `gbgpu.py` (`GBGPUBase` / `GBGPU`, FastGB), `thirdbody.py`,
+  `gbcomps.py` (`GBWDMComputations`, a thin subclass of LAT
+  `chunked_het.WDMComputationsBase`; `GBFDComputations`),
+  `gbsignalhetcomputations.py` (`GBSignalHetComputations`; production path
+  `for_band_engine`, CPU and CUDA), `gblookupcomputations.py`
+  (`GBLookupComputations`, `GBLookupWDMComputations`), `gb_likelihood.py`
+  (band engines), `cutils/__init__.py` (backends), `parallelbase.py`
+  (`GBGPUParallelModule`; `utils/parallelbase.py` and `wdm_het.py` are
+  re-export shims).
+- **JAX** (`gbgpu/jax/`): `sources.ucb.JaxUCBSource`, `tdi_on_the_fly`,
+  `wdm.{kernels, heterodyne_kernels, fast_inner_heterodyne, signal_het_kernels}`.
+  These import generic infrastructure absolutely from
+  `lisatools.jax.{response,wdm,orbits}` -- there is NO `gbgpu.jax.base` etc.
+  No `gbgpu_jax` backend is registered; `jax/wrappers.py` and
+  `jax/wdm/computation_group.py` (`GBComputationGroupWrapJAX`) are unwired
+  adapters, and the SOBBH JAX pieces moved to BBHx
+  (`bbhx.jax.sources.sobbh`; `gbgpu.jax.tdi_on_the_fly.sobbh_run_wave_tdi`
+  still imports the removed `gbgpu.jax.sources.sobbh`).
+
+**Production GB likelihood (9mo / 12mo global fits).** LAT builds a
+`GBWDMComputations` and wraps it with `GBSignalHetComputations.for_band_engine`
+(LAT `stock/erebor/gb.build_sighet_engine`, with a GB WDM lookup table);
+inside it a `GBLookupComputations` builds the carrier references, the anchor
+offsets and the information matrices; `gb_likelihood.WDMBandLikelihoodEngine`
+drives it. The `GBGPU` object the recipe builds is a container on the WDM path;
+`GBGPU.run_wave` runs only in the warm-start referee and on the monitor (CPU).
+The user-facing write-up is `docs/source/user/likelihood_path.rst`.
+
+**API traps to remember.**
+- Pass `force_backend` explicitly. `None` is broken for `GBGPU`,
+  `GBGPUThirdBody` and the `GBSignalHetComputations` constructor: their
+  `supported_backends` return bare flavors, which resolve to a `gbt_*`
+  backend without the GB wraps.
+- `GBGPU(...)` requires `orbits` (`None` raises `ValueError`).
+- The `GBSignalHetComputations` constructor is CPU only (`"cpu"`); CUDA goes
+  through `for_band_engine`, which inherits the delegate's backend.
+- `GBGPU.get_chi_sqared`, `hessian_wdm`, `utils/config.py` and
+  `utils/citations.py` are broken / dead (TODO-tagged, excluded from the API
+  docs); `gbgpu.__all__` lists names that do not exist.
+- `examples/GBGPU_tutorial.ipynb` (copied into `docs/source/` by `conf.py`)
+  still builds `GBGPU` without `orbits` and calls `information_matrix` with an
+  outdated signature; `examples/fast_likelihood_tutorial.ipynb` still calls
+  `GBSignalHetComputations` "on the roadmap". `tests/test_gbgpu.py` /
+  `tests/test_thirdbody.py` use the retired `EqualArmlengthOrbits(use_gpu=...)`
+  kwarg. Notebooks and tests are stale on dev.
+
+**Build infrastructure:**
 - GBGPU's CMakeLists consumes LAT's `Detector.cu`, `Detector.hpp`, `global.hpp`
-  via the same `python -c "import lisatools"` shell-out pattern used by
-  lisa-on-gpu (`LISATOOLS_CUTILS` variable, then `file(COPY ${LISATOOLS_CUTILS}/...)`).
-  This replaced an older `file(DOWNLOAD https://raw.githubusercontent.com/.../refs/heads/main/...)`
+  via a `python -c "import lisatools"` shell-out (`LISATOOLS_CUTILS` variable,
+  then `file(COPY ${LISATOOLS_CUTILS}/...)`) and copy-compiles LAT's
+  `lat_tdi_on_the_fly.cu`. This replaced an older
+  `file(DOWNLOAD https://raw.githubusercontent.com/.../refs/heads/main/...)`
   pattern that pulled stale snapshots ignoring the version-pinned
   lisaanalysistools build dep. The copied files live under
   `src/gbgpu/cutils/` and are gitignored — source of truth is LAT.
-- Same flow for `${GBT_CUTILS}` (gpubackendtools cutils dir, already
-  in place pre-2026-06-03).
-- `src/gbgpu/cutils/binding_gbgpu.{hpp,cxx}` -- pybind11 module skeleton
-  (Phase GBGPU.pybind, 2026-06-03). Mirror of BBHx's
-  binding_bbhx.{hpp,cxx}; built fresh (no prior pybind branch on GBGPU
-  to pull forward). Consumes LAT's canonical `ReturnPointerBase` via
-  `#include "binding_flr.hpp"` and asserts
-  `static_assert(!LISATOOLS_IS_WRAPPER_OWNER, ...)` to enforce the
-  single-registrant rule. Produces a new backend module
-  `gbgpu_backend_{cpu,cudaXXx}.cgbgpu` alongside the existing Cython
-  modules (utils, sharedmem). The skeleton ships an empty
-  `GBGPUComputationWrap`; Phase 3L.7 populates it with
-  GBTDIonTheFly + GBComputationGroup + gb_wdm_het_* kernels.
-- `find_package(pybind11 CONFIG)` added to project-root `CMakeLists.txt`;
-  `pybind11` added to `pyproject.toml`'s build-system requires.
+- Same flow for `${GBT_CUTILS}` (gpubackendtools cutils dir): GBT's
+  `Interpolate.cu` (LAPACKE cubic-spline solver) is compiled into `cgbgpu`.
+- `cutils/lisaconstants_values.h` is GENERATED by LAT's
+  `python -m lisatools.utils.lisaconstants_header` (committed so the copied LAT
+  headers resolve it); `tests/test_lisaconstants_values.py` checks it against
+  the installed `lisaconstants` (pinned `==2.0.2`). Never hand-edit it.
 - **`GBGPU_CUDA_ARCH` defaults to `80;90` (2026-07-28)** — was `"native"`, which
   needs CMake to see a GPU at *configure* time. On a GPU-less cluster
   build/login node that detection falls through to nvcc's own default (sm_52),
@@ -53,13 +113,14 @@ GB-specific physics on top of it.
   available for execution on the device". No PTX entry is emitted, so future
   majors need an explicit value too. Note GPUBackendTools still defaults to
   `native` and carries the same latent exposure.
-- **`GBGPU_WITH_SHAREDMEM` (default `ON`, 2026-07-28)** — compiles the legacy
+- **`GBGPU_WITH_SHAREDMEM` (CMake default `ON`, 2026-07-28)** — compiles the legacy
   `SharedMemoryGBGPU.cu` kernel family into `cgbgpu`. It is 4k lines of
   heavily-templated CUDA and the repo's **only** `#include <cufftdx.hpp>`, so
   `-DGBGPU_WITH_SHAREDMEM=OFF` also removes the configure-time
   `nvidia-mathdx` tarball download + extract + `find_package(mathdx)` — a
   GPU configure with it OFF needs **no network access** and compiles
-  substantially faster.
+  substantially faster. `LISAanalysistools/install.sh` builds the dev stack
+  with `OFF` by default (its `GBGPU_WITH_SHAREDMEM` variable).
 
   ```sh
   pip install -e . --config-settings=cmake.define.GBGPU_WITH_SHAREDMEM=OFF
@@ -68,58 +129,33 @@ GB-specific physics on top of it.
   The seven `SharedMemory*_wrap` methods stay **bound** (identical Python
   surface) but raise `RuntimeError` with a rebuild instruction — the guard is
   `GBGPU_NO_SHAREDMEM` / `GBGPU_SHAREDMEM_UNAVAILABLE` in `binding_gbgpu.hpp`.
-  Unaffected: `GBTDIonTheFly`, the chunked-heterodyne kernels, and the
-  signal-heterodyne (`gb_signal_het_*`) family — i.e. an OFF build fully
-  supports the sig-het in-model GB path and its parity gates.
+  Unaffected: `GBTDIonTheFly`, the chunked-heterodyne kernels, the
+  signal-heterodyne (`gb_signal_het_*`) and lookup families, the gbgpu_utils
+  `fill_global` (`GBGPU.fill_global_template`) and the Python path of
+  `GBGPU.run_wave` / `information_matrix` — i.e. an OFF build fully supports
+  the WDM global fits (sig-het in-model, F-stat grid births through the
+  sig-het / chunked F-stat) and their parity gates.
 
-  **Still needs ON:** GB F-stat RJ births (`GBGPU.get_fstat_ll`, via
-  LAT `gbspecialstretch.para_log_like`), synthetic GB injections and the
-  FD-domain global-template subtraction (`GBGPU.generate_global_template`,
-  via LAT `recipe.py` / `stock/erebor/injections.py` / `sources/gb/waveform.py`),
-  `GBAETWaveform` (`run_wave`), and `gathergalaxy`'s
-  `swap_likelihood_difference`. A WDM-domain **search** run therefore needs
-  ON; WDM PE runs and the sig-het/chunked-het parity gates do not.
-
-**Already received from lisa-on-gpu (Phase 3F):**
-- `gbgpu.jax.sources.ucb` — `JaxUCBSource`.
-- `gbgpu.jax.wdm.kernels` — `gb_wdm_get_ll_jax`, `gb_wdm_fill_global_jax`, `gb_wdm_swap_ll_jax`.
-- `gbgpu.jax.wdm.heterodyne_kernels` — `gb_wdm_het_get_ll_jax`, `gb_wdm_het_fill_global_jax`, `gb_wdm_het_swap_ll_jax`.
-- `gbgpu.jax.wdm.fast_inner_heterodyne` — `fast_wdm_inner_heterodyne_jax`, `gb_chunk_fd_to_wdm_jax`, `ALPHA_AUTO`.
-
-These import generic infrastructure absolutely from `lisatools.jax.{response,wdm,orbits}` — there is NO `gbgpu.jax.base` etc. Use the LAT path.
-
-**Pending arrival (future C++ TDIonTheFly carve-out session):**
-- C++: `GBTDIonTheFly` class + `GBComputationGroup` class + `WDMSplineHelpers.hh` + GB chunked-het CUDA kernels. Will land in `GBGPU/src/gbgpu/cutils/` with its own pybind11 module.
-- Python: `gbcomps.py` (`GBWDMComputations`, `GBFDComputations`).
-- JAX: `computation_group.py`'s `GBComputationGroupWrapJAX` (currently mixed with SOBBH in lisa-on-gpu's `fastlisaresponse.jax.wdm.computation_group`; split during the C++ carve-out).
-
-**Pending arrival (V2 signal-heterodyne port, independent work item):**
-- C++: `cutils/GBSignalHet.{hh,cu}` (source-class entry) +
-  `cutils/GBAbsoluteFD.{hh,cu}` (`compute_fd_bin(params9, ch, k_global) → cmplx`,
-  bin-by-bin, no TD intermediate, no full-N rfft) +
-  `cutils/binding_gbsignalhet.cxx`.
-- Python: `gbgpu/gbsignalhetcomputations.py` — `GBSignalHetComputations`,
-  parallels `GBWDMComputations` (chunked-het) but uses the polyphase
-  signal-het kernel suite (`gb_signal_het_{fill_global,get_ll,swap_ll,
-  get_ll_grad,hessian,get_fstat_ll}`).
-- JAX: `gbgpu/jax/wdm/gb_signal_het_kernels.py` + `gb_signal_het_computation_group.py`.
-- The generic polyphase + bin-fold + reconstruct primitives live in LAT
-  (`lisatools/cutils/SignalHet*.hh,cu`) — GBGPU only owns the
-  GB-specific FD-bin producer.
-- Full plan: `~/.claude/plans/yes-find-and-read-sprightly-garden.md`.
-- Python prototype + walkthrough live at
-  `LISAanalysistools/scripts/gb_chunked_het/gb_signal_het_wdm_v2*.py`
-  (mm5 ≈ 1.6e-9 median, ~130× faster than v1 dense path).
+  **Still needs ON:** the legacy FD methods `GBGPU.get_ll`, `get_fstat_ll`,
+  `swap_likelihood_difference`, `generate_global_template` and the
+  `use_c_implementation=True` paths. LAT callers: FD-basis code only
+  (`gbspecialstretch.para_log_like`, which refuses non-FD bases since the
+  2026-08-12 ruling; the FD branch of `recipe.py`; `gathergalaxy`;
+  `sources/gb/waveform.GBXYZTDIWaveform`). Synthetic GB injections
+  (`stock/erebor/injections.py`) moved to `GBFDComputations` in 2026-08 and no
+  longer need it.
 
 **Single-registrant rule (LISA Analysis Tools–wide)**: GBGPU's binding TUs MUST NOT
 register `OrbitsWrap`, `LISAResponseWrap`, `TDIConfigWrap`, or
 `CubicSplineWrap`. The first three are owned by LAT's `pycppdetector`;
-`CubicSplineWrap` is owned by GBT's `interp` module (2026-06-10). When GBGPU receives its tdionthefly
-module, add `#include "lisatools_header_abi.hpp"` +
-`static_assert(!LISATOOLS_IS_WRAPPER_OWNER, ...)` to its binding source
-(see `lisa-on-gpu/src/fastlisaresponse/cutils/binding_tof.cxx` for the
-pattern). The umbrella workspace's `tools/check_single_registrant.sh` is the CI
-grep complement.
+`CubicSplineWrap` is owned by GBT's `interp` module (2026-06-10). GBGPU's
+`binding_gbgpu.cxx` enforces it with `#include "lisatools_header_abi.hpp"`
+(via `binding_gbgpu.hpp`) + `static_assert(!LISATOOLS_IS_WRAPPER_OWNER, ...)`,
+and consumes LAT's canonical `ReturnPointerBase` through `binding_flr.hpp`;
+the backend loaders in `cutils/__init__.py` take the shared wraps from
+`lisatools_backend_<flavor>.pycppdetector` and `gbt_backend_<flavor>.interp`.
+`LISAanalysistools/tools/check_single_registrant.sh` is the CI grep
+complement.
 
 ## Backend implementation hierarchy (LISA Analysis Tools–wide rule)
 

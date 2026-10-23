@@ -1,3 +1,32 @@
+"""FastGB waveforms of a galactic binary with a third body on a long outer orbit.
+
+:class:`GBGPUThirdBody` extends :class:`gbgpu.gbgpu.GBGPUBase` with the line-of-sight
+motion of the inner binary around the centre of mass of a hierarchical triple (Robson et al.
+2018, arXiv:1806.00500): the outer orbit Doppler-shifts the instantaneous frequency
+(``shift_frequency``) and adds the integrated phase (``add_to_phasing``). Five extra
+per-binary parameters follow the nine GB ones in :meth:`GBGPUThirdBody.run_wave`:
+``A2`` [m/s], ``varpi`` [rad], ``e2``, ``P2`` [yr], ``T2`` [yr].
+:func:`third_body_factors` and :func:`get_T2` convert physical triple parameters to them.
+
+Public GBGPU API (docs ``user/derivedwaves.rst``, ``GBGPU_tutorial``); not used by the
+global fit.
+
+Example:
+    .. code-block:: python
+
+        import numpy as np
+        from lisatools.detector import EqualArmlengthOrbits
+        from lisatools.utils.constants import YRSID_SI
+        from gbgpu.thirdbody import GBGPUThirdBody
+
+        gb = GBGPUThirdBody(orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                            force_backend="cpu")
+        base = [2e-23, 2e-3, 7.5e-18, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+        third = [400.0, 0.0, 0.3, 1.2, 0.6]  # A2, varpi, e2, P2 [yr], T2 [yr]
+        params = np.tile(base + third, (10, 1))
+        gb.run_wave(*params.T, T=1.0 * YRSID_SI, dt=10.0, oversample=2)
+"""
+
 from multiprocessing.sharedctypes import Value
 import time
 import warnings
@@ -24,37 +53,60 @@ class GBGPUThirdBody(GBGPUBase):
 
     The third-body components are originally
     by Travis Robson for the paper `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+    The four :class:`gbgpu.gbgpu.GBGPUBase` hooks implement it: the extra
+    :meth:`run_wave` arguments are ``(A2, varpi, e2, P2, T2)``
+    (:meth:`prepare_additional_args`), ``N`` is doubled until the outer orbit is resolved
+    (:meth:`special_get_N`), the frequency at each spacecraft is Doppler-shifted by the
+    line-of-sight velocity (:meth:`shift_frequency`) and the phase gains its time integral
+    (:meth:`add_to_phasing`). Only the Python path of :meth:`run_wave` includes the third
+    body; the shared-memory likelihood kernels do not take the extra parameters.
 
     Args:
-        force_backend (str, optional): Change to general backend in use. Example options are ``'cpu'`` and ``'gpu'``.
-            Default is ``None``. 
+        orbits: :class:`~lisatools.detector.Orbits` instance (required), as for
+            :class:`gbgpu.gbgpu.GBGPUBase`.
+        force_backend (str, optional): Backend flavor (``"cpu"``, ``"cuda13x"``, ...),
+            prefixed with ``gbgpu_``; see :class:`gbgpu.gbgpu.GBGPUBase`.
+        t0 (float, optional): Absolute start time [s] of the observation window. Default
+            ``None`` uses ``orbits.sc_t0`` if present, else ``0.0``.
+        flip_ref_phase (bool, optional): Negate ``phi0`` before generating. Default
+            ``False``.
 
+    Example:
+        .. code-block:: python
+
+            from lisatools.detector import EqualArmlengthOrbits
+            from gbgpu.thirdbody import GBGPUThirdBody
+
+            gb_third = GBGPUThirdBody(orbits=EqualArmlengthOrbits(force_backend="cpu"),
+                                      force_backend="cpu")
+            # 9 GB parameters, then A2 [m/s], varpi, e2, P2 [yr], T2 [yr]
+            gb_third.run_wave(2e-23, 2e-3, 7.5e-18, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5,
+                              400.0, 0.0, 0.3, 1.2, 0.6, T=3.15e7, dt=10.0)
     """
 
     @property
     def citation(self):
-        """Get citations for this class"""
+        """str: BibTeX entries to cite: GBGPU (Zenodo), FastGB and Robson et al. 2018."""
         return zenodo + cornish_fastb + robson_triple
 
     def prepare_additional_args(self, A2, varpi, e2, P2, T2):
-        """Prepare the arguments special to this class
+        r"""Convert the five third-body parameters for the slow-part hooks.
+
+        Stores ``P2`` (years, host) on ``self.P2``.
 
         Args:
-            A2 (double or 1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (double or 1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (double or 1D double np.ndarray): Eccentricity of the third body orbit.
-            P2 (double or 1D double np.ndarray): Period of the third body orbit in Years.
-            T2 (double or 1D double np.ndarray): Time of pericenter passage of the third body in Years.
-                This parameter is effectively a constant of integration.
+            A2 (float or np.ndarray): Line-of-sight velocity amplitude of the inner binary's
+                orbit about the triple's centre of mass [m/s] (``A2`` of the paper).
+            varpi (float or np.ndarray): Phase offset of the line-of-sight velocity [rad]
+                (``omega_bar`` from :func:`third_body_factors`).
+            e2 (float or np.ndarray): Eccentricity of the outer orbit.
+            P2 (float or np.ndarray): Period of the outer orbit [yr].
+            T2 (float or np.ndarray): Time of pericenter passage of the outer orbit [yr],
+                effectively a constant of integration.
 
         Returns:
-            Tuple: (A2, varpi, e2, n2, T2) adjusted for GPU usage if necessary.
-                (:math:`n_2=\\frac{2\\pi}{P_2}` is the angular frequency of the orbit.)
-
+            tuple: ``(A2, varpi, e2, n2, T2)`` as backend arrays, with
+            :math:`n_2 = 2\pi / (P_2 \, \mathrm{YRSID\_SI})` [rad/s] and ``T2`` in seconds.
         """
         # cast to 1D if scalar
         A2 = np.atleast_1d(A2).copy()
@@ -91,31 +143,30 @@ class GBGPUThirdBody(GBGPUBase):
         T2,
         oversample=1,
     ):
-        """Determine proper sampling rate in time domain for slow-part.
+        """Slow-part sample count per binary, doubled until the outer orbit is resolved.
+
+        Starts from :func:`gbgpu.utils.utility.get_N` (which already includes
+        ``oversample``) and doubles ``N`` for every binary whose sampling rate
+        ``N / (T / yr)`` is below ``2 / P2`` [1/yr]. If any doubling happened, the whole
+        array is then multiplied by ``oversample`` once more. The 2048 cap of ``get_N`` is
+        not re-applied.
 
         Args:
-            amp (double or 1D double np.ndarray): Amplitude parameter.
-            f0 (double or 1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            T (double): Observation time in seconds.
-            A2 (double or 1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above. (Not needed in this function)
-            varpi (double or 1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above. (Not needed in this function)
-            e2 (double or 1D double np.ndarray): Eccentricity of the third body orbit. (Not needed in this function)
-            P2 (double or 1D double np.ndarray): Period of the third body orbit in Years.
-            T2 (double or 1D double np.ndarray): Time of pericenter passage of the third body in Years.
-                This parameter is effectively a constant of integration. (Not needed in this function)
+            amp (float or np.ndarray): Amplitudes.
+            f0 (float or np.ndarray): Frequencies [Hz].
+            T (float): Observation time [s].
+            A2 (float or np.ndarray): Unused here.
+            varpi (float or np.ndarray): Unused here.
+            e2 (float or np.ndarray): Unused here.
+            P2 (float or np.ndarray): Outer-orbit period [yr].
+            T2 (float or np.ndarray): Unused here.
+            oversample (int, optional): Multiplier on ``N``. Default ``1``.
 
         Returns:
-            1D int32 xp.ndarray: Number of time-domain points recommended for each binary.
+            np.ndarray: ``(num_bin,)`` int ``N`` per binary.
 
         Raises:
-            AssertionError: Shapes of inputs are wrong.
-
-
+            AssertionError: If ``amp``, ``f0`` and ``P2`` lengths differ.
         """
 
         # make sure everything is the same shape
@@ -153,66 +204,43 @@ class GBGPUThirdBody(GBGPUBase):
         return N_out
 
     def shift_frequency(self, fi, xi, A2, varpi, e2, n2, T2):
-        """Shift the evolution of the frequency in the slow part
+        """Doppler-shift the instantaneous frequency: ``fi * (1 + v_LOS(xi) / c)``.
 
         Args:
-            fi (3D double xp.ndarray): Instantaneous frequencies of the
-                wave before applying third-body effect at each spacecraft as a function of time.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            xi (3D double xp.ndarray): Time at each spacecraft.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            A2 (1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (1D double np.ndarray): Eccentricity of the third body orbit.
-            n2 (1D double np.ndarray): Angular frequency of the third body orbit in per seconds.
-            T2 (1D double np.ndarray): Time of pericenter passage of the third body in seconds.
-                This parameter is effectively a constant of integration.
+            fi (xp.ndarray): Instantaneous GW frequencies [Hz] at each spacecraft before the
+                third-body effect, ``(num_bin, 3, N)``; modified in place.
+            xi (xp.ndarray): Delayed times at each spacecraft [s], ``(num_bin, 3, N)``.
+            A2 (xp.ndarray): ``(num_bin,)`` line-of-sight velocity amplitude [m/s].
+            varpi (xp.ndarray): ``(num_bin,)`` velocity phase offset [rad].
+            e2 (xp.ndarray): ``(num_bin,)`` outer-orbit eccentricity.
+            n2 (xp.ndarray): ``(num_bin,)`` outer-orbit angular frequency [rad/s].
+            T2 (xp.ndarray): ``(num_bin,)`` time of pericenter passage [s].
 
         Returns:
-            3D double xp.ndarray: Updated frequencies with third-body effect.
-
+            xp.ndarray: The shifted ``fi``.
         """
         fi *= 1 + self.get_vLOS(xi, A2, varpi, e2, n2, T2) / C_SI
         return fi
 
     def add_to_phasing(self, arg_phasing, f0, fdot, fddot, xi, A2, varpi, e2, n2, T2):
-        """Update phasing in transfer function in FastGB formalism for third-body effect
+        """Add the third-body phase to the link-response phasing.
 
-        Adding an effective phase that goes into ``arg2`` in the construction
-        of the slow part of the waveform. ``arg2`` is then included directly
-        in the transfer function. See :meth:`gbgpu.gbgpu.GBGPU._construct_slow_part`
-        for the use of argS in the larger code.
+        The phase is the running trapezoid-rule integral over the delayed times ``xi`` of
+        ``2 pi f_GW(t) v_LOS(t) / c`` (:meth:`parab_step_ET` per step, cumulated along the
+        time axis, zero at the first sample). See
+        :meth:`gbgpu.gbgpu.GBGPUBase._construct_slow_part` for where the phasing enters.
 
         Args:
-            arg_phasing (3D double xp.ndarray): Input phasing information from 
-                FastGB base waveform. Shape is ``(num binaries, 3 spacecraft, N)``.
-            f0 (1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            fdot (1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz/s.
-            fddot (1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz/s^2.
-            xi (3D double xp.ndarray): Time at each spacecraft.
-                The shape is ``(num binaries, 3 spacecraft, N)``.
-            T (double): Observation time in seconds.
-            A2 (1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (1D double np.ndarray): Eccentricity of the third body orbit.
-            n2 (1D double np.ndarray): Angular frequency of the third body orbit in per seconds.
-            T2 (1D double np.ndarray): Time of pericenter passage of the third body in seconds.
-                This parameter is effectively a constant of integration.
+            arg_phasing (xp.ndarray): Phasing of the base FastGB waveform,
+                ``(num_bin, 3, N)`` [rad]; modified in place.
+            f0, fdot, fddot (xp.ndarray): ``(num_bin,)`` frequency parameters [Hz, Hz/s,
+                Hz/s^2].
+            xi (xp.ndarray): Delayed times at each spacecraft [s], ``(num_bin, 3, N)``.
+            A2, varpi, e2, n2, T2 (xp.ndarray): ``(num_bin,)`` outputs of
+                :meth:`prepare_additional_args` (m/s, rad, -, rad/s, s).
 
         Returns:
-            3D double xp.ndarray: Updated ``argS`` with third-body effect
-
+            xp.ndarray: The updated ``arg_phasing``.
         """
         # prepare inputs to parabolic integration
         input_tuple = (
@@ -227,18 +255,19 @@ class GBGPUThirdBody(GBGPUBase):
         return arg_phasing
 
     def get_u(self, l, e):
-        """Invert Kepler's Equation to get eccentric anomaly
+        """Invert Kepler's Equation to get eccentric anomaly.
 
         Invert Kepler's equation (:math:`l = u - e \\sin{u}`)
-        using Mikkola's method (1987) referenced in Tessmer & Gopakumar 2007.
+        using Mikkola's method (1987) referenced in Tessmer & Gopakumar 2007: a cubic
+        initial guess refined by one 4th-order Newton step, after folding ``l`` into
+        ``[0, pi]`` (the fold is undone on ``u``).
 
         Args:
-            l (1D double xp.ndarray): Mean anomaly in radians.
-            e (1D double xp.ndarray): Eccentricity.
+            l (xp.ndarray): Mean anomaly [rad]; :meth:`get_phi` passes ``(num_bin, 3, N)``.
+            e (xp.ndarray): Eccentricity, broadcastable to ``l`` (e.g. ``(num_bin, 1, 1)``).
 
         Returns:
-            3D double xp.ndarray: Eccentric anomaly
-
+            xp.ndarray: Eccentric anomaly [rad], shape of ``l``.
         """
 
         # enforce the mean anomaly to be in the domain -pi < l < pi
@@ -321,19 +350,22 @@ class GBGPUThirdBody(GBGPUBase):
         return u
 
     def get_phi(self, t, T, e, n):
-        """Get phi value for Line-of-sight velocity
+        """Get phi value for Line-of-sight velocity.
 
-        See `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+        See `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_. Solves Kepler's
+        equation for the mean anomaly ``n (t - T)`` (:meth:`get_u`) and, for ``e > 1e-6``,
+        converts the eccentric anomaly to the true anomaly
+        ``u + 2 arctan(beta sin u / (1 - beta cos u))``, ``beta = (1 - sqrt(1 - e^2)) / e``.
 
         Args:
-            t (3D double xp.ndarray): Time values to evaluate :math:`\\bar{\\phi}`.
-            T (1D double xp.ndarray): Time of periastron passage (``T2``) in seconds.
-            e (1D double xp.ndarray): Eccentricity.
-            n (1D double xp.ndarray): Angular frequency of third-body orbit (``n2``) in per seconds.
+            t (xp.ndarray): Times [s], ``(num_bin, 3, N)``.
+            T (xp.ndarray): ``(num_bin,)`` time of periastron passage (``T2``) [s].
+            e (xp.ndarray): ``(num_bin,)`` eccentricity.
+            n (xp.ndarray): ``(num_bin,)`` angular frequency of the outer orbit (``n2``)
+                [rad/s].
 
         Returns:
-            3D double xp.ndarray: Phi values for line-of-sight velocities.
-
+            xp.ndarray: Orbital phase (true anomaly) [rad], shape of ``t``.
         """
 
         # get eccentric anomaly
@@ -353,26 +385,23 @@ class GBGPUThirdBody(GBGPUBase):
         return u
 
     def get_vLOS(self, t, A2, varpi, e2, n2, T2):
-        """Calculate the line-of-site velocity
+        """Calculate the line-of-sight velocity ``A2 (sin(phi2 + varpi) + e2 sin(varpi))``.
 
-        See equation 13 in `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+        See equation 13 in `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_;
+        ``phi2`` is the outer-orbit phase from :meth:`get_phi`.
 
         Args:
-            t (3D double xp.ndarray): Time values to evaluate :math:`\\bar{\\phi}`.
-            A2 (1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (1D double np.ndarray): Eccentricity of the third body orbit.
-            n2 (1D double np.ndarray): Angular frequency of the third body orbit in per seconds.
-            T2 (1D double np.ndarray): Time of pericenter passage of the third body in seconds.
-                This parameter is effectively a constant of integration.
+            t (xp.ndarray): Times [s], ``(num_bin, 3, N)`` (any 3D shape with ``num_bin``
+                leading).
+            A2 (xp.ndarray): ``(num_bin,)`` velocity amplitude [m/s].
+            varpi (xp.ndarray): ``(num_bin,)`` velocity phase offset [rad].
+            e2 (xp.ndarray): ``(num_bin,)`` eccentricity of the outer orbit.
+            n2 (xp.ndarray): ``(num_bin,)`` angular frequency of the outer orbit [rad/s].
+            T2 (xp.ndarray): ``(num_bin,)`` time of pericenter passage [s], effectively a
+                constant of integration.
 
         Returns:
-            3D double xp.ndarray: LOS velocity.
-
+            xp.ndarray: Line-of-sight velocity [m/s], shape of ``t``.
         """
         # get special phi value
         phi2 = self.get_phi(t, T2, e2, n2)
@@ -383,40 +412,32 @@ class GBGPUThirdBody(GBGPUBase):
         )
         
     def parab_step_ET(self, f0, fdot, fddot, A2, varpi, e2, n2, T2, t0, t0_old):
-        """Determine phase difference caused by third-body
+        """Determine phase difference caused by third-body.
 
         Takes a step in the integration of the orbit. In this setup,
         the calculations can all be done in parallel because we are just
         inverted Kepler's equation rather than integrating an ODE where
         a serial operation is required. TODO: Check this again. Was checked in past.
+        Each step is the trapezoid rule on ``2 pi f_GW(t) v_LOS(t) / c`` between
+        ``t0_old`` and ``t0``.
 
         Args:
-            f0 (1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            fdot (1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz/s.
-            fddot (1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz/s^2.
-            A2 (1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (1D double np.ndarray): Eccentricity of the third body orbit.
-            n2 (1D double np.ndarray): Angular frequency of the third body orbit in per seconds.
-            T2 (1D double np.ndarray): Time of pericenter passage of the third body in seconds.
-                This parameter is effectively a constant of integration.
-            t0 (3D double xp.ndarray): Time values at end of step.
-                Shape is ``(num binaries, 3 spacecraft, N - 1)``.
-            t0_old (3D double xp.ndarray): Time values at start of step.
-                Shape is ``(num binaries, 3 spacecraft, N - 1)``.
-
+            f0 (xp.ndarray): ``(num_bin,)`` frequency [Hz].
+            fdot (xp.ndarray): ``(num_bin,)`` frequency derivative [Hz/s].
+            fddot (xp.ndarray): ``(num_bin,)`` second frequency derivative [Hz/s^2].
+            A2 (xp.ndarray): ``(num_bin,)`` line-of-sight velocity amplitude [m/s].
+            varpi (xp.ndarray): ``(num_bin,)`` velocity phase offset [rad].
+            e2 (xp.ndarray): ``(num_bin,)`` eccentricity of the outer orbit.
+            n2 (xp.ndarray): ``(num_bin,)`` angular frequency of the outer orbit [rad/s].
+            T2 (xp.ndarray): ``(num_bin,)`` time of pericenter passage [s], effectively a
+                constant of integration.
+            t0 (xp.ndarray): Time values at end of step [s],
+                shape ``(num_bin, 3, N - 1)``.
+            t0_old (xp.ndarray): Time values at start of step [s],
+                shape ``(num_bin, 3, N - 1)``.
 
         Returns:
-            3D double xp.ndarray: Phase shifts due to third-body effect.
-
-
+            xp.ndarray: Phase increments [rad] due to the third body, shape of ``t0``.
         """
         dtt = t0 - t0_old
         g1 = self.get_vLOS(t0_old, A2, varpi, e2, n2, T2) * get_fGW(
@@ -431,28 +452,25 @@ class GBGPUThirdBody(GBGPUBase):
         return dtt * (g1 + g3) / 2.0 * PI * 2 / C_SI
 
     def get_aLOS(self, A2, varpi, e2, P2, T2, t, eps=1e-9):
-        """Get line-of-sight acceleration
+        """Get line-of-sight acceleration.
 
         Use central difference with LOS velocity to get
-        LOS acceleration.
+        LOS acceleration: ``(v_LOS(t + eps) - v_LOS(t - eps)) / (2 eps)``.
 
         Args:
-            A2 (1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (1D double np.ndarray): Eccentricity of the third body orbit.
-            n2 (1D double np.ndarray): Angular frequency of the third body orbit in per seconds.
-            T2 (1D double np.ndarray): Time of pericenter passage of the third body in seconds.
-                This parameter is effectively a constant of integration.
-            t (3D double xp.ndarray): Time values to evaluate. Shape is
-                ``(num binaries, 3 spacecraft, N)``.
+            A2 (xp.ndarray): ``(num_bin,)`` line-of-sight velocity amplitude [m/s].
+            varpi (xp.ndarray): ``(num_bin,)`` velocity phase offset [rad].
+            e2 (xp.ndarray): ``(num_bin,)`` eccentricity of the outer orbit.
+            P2 (xp.ndarray): ``(num_bin,)`` outer-orbit period [yr] (converted to
+                ``n2 = 2 pi / (P2 * YRSID_SI)``).
+            T2 (xp.ndarray): ``(num_bin,)`` time of pericenter passage [s] (passed to
+                :meth:`get_vLOS` unchanged).
+            t (xp.ndarray): Times [s], ``(num_bin, 3, N)`` (any 3D shape with ``num_bin``
+                leading).
+            eps (float, optional): Time step [s]. Default ``1e-9``.
 
         Returns:
-            3D double xp.ndarray: LOS acceleration
-
+            xp.ndarray: LOS acceleration [m/s^2], shape of ``t``.
         """
         n2 = 2 * np.pi / (P2 * YRSID_SI)
         # central differencing for derivative of velocity
@@ -466,44 +484,45 @@ class GBGPUThirdBody(GBGPUBase):
     def get_f_derivatives(
         self, f0, fdot, fddot, A2, varpi, e2, P2, T2, t=None, eps=5e4
     ):
-        """Get instantaneous frequency derivatives in third-body waveform
+        """Get instantaneous frequency derivatives in third-body waveform.
 
         Computes the instantaneous frequency and frequency derivatives by
-        calculating the effect of the third-body over the course of the orbit.
-
-        Central difference is used for both first and second derivatives.
+        calculating the effect of the third-body over the course of the orbit:
+        ``f(t) = (f0 + fdot t + fddot t^2 / 2) (1 + v_LOS(t) / c)`` on three times per
+        row, then central differences for the first and second derivatives.
 
         Args:
-            f0 (1D double np.ndarray): Initial frequency of gravitational
-                wave in Hz.
-            fdot (1D double np.ndarray): Initial time derivative of the
-                frequency given as Hz/s.
-            fddot (1D double np.ndarray): Initial second derivative with
-                respect to time of the frequency given in Hz/s^2.
-            A2 (1D double np.ndarray): Special amplitude parameter related to the
-                    line-of-site velocity for the third body orbit as defined in the paper
-                    given in the description above.
-            varpi (1D double np.ndarray): Special angular frequency parameter related to the
-                line-of-site velocity for the third body orbit as defined in the paper
-                given in the description above.
-            e2 (1D double np.ndarray): Eccentricity of the third body orbit.
-            n2 (1D double np.ndarray): Angular frequency of the third body orbit in per seconds.
-            T2 (1D double np.ndarray): Time of pericenter passage of the third body in seconds.
-                This parameter is effectively a constant of integration.
-            t (3D double xp.ndarray, optional): Time values for derivative calculation.
-                Shape is ``(num binaries, anything, 3)``. The 3 here represents
-                the times for each derivative computation. The derivatives are to be
-                calucated at index 1. The step before (after) the time of the derivative
-                (for central differencing) is at index 0 (1). In other words, the final dimension
-                of ``t`` should be ``[t_deriv - eps, t_deriv, t_deriv + eps]``. Default is ``None``.
-                If ``None``, will fill ``[t_deriv - eps, t_deriv, t_deriv + eps]`` with
-                ``t_deriv = 0.0`` and ``eps`` will be the kwarg value.
-            eps (double): Step size for central differencing. Only used if ``t`` is not provided.
+            f0 (float or np.ndarray): ``(num_bin,)`` frequency [Hz].
+            fdot (float or np.ndarray): ``(num_bin,)`` frequency derivative [Hz/s].
+            fddot (float or np.ndarray): ``(num_bin,)`` second derivative [Hz/s^2].
+            A2 (float or np.ndarray): ``(num_bin,)`` line-of-sight velocity amplitude [m/s].
+            varpi (float or np.ndarray): ``(num_bin,)`` velocity phase offset [rad].
+            e2 (float or np.ndarray): ``(num_bin,)`` eccentricity of the outer orbit.
+            P2 (float or np.ndarray): ``(num_bin,)`` outer-orbit period [yr] (converted to
+                ``n2 = 2 pi / (P2 * YRSID_SI)``).
+            T2 (float or np.ndarray): ``(num_bin,)`` time of pericenter passage, passed on
+                unconverted.
+            t (np.ndarray or list, optional): Time values for derivative calculation.
+                Shape is ``(num_bin, anything, 3)``: the last axis is
+                ``[t_deriv - eps, t_deriv, t_deriv + eps]`` and the derivatives are taken at
+                index 1. Default is ``None``: ``[-eps, 0.0, eps]`` for every binary
+                (``(num_bin, 1, 3)``).
+            eps (float, optional): Step size for central differencing [s]; also used as the
+                step when ``t`` is given (it must match ``t``). Default ``5e4``.
 
         Returns:
-            3D double xp.ndarray: Phase shifts due to third-body effect.
+            tuple: ``(f, fdot_new, fddot_new)``, each ``(num_bin, anything)``: the
+            frequency, first and second derivative at ``t_deriv``.
 
+        Raises:
+            ValueError: If ``t`` is not ``None``, a list or an ``np.ndarray``.
+            AssertionError: If ``t`` is not 3D with a last axis of 3 and ``num_bin`` rows.
 
+        Warning:
+            As written it calls ``get_vLOS(A2, varpi, e2, n2, T2, t)`` while the signature
+            is ``get_vLOS(t, A2, varpi, e2, n2, T2)``, so the result is wrong (or the call
+            fails on shapes). The second derivative also divides by ``(2 eps)**2`` instead
+            of ``eps**2``.
         """
         A2 = np.atleast_1d(A2).copy()
         varpi = np.atleast_1d(varpi).copy()
@@ -552,36 +571,57 @@ def third_body_factors(
     third_mass_unit="Mjup",
     third_period_unit="yrs",
 ):
-    """Get ``A2,varpi,T2`` from third-body parameters
+    """Get ``A2``, ``varpi``, ``T2`` from third-body parameters.
 
     Get all the third-body factors that go into the waveform computation:
-    ``A2``, ``varpi``, and ``T2``.
+    ``A2``, ``varpi``, and ``T2`` (the extra :meth:`GBGPUThirdBody.run_wave` arguments,
+    with ``e2`` and ``P2`` [yr]). Following arXiv:1806.00500: the sky projection
+    ``C = cos(theta) sin(iota) + sin(theta) cos(iota) sin(lam - Omega2)``,
+    ``S = sin(theta) cos(lam - Omega2)`` (``theta = pi / 2 - beta``) gives
+    ``A2 = (mc / (M + mc)) sqrt(G (M + mc) / p2) sqrt(C^2 + S^2)`` and
+    ``varpi = (omega2 + arctan(C / -S)) mod 2 pi``, with the semilatus rectum
+    ``p2 = a2 (1 - e2^2)``, ``a2 = (G M P2^2 / (4 pi^2))^(1/3)``. The projection only needs
+    ``lam`` / ``beta`` and the Euler angles in one common frame (the ecliptic below; use the
+    orbits frame, ICRS for L1 orbits, to match :class:`GBGPUThirdBody`'s sky angles).
 
     Args:
-        M (double or double np.ndarray): Total mass of inner
+        M (np.ndarray): Total mass of inner
             Galactic binary in Solar Masses.
-        mc (double or double np.ndarray): Mass of third body in units of
+        mc (np.ndarray): Mass of third body in units of
             ``third_mass_unit`` kwarg.
-        P2 (double or double np.ndarray): Orbital period of third body
+        P2 (np.ndarray): Orbital period of third body
             in units of ``third_period_unit`` kwarg.
-        e2 (double or double np.ndarray): Orbital eccentricity of third body.
-        iota (double or double np.ndarray): Orbital inclination of third body
+        e2 (np.ndarray): Orbital eccentricity of third body.
+        iota (np.ndarray): Orbital inclination of third body
             in radians. This orbital inclination is one of the three euler angles describing
             the rotation of the third-body orbital frame to ecliptic frame.
-        Omega2, omega2 (double or double np.ndarray): The other two of three
+        Omega2, omega2 (np.ndarray): The other two of three
             euler angles describing the third-body orbital frame rotation from
-            the ecliptic frame. See the Figure 1 in `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
-        phi2 (double or double np.ndarray): Orbital phase in radians.
-        lam (double or double np.ndarray): Ecliptic longitude in radians.
-        beta (double or double np.ndarray): Ecliptic latitude in radians.
+            the ecliptic frame. See Figure 1 in
+            `arXiv:1806.00500 <https://arxiv.org/pdf/1806.00500.pdf>`_.
+        phi2 (np.ndarray): Orbital phase in radians.
+        lam (np.ndarray): Ecliptic longitude in radians.
+        beta (np.ndarray): Ecliptic latitude in radians.
         third_mass_unit (str, optional): Mass unit for third-body mass. Options are
-            ``"Mjup"`` for Jupiter Masses or ``"MSUN``" for Solar Masses. Default is ``"Mjup"``.
+            ``"Mjup"`` for Jupiter Masses or ``"MSUN"`` for Solar Masses. Default is
+            ``"Mjup"``.
         third_period_unit (str, optional): Time unit for third-body period. Options are
-            ``"sec"`` for seconds or ``"yrs``" for years. Default is ``"yrs"``.
+            ``"sec"`` for seconds or ``"yrs"`` for years. Default is ``"yrs"``.
 
     Returns:
-        Tuple: ``(A2, varpi, T2)`` associated with the input parameters.
+        tuple: ``(A2, varpi, T2)``: velocity amplitude [m/s], phase offset [rad] and time
+        of pericenter passage [yr] (:func:`get_T2`).
 
+    Raises:
+        NotImplementedError: For an unknown unit string.
+        AssertionError: If the array shapes differ (all inputs must be arrays of one
+            shape; Python floats fail on ``.shape``).
+
+    Warning:
+        ``M``, ``mc`` and ``P2`` are converted to SI IN PLACE (``*=``), so the caller's
+        arrays change. As written the function also uses a constant ``G`` that is not
+        defined in this module (``lisatools.utils.constants`` provides ``G_SI``), so it
+        raises ``NameError`` before returning.
     """
 
     # adjust inner binary mass to kg
@@ -649,19 +689,33 @@ def third_body_factors(
 
 
 def get_T2(P2, e2, phi2, third_period_unit="yrs"):
-    """Get ``T2`` from third-body parameters
+    """Get ``T2`` from third-body parameters.
+
+    Converts the orbital phase ``phi2`` (true anomaly) to the eccentric anomaly
+    ``u2 = 2 arctan(sqrt((1 - e2) / (1 + e2)) tan(phi2 / 2))`` and the time since pericenter
+    ``(u2 - e2 sin u2) / n2``, ``n2 = 2 pi / P2``; negative values are wrapped by one period.
 
     Args:
-        P2 (double or double np.ndarray): Orbital period of third body
+        P2 (float or np.ndarray): Orbital period of third body
             in units of ``third_period_unit`` kwarg.
-        e2 (double or double np.ndarray): Orbital eccentricity of third body.
-        phi2 (double or double np.ndarray): Orbital phase in radians.
+        e2 (float or np.ndarray): Orbital eccentricity of third body.
+        phi2 (float or np.ndarray): Orbital phase in radians.
         third_period_unit (str, optional): Time unit for third-body period. Options are
-            ``"sec"`` for seconds or ``"yrs``" for years. Default is ``"yrs"``.
+            ``"sec"`` for seconds or ``"yrs"`` for years. Default is ``"yrs"``.
 
     Returns:
-        double xp.ndarray: ``T2`` associated with the input parameters.
+        float or np.ndarray: ``T2`` in YEARS (``YRSID_SI``), whatever the input unit.
 
+    Raises:
+        NotImplementedError: For an unknown ``third_period_unit``.
+
+    Warning:
+        With ``"yrs"`` an array ``P2`` is converted to seconds IN PLACE.
+
+    Example:
+        >>> from gbgpu.thirdbody import get_T2
+        >>> float(get_T2(1.0, 0.0, 0.0))
+        0.0
     """
     # adjust perturber period to seconds
     if third_period_unit == "yrs":

@@ -5,6 +5,27 @@ rework, per the fast-computation-wrap layering rule): this layer wraps the
 GB fast-waveform computation objects (:class:`gbgpu.gbcomps.GBFDComputations`
 / :class:`GBWDMComputations`) and therefore lives with them in GBGPU. The
 old lisatools path re-exports these names through a deprecation shim.
+
+Entry point: :func:`make_band_likelihood_engine`, which picks the engine from the type
+of the basis-domain settings:
+
+* :class:`~lisatools.domains.WDMSettings` -> :class:`WDMBandLikelihoodEngine` around a
+  WDM computation object. On the 9mo / 12mo global fits that object is the sig-het
+  wrapper :class:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations` (built with
+  ``for_band_engine`` around the chunked :class:`gbgpu.gbcomps.GBWDMComputations`), so
+  in-model repeats score through sig-het and everything else through the chunked comp.
+* :class:`~lisatools.domains.FDSettings` -> :class:`FDBandLikelihoodEngine` around a
+  :class:`gbgpu.gbcomps.GBFDComputations` (the FD basis; not used by the runs).
+
+LAT builds the engine in ``lisatools.globalfit.moves.gbbands.make_routed_band_engine``
+(one prototype plus per-device replicas behind ``_RoutedBandEngine``) and drives it from
+``SubBandBuffer``. All engines take the band buffer (an
+:class:`~lisatools.analysiscontainer.AnalysisContainerArray`) and PHYSICAL parameters in
+the 9-column GB layout ``(amp, f0, fdot, fddot, phi0, iota, psi, lam, beta)``.
+
+Phase maximization (:class:`TwoQuadraturePhaseMaxMixin`; LAT ``GB_RJ_PHASE_MAXIMIZE=1``
+on the runs) uses the fused quadrature of the comps unless ``GB_PHASE_MAX_FUSED=0``
+(default ``1``; the launchers set ``1``).
 """
 
 from __future__ import annotations
@@ -28,34 +49,34 @@ from lisatools.domains import DomainSettingsBase, FDSettings, WDMSettings
 class SwapLLResult:
     """Outputs of one batched swap-likelihood call.
 
-    All arrays are 1-D, length ``num_proposals``. Out-of-bounds proposals get
-    ``ll_diff = -1e300`` (callers don't need to mask separately).
+    All arrays are 1-D, length ``num_proposals``, on the engine's array module.
+    Out-of-bounds proposals get ``ll_diff = -1e300`` (callers don't need to mask
+    separately). Built by :meth:`WDMBandLikelihoodEngine.get_swap_ll` /
+    :meth:`FDBandLikelihoodEngine.get_swap_ll`, and returned by LAT's routed engine
+    (``gbbands._RoutedBandEngine.get_swap_ll``) and ``SubBandBuffer.get_swap_ll``. No
+    caller on the 9mo / 12mo runs: the only LAT caller is the ``GB_ORTHO_CHECK``
+    diagnostic of ``GBSpecialBase`` (``0`` on the launchers).
 
-    Attributes
-    ----------
-    ll_diff
-        Posterior log-likelihood difference for the swap proposal, summed over
-        bands. For FD this is the legacy
-        ``gbgpu.swap_likelihood_difference`` output. For WDM it is
-        ``-0.5 * ( <h_add|h_add> - 2<d|h_add> ) - ( -0.5 * ( <h_remove|h_remove> - 2<d|h_remove> ) )``
-        which is the standard
-        ``(d_h_add - d_h_remove) - 0.5*(h_add_h_add - h_remove_h_remove) - cross_term``
-        algebra, computed from the five swap inner products.
-    d_h_add, d_h_remove, hh_add, hh_remove, hh_cross
-        The raw inner products. WDM populates all five; FD currently returns
-        only those it computes natively, leaving the rest as ``None``.
-    opt_snr_add
-        Optimal SNR of the proposed (added) template: ``sqrt(<h_add|h_add>)``.
-        Used by :meth:`Buffer.get_swap_ll` for the rejection-sampling clamp.
-    phase_angle
-        When ``phase_maximize=True``, the per-proposal phase rotation that
-        the engine applied to maximise over phase. Otherwise ``None``. Callers
-        subtract this from the proposed ``phi0`` parameter when an accept lands
-        on a phase-maximised draw.
-    kept
-        Boolean mask (length ``num_proposals``) identifying the proposals that
-        passed engine-internal bounds checks. Rejected proposals already have
-        ``ll_diff = -1e300`` and ``opt_snr_add = 0``.
+    Attributes:
+        ll_diff: Log-likelihood difference of replacing the removed source by the added
+            one, computed from the five swap inner products as
+            ``(d_h_add - d_h_remove) - 0.5 * (hh_add - hh_remove) - (hh_cross - hh_remove)``
+            (both engines).
+        d_h_add: ``<d|h_add>`` against the slot's residual.
+        d_h_remove: ``<d|h_remove>``.
+        hh_add: ``<h_add|h_add>``.
+        hh_remove: ``<h_remove|h_remove>``.
+        hh_cross: ``<h_add|h_remove>``. Both engines populate all five products (zeros on
+            rejected rows).
+        opt_snr_add: Optimal SNR of the proposed (added) template: ``sqrt(<h_add|h_add>)``.
+            Used by ``SubBandBuffer.get_swap_ll`` for the rejection-sampling clamp.
+        phase_angle: When ``phase_maximize=True``, the per-proposal phase rotation that
+            the engine applied to maximise over phase. Otherwise ``None``. Callers
+            subtract this from the proposed ``phi0`` parameter when an accept lands
+            on a phase-maximised draw.
+        kept: Boolean mask (length ``num_proposals``) identifying the proposals that
+            passed engine-internal bounds checks. Rejected proposals already have
+            ``ll_diff = -1e300`` and ``opt_snr_add = 0``.
     """
 
     ll_diff: Any
@@ -69,16 +90,23 @@ class SwapLLResult:
     kept: Any
 
 
-# Physical GB parameter layout shared by every fast-computation wrap:
-# (amp, f0[Hz], fdot, fddot, phi0, inc, psi, lam, beta).
+#: Column of ``phi0`` in the physical GB parameter layout shared by every
+#: fast-computation wrap: (amp, f0[Hz], fdot, fddot, phi0, inc, psi, lam, beta).
 PHYS_IDX_PHI0 = 4
 
 
 def _phase_max_fused_enabled() -> bool:
-    """GB_PHASE_MAX_FUSED=0 forces the legacy two-call phase max even when
+    """Whether the fused phase-max quadrature may be used (``GB_PHASE_MAX_FUSED``).
+
+    GB_PHASE_MAX_FUSED=0 forces the legacy two-call phase max even when
     the fused quadrature stash is available -- the production rollback
     lever (read per call: negligible next to a kernel batch, and it keeps
-    the knob testable without reimports)."""
+    the knob testable without reimports).
+
+    Returns:
+        bool: False only when ``GB_PHASE_MAX_FUSED`` is ``"0"`` (default ``"1"``; the 9mo /
+        12mo launchers set ``1``).
+    """
     return os.environ.get("GB_PHASE_MAX_FUSED", "1") != "0"
 
 
@@ -90,7 +118,7 @@ class TwoQuadraturePhaseMaxMixin:
     ``<h_add|h_remove>``, ...) the dependence on a physical phase shift
     ``delta`` is sinusoidal: ``g(phi0 + delta) = R cos(delta ± theta)``.
     Two evaluations at ``phi0`` and ``phi0 + pi/2`` therefore determine the
-    whole curve:
+    whole curve::
 
         D = g(phi0) + 1j * g(phi0 + pi/2)
         max_delta g = |D|      at    delta* = arg(D)
@@ -118,6 +146,12 @@ class TwoQuadraturePhaseMaxMixin:
     (e.g. the JAX chunked backend) falls back to the legacy second
     evaluation at ``phi0 + pi/2``; ``h_h`` is phase-invariant so it is
     never recomputed on either path.
+
+    The host engine provides ``xp``, ``get_ll`` / ``get_swap_ll`` with the
+    :class:`BandLikelihoodEngine` signatures, and stashes ``d_h_out``, ``h_h_out``,
+    ``kept_out`` and ``d_h_im_out`` (``swap_d_h_add_im`` / ``swap_add_remove_im`` for
+    swaps) on each call. Used by :class:`WDMBandLikelihoodEngine` (the 9mo / 12mo runs,
+    ``GB_RJ_PHASE_MAXIMIZE=1``) and :class:`FDBandLikelihoodEngine`.
     """
 
     def _get_ll_phase_max(
@@ -131,6 +165,17 @@ class TwoQuadraturePhaseMaxMixin:
         return_inner_products,
         waveform_kwargs,
     ):
+        """Phase-maximized ``get_ll``: one ``phase_maximize=False`` call plus the quadrature.
+
+        Uses the comp's fused ``d_h_im_out`` when present and ``GB_PHASE_MAX_FUSED`` is on,
+        else a second ``get_ll`` at ``phi0 + pi/2``. Rows with the ``-1e300`` bounds
+        sentinel keep it.
+
+        Returns:
+            xp.ndarray or tuple: ``ll`` (maximized, ``(num,)``), or
+            ``(ll, d_h_out, h_h_out, phase_angle)`` with ``return_inner_products``. Sets
+            ``d_h_out`` (maximized), ``non_marg_d_h`` and ``phase_angle`` (``delta*``).
+        """
         xp = self.xp
         ll_0 = self.get_ll(
             buffer_aca, params_phys,
@@ -183,6 +228,15 @@ class TwoQuadraturePhaseMaxMixin:
         N_vals,
         waveform_kwargs,
     ) -> "SwapLLResult":
+        """Phase-maximized ``get_swap_ll`` over the ADDED template's ``phi0``.
+
+        Maximizes ``G = d_h_add - hh_cross`` (the terms linear in ``h_add``) with the fused
+        swap quadratures, or a second ``get_swap_ll`` at ``phi0 + pi/2`` when they are
+        missing, then re-evaluates ``d_h_add`` and ``hh_cross`` at the maximizing shift.
+
+        Returns:
+            SwapLLResult: With ``phase_angle`` set to the shift ``delta*`` per proposal.
+        """
         xp = self.xp
         res_0 = self.get_swap_ll(
             buffer_aca, params_remove_phys, params_add_phys,
@@ -251,7 +305,13 @@ class BandLikelihoodEngine(Protocol):
 
     All engines must expose ``basis_settings``, ``nchannels``, and
     ``tdi_channel_setup`` so the Buffer can sanity-check shapes at construction
-    time.
+    time. They also expose ``xp`` and the in-model hooks ``setup_in_model`` /
+    ``clear_in_model`` (forwarded to the computation object).
+
+    Attributes:
+        basis_settings (DomainSettingsBase): The basis-domain settings (WDM or FD).
+        nchannels (int): Number of TDI channels.
+        tdi_channel_setup (str): TDI channel set name.
     """
 
     basis_settings: DomainSettingsBase
@@ -268,11 +328,20 @@ class BandLikelihoodEngine(Protocol):
         factor: int,
         waveform_kwargs: dict,
     ) -> None:
-        """Add (``factor=+1``) or remove (``factor=-1``) sources from
-        ``buffer_aca.linear_data_arr[0]`` in-place.
+        """Add (``factor=+1``) or remove (``factor=-1``) sources in place.
 
+        Writes into ``buffer_aca.linear_data_arr[0]``.
         ``params_phys`` are already transformed to physical units.
         ``params_index`` maps each source to a band buffer index.
+
+        Args:
+            buffer_aca: The band buffer.
+            params_phys (xp.ndarray): ``(num, 9)`` physical parameters.
+            params_index (xp.ndarray): ``(num,)`` buffer slot of each source.
+            N_vals (xp.ndarray or None): Per-source FD waveform lengths (FD engine) or
+                ignored (WDM).
+            factor: ``+1`` or ``-1``.
+            waveform_kwargs: Not consumed by the current engines.
         """
         ...
 
@@ -288,8 +357,7 @@ class BandLikelihoodEngine(Protocol):
         return_inner_products: bool = False,
         waveform_kwargs: dict,
     ):
-        """Compute the per-source log-likelihood against the per-band data
-        in ``buffer_aca``.
+        """Compute the per-source log-likelihood against the per-band data in ``buffer_aca``.
 
         Returns a length-``len(params_phys)`` array of
         ``-0.5 * (d_d + h_h - 2 d_h)`` on the engine's xp module (``d_d``
@@ -302,6 +370,18 @@ class BandLikelihoodEngine(Protocol):
         ``d_h_out`` / ``h_h_out``, and ``phase_angle`` holds the per-source
         maximising rotation when ``phase_maximize=True`` (``None``
         otherwise).
+
+        Args:
+            buffer_aca: The band buffer.
+            params_phys (xp.ndarray): ``(num, 9)`` physical parameters.
+            data_index (xp.ndarray): ``(num,)`` buffer slot (residual) of each source.
+            noise_index (xp.ndarray): ``(num,)`` inverse-covariance row of each source.
+            N_vals (xp.ndarray or None): Per-source FD waveform lengths (FD engine) or
+                ignored (WDM).
+            phase_maximize: Maximize analytically over ``phi0``. Default ``False``.
+            return_inner_products: Return ``(ll, d_h, h_h, phase_angle)``. Default
+                ``False``.
+            waveform_kwargs: Not consumed by the current engines.
         """
         ...
 
@@ -317,8 +397,26 @@ class BandLikelihoodEngine(Protocol):
         phase_maximize: bool,
         waveform_kwargs: dict,
     ) -> SwapLLResult:
-        """Compute the five swap inner products and the resulting
-        ``ll_diff`` for each row of the two parameter arrays.
+        """Compute the five swap inner products and the resulting ``ll_diff`` per row.
+
+        Row ``i`` replaces source ``params_remove_phys[i]`` by ``params_add_phys[i]`` in
+        slot ``data_index[i]``.
+
+        Args:
+            buffer_aca: The band buffer.
+            params_remove_phys (xp.ndarray): ``(num, 9)`` physical parameters of the
+                removed sources.
+            params_add_phys (xp.ndarray): ``(num, 9)`` physical parameters of the added
+                sources.
+            data_index (xp.ndarray): ``(num,)`` buffer slots.
+            noise_index (xp.ndarray): ``(num,)`` inverse-covariance rows.
+            N_vals (xp.ndarray or None): Per-source FD waveform lengths (FD engine) or
+                ignored (WDM).
+            phase_maximize: Maximize over the added source's ``phi0``.
+            waveform_kwargs: Not consumed by the current engines.
+
+        Returns:
+            SwapLLResult: Per-row outputs.
         """
         ...
 
@@ -336,8 +434,10 @@ class BandLikelihoodEngine(Protocol):
     ):
         """Per-source gradient of ``L = <d|h> - 0.5<h|h>``.
 
-        Returns ``(num_proposals, nparams)``. Only the chunked-het
-        backend implements this; the FD legacy path raises. The
+        Returns ``(num_proposals, nparams)``. The FD engine computes it through
+        ``GBFDComputations.get_ll_grad_fd``; the WDM engine forwards to the comp's
+        ``get_ll_grad_wdm``, whose C++ chunked-het kernel is not bound in GBGPU (only a
+        JAX backend would answer). The
         compute backend (C++ central-FD vs JAX autograd) is fixed at
         engine construction; per the sprint-wide rule there is no
         runtime ``backend=`` kwarg.
@@ -361,16 +461,15 @@ class BandLikelihoodEngine(Protocol):
 
         Returns ``(num_proposals, nparams, nparams)``. When
         ``psd_fix=True`` returns ``M = |-H|`` ready to feed to a NUTS
-        sampler as a mass matrix. Only the chunked-het backend
-        implements this; the FD legacy path raises. The compute
-        backend (currently JAX autograd only) is fixed at engine
-        construction.
+        sampler as a mass matrix. No current engine answers: the FD engine raises
+        ``NotImplementedError``, and the WDM engine needs a comp with ``hessian_wdm``,
+        which neither the chunked comps nor the sig-het wrapper's delegate define.
         """
         ...
 
 
 # ---------------------------------------------------------------------------
-# Frequency-domain engine (wraps gbgpu.GBGPU)
+# Frequency-domain engine (wraps gbgpu.gbcomps.GBFDComputations)
 # ---------------------------------------------------------------------------
 
 
@@ -394,6 +493,32 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
 
     Per-source waveform lengths (``N_vals``) are handled by grouping calls
     over unique N (the kernels take one ``N_sparse`` per launch).
+
+    Not used by the 9mo / 12mo runs (WDM basis); built by
+    :func:`make_band_likelihood_engine` for an :class:`~lisatools.domains.FDSettings`
+    basis.
+
+    Args:
+        gb_fd_comp (GBFDComputations): The config-only FD comp.
+        basis_settings: The FD basis settings.
+        nchannels: Number of TDI channels.
+        tdi_channel_setup: TDI channel set name.
+        df: Frequency resolution [Hz] of the buffer (bounds check ``f0 / df``).
+        start_freq_inds (xp.ndarray, optional): Fallback per-slot window start bins, used only when
+            the holder exposes no ``min_freq_inds``. Default ``None``.
+        data_length: Stored only; the live bin count is read off the buffer. Default
+            ``None``.
+        opt_snr_rej_samp_limit: Stored on the engine (the LAT buffer applies its own
+            copy of the optimal-SNR clamp). Default ``5.0``.
+        snr_rej_detected: Stored on the engine likewise. Default ``False``.
+
+    Attributes:
+        d_h_out, h_h_out, d_h_im_out, kept_out: Per-source outputs of the last
+            :meth:`get_ll` (``kept_out``: the window-inside-buffer mask).
+        phase_angle: Maximizing phi0 shift of the last phase-maximized call, else
+            ``None``.
+        swap_d_h_add_im, swap_add_remove_im: Fused swap quadratures of the last
+            :meth:`get_swap_ll`.
     """
 
     def __init__(
@@ -426,6 +551,7 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
 
     @property
     def xp(self):
+        """module: The FD comp's array module (``numpy`` or ``cupy``)."""
         return self.gb_fd_comp.xp
 
     # ---------- per-holder window geometry ---------------------------------
@@ -466,6 +592,10 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         return buffer_aca.data_shaped[0].shape[-1]
 
     def _unique_N_groups(self, N_vals, num: int):
+        """Split rows by waveform length: ``[(rows, N), ...]`` (one launch per unique N).
+
+        ``N_vals=None`` gives one group with the comp's ``N_sparse``.
+        """
         xp = self.xp
         if N_vals is None:
             return [(xp.arange(num), self.gb_fd_comp.N_sparse)]
@@ -488,6 +618,13 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         factor: int,
         waveform_kwargs: dict,
     ) -> None:
+        """Add / remove templates with ``GBFDComputations.fill_global``, one call per unique N.
+
+        See :meth:`BandLikelihoodEngine.fill_template`. ``waveform_kwargs`` is ignored.
+
+        Raises:
+            AssertionError: ``factor`` is not ``+1`` / ``-1``.
+        """
         assert factor in (-1, +1)
         comp = self.gb_fd_comp
         xp = self.xp
@@ -516,6 +653,13 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         return_inner_products: bool = False,
         waveform_kwargs: dict,
     ):
+        """Per-source ln L through ``GBFDComputations.get_ll_fd`` (see the protocol).
+
+        Sources whose ``+-N/2`` window around ``int(f0 / df) - min_freq_inds[slot]`` is not
+        fully inside the slot's buffer are rejected: ``ll = -1e300``, zero products,
+        ``kept_out`` False. See :meth:`BandLikelihoodEngine.get_ll` for the arguments and
+        the return value.
+        """
         if phase_maximize:
             # Two-quadrature analytic maximisation (Python-level; the gb_fd
             # kernels return real d_h). See TwoQuadraturePhaseMaxMixin.
@@ -579,6 +723,7 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
             buffer_aca, params_phys, data_index, N_vals=N_vals)
 
     def clear_in_model(self) -> None:
+        """In-model clear hook, forwarded to the FD comp (a no-op there)."""
         return self.gb_fd_comp.clear_in_model()
 
     # ---------- get_swap_ll --------------------------------------------------
@@ -595,6 +740,11 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         phase_maximize: bool,
         waveform_kwargs: dict,
     ) -> SwapLLResult:
+        """Swap products through ``GBFDComputations.get_swap_ll_fd`` (see the protocol).
+
+        A row is kept only when both the added and the removed source's ``+-N/2`` window
+        fits inside the slot's buffer. See :meth:`BandLikelihoodEngine.get_swap_ll`.
+        """
         if phase_maximize:
             return self._get_swap_ll_phase_max(
                 buffer_aca, params_remove_phys, params_add_phys,
@@ -689,6 +839,11 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         )
 
     def hessian(self, *_args, **_kwargs):
+        """Not implemented on the FD engine.
+
+        Raises:
+            NotImplementedError: Always; use ``GBFDComputations.information_matrix``.
+        """
         raise NotImplementedError(
             "FDBandLikelihoodEngine.hessian is not implemented yet; use "
             "GBFDComputations.information_matrix for proposal shaping."
@@ -701,16 +856,45 @@ class FDBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
 
 
 class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
-    """WDM engine wrapping a
-    :class:`gbgpu.gbcomps.GBWDMComputations` instance.
+    """WDM engine wrapping a WDM GB computation object.
+
+    ``gb_comps`` is a :class:`gbgpu.gbcomps.GBWDMComputations` or, on the 9mo / 12mo
+    runs, the sig-het wrapper
+    :class:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations` around one (its
+    ``get_ll_wdm`` scores in-model repeats through sig-het and everything else through
+    the chunked comp). A :class:`gbgpu.gblookupcomputations.GBLookupWDMComputations`
+    (``GB_LIKELIHOOD=lookup``) also fits.
 
     Three calls all route through the same ``gb_comps`` object: fill, get_ll,
     and get_swap_ll. The per-band ACA is forwarded directly -- the GB WDM
-    Python API already speaks AnalysisContainerArray.
+    Python API already speaks AnalysisContainerArray. The in-model hooks
+    :meth:`setup_in_model` / :meth:`clear_in_model` forward to it too.
 
-    The bounds-keep mask is WDM-flavoured: each source's
+    The bounds-keep mask of :meth:`get_swap_ll` is WDM-flavoured: each source's
     ``layer_m = int(f0 / layer_df)`` must land within the WDM
-    ``[ind_min_f, ind_max_f]`` active band.
+    ``[ind_min_f, ind_max_f]`` active band. :meth:`get_ll` keeps every row (the kernels
+    skip out-of-band layers themselves).
+
+    Args:
+        gb_comps (GBWDMComputations or GBSignalHetComputations): The WDM computation
+            object (see above).
+        basis_settings: The run's WDM settings (``layer_df``, ``ind_min_f``, ``ind_max_f``
+            are read by :meth:`get_swap_ll`).
+        nchannels: Number of TDI channels.
+        tdi_channel_setup: TDI channel set name.
+        opt_snr_rej_samp_limit: Stored on the engine (the LAT buffer applies its own
+            copy of the optimal-SNR clamp). Default ``5.0``.
+        snr_rej_detected: Stored on the engine likewise. Default ``False``.
+
+    Attributes:
+        d_h_out, h_h_out: Copies of the comp's products after the last :meth:`get_ll`.
+        d_h_im_out: Copy of the comp's fused quadrature, or ``None`` when the comp has
+            none (the mixin then makes a second call).
+        kept_out: All-True mask after :meth:`get_ll`.
+        phase_angle: Maximizing phi0 shift of the last phase-maximized call, else
+            ``None``.
+        swap_d_h_add_im, swap_add_remove_im: Fused swap quadratures of the last
+            :meth:`get_swap_ll` (``None`` when the comp has none).
     """
 
     def __init__(
@@ -735,6 +919,7 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
 
     @property
     def xp(self):
+        """module: The comp's array module (``numpy`` or ``cupy``)."""
         return self.gb_comps.xp
 
     # ---------- fill_template ------------------------------------------------
@@ -751,6 +936,21 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         band_slab_Nf=None,
         slab_min_f=None,
     ) -> None:
+        """Add / remove templates in one ``gb_comps.fill_global_wdm`` call.
+
+        See :meth:`BandLikelihoodEngine.fill_template`; ``N_vals`` and
+        ``waveform_kwargs`` are ignored. Always the chunked-het template (the sig-het
+        wrapper forwards fills to its delegate).
+
+        Args:
+            band_slab_Nf (int, optional): Narrow-slab width of the buffer (LAT task-b
+                slabs); ``None`` = full active band. Default ``None``.
+            slab_min_f (xp.ndarray, optional): Per-slot absolute first layer of the slab.
+                Default ``None``.
+
+        Raises:
+            AssertionError: ``factor`` is not ``+1`` / ``-1``.
+        """
         assert factor in (-1, +1)
         # GBWDMComputations.fill_global_wdm needs the params in the layout it
         # expects (num_bin, 9). data_index controls which per-band buffer each
@@ -789,6 +989,14 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         return_inner_products: bool = False,
         waveform_kwargs: dict,
     ):
+        """Per-source ln L through ``gb_comps.get_ll_wdm`` (see the protocol).
+
+        The production GB likelihood call of the WDM global fit: with the sig-het wrapper
+        as ``gb_comps`` this is the sig-het score during an in-model block and the
+        chunked-het score otherwise. ``N_vals`` and ``waveform_kwargs`` are ignored;
+        ``kept_out`` is all-True. See :meth:`BandLikelihoodEngine.get_ll` for the
+        arguments and the return value.
+        """
         if phase_maximize:
             # Two-quadrature analytic maximisation (Python-level; the WDM
             # chunked-het kernel returns real d_h). See
@@ -829,12 +1037,19 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
 
         Chunked-het comps inherit the no-op from WDMComputationsBase;
         sig-het comps (GBSignalHetComputations.for_band_engine) build the
-        heterodyne reference against the source-free cell residuals here
-        and hold it constant until :meth:`clear_in_model`."""
+        heterodyne reference against the slots' residual slabs here (the picked
+        sources' templates are out of the model, so each slab contains its source's
+        signal) and hold it constant until :meth:`clear_in_model`.
+
+        Returns:
+            bool or None: The comp's return value: ``True`` from the sig-het wrapper,
+            ``None`` from the no-op hooks.
+        """
         return self.gb_comps.setup_in_model(
             buffer_aca, params_phys, data_index, N_vals=N_vals)
 
     def clear_in_model(self) -> None:
+        """Forward to the comp's ``clear_in_model`` (releases the sig-het stash)."""
         return self.gb_comps.clear_in_model()
 
     # ---------- get_swap_ll --------------------------------------------------
@@ -851,6 +1066,15 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         phase_maximize: bool,
         waveform_kwargs: dict,
     ) -> SwapLLResult:
+        """Swap products through ``gb_comps.get_swap_ll_wdm`` (see the protocol).
+
+        Rows whose added or removed source has its carrier layer outside the active band
+        are not scored (``ll_diff = -1e300``, ``kept`` False). With the sig-het wrapper
+        the swap is always the exact chunked-het score. Callers on the global fit: only
+        the ``GB_ORTHO_CHECK`` diagnostic (through LAT's routed engine), ``0`` on the
+        9mo / 12mo launchers. See :meth:`BandLikelihoodEngine.get_swap_ll`; ``N_vals`` and
+        ``waveform_kwargs`` are ignored.
+        """
         xp = self.gb_comps.xp
 
         if phase_maximize:
@@ -968,17 +1192,18 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
             kept=keep,
         )
 
-    # ---------- get_ll_grad / hessian (chunked-het backends only) ----------
+    # ---------- get_ll_grad / hessian ----------------------------------------
     #
-    # These two methods are present on ``gb_comps`` only when the
-    # underlying generator is :class:`GBWDMComputations` (the chunked-het
-    # backend). The legacy lookup-table ``GBWDMComputations`` does not
-    # expose ``hessian_wdm`` (its FD ``get_ll_grad_wdm`` is implemented
-    # but the in-the-kernel info-matrix path it served has been retired).
-    # We probe at call time so a global fit running on the legacy
-    # generator fails loudly rather than silently masking a config bug.
+    # Both are probed on ``gb_comps`` at call time so a missing method
+    # fails loudly rather than silently masking a config bug.
+    # ``get_ll_grad_wdm`` exists on every chunked-het comp
+    # (lisatools.chunked_het.WDMComputationsBase), but its C++ kernel is not
+    # bound in GBGPU, so only a JAX backend answers. ``hessian_wdm`` exists
+    # on no current comp: GBWDMComputations fails the probe, and the sig-het
+    # wrapper passes it but its delegate has none (AttributeError).
 
     def _require_chunked_het(self, method_name: str):
+        """Raise ``NotImplementedError`` unless ``gb_comps`` has ``method_name``."""
         if not hasattr(self.gb_comps, method_name):
             raise NotImplementedError(
                 f"WDMBandLikelihoodEngine.{method_name.replace('_wdm','')}: "
@@ -1006,7 +1231,12 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
         The compute backend (C++ central-FD vs JAX autograd) is fixed
         at the ``GBWDMComputations``'s construction-time
         ``force_backend``; per the sprint-wide rule no ``backend=``
-        runtime kwarg is taken.
+        runtime kwarg is taken. The GBGPU C++ backends do not bind the chunked-het
+        gradient kernel, so on CPU / CUDA the comp raises. No production caller.
+        ``N_vals``, ``param_eps``, ``chunk`` and ``waveform_kwargs`` are ignored.
+
+        Raises:
+            NotImplementedError: ``gb_comps`` has no ``get_ll_grad_wdm``.
         """
         self._require_chunked_het("get_ll_grad_wdm")
         # Post-Phase-3L.7p, ``get_ll_grad_wdm`` no longer accepts
@@ -1020,6 +1250,7 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
             data_index=data_index, noise_index=noise_index,
         )
 
+    # TODO check: keep/remove/document -- no comp has hessian_wdm (always raises); no LAT caller
     def hessian(
         self,
         buffer_aca: AnalysisContainerArray,
@@ -1037,11 +1268,10 @@ class WDMBandLikelihoodEngine(TwoQuadraturePhaseMaxMixin):
 
         Returns ``(num_proposals, nparams, nparams)``. When
         ``psd_fix=True`` returns ``M = |−H|`` (eigendecompose +
-        ``|lambda|``), ready to feed to ``NUTSSampler(metric=M)``. The
-        compute backend (JAX autograd only at present) is fixed at
-        ``GBWDMComputations`` construction; calling this on a non-JAX
-        chunked-het instance raises ``NotImplementedError`` inside
-        ``hessian_wdm``.
+        ``|lambda|``), ready to feed to ``NUTSSampler(metric=M)``. No current comp
+        implements ``hessian_wdm``: a :class:`gbgpu.gbcomps.GBWDMComputations` fails the
+        probe (``NotImplementedError``) and the sig-het wrapper's forward hits a delegate
+        without the method (``AttributeError``).
         """
         self._require_chunked_het("hessian_wdm")
         del N_vals, waveform_kwargs
@@ -1074,6 +1304,47 @@ def make_band_likelihood_engine(
     ``None``. ``gb`` (the legacy GBGPU handle) is accepted for backward
     compatibility but no longer consumed -- the FD engine runs on the new
     ``gb_fd_*`` kernels, not the SharedMemory family.
+
+    Called by LAT ``lisatools.globalfit.moves.gbbands.make_routed_band_engine`` for the
+    prototype engine and again, inside each device's context, for per-device replicas.
+    On the 9mo / 12mo runs ``basis_settings`` is the run's
+    :class:`~lisatools.domains.WDMSettings` and ``gb_wdm_comp`` the sig-het wrapper.
+
+    Args:
+        basis_settings: :class:`~lisatools.domains.FDSettings` or
+            :class:`~lisatools.domains.WDMSettings` of the band buffers.
+        gb (object, optional): Ignored (legacy). Default ``None``.
+        gb_fd_comp (GBFDComputations, optional): Required for an FD basis. Default
+            ``None``.
+        gb_wdm_comp (object, optional): A WDM computation object (``GBWDMComputations``,
+            the sig-het wrapper, or ``GBLookupWDMComputations``); required for a WDM basis.
+            Default ``None``.
+        nchannels: Number of TDI channels.
+        tdi_channel_setup: TDI channel set name (stored on the engine).
+        df: FD resolution [Hz]; required for an FD basis. Default ``None``.
+        start_freq_inds (xp.ndarray, optional): FD fallback window starts. Default ``None``.
+        data_length: FD only, stored. Default ``None``.
+        opt_snr_rej_samp_limit: Stored on the engine. Default ``5.0``.
+        snr_rej_detected: Stored on the engine. Default ``False``.
+
+    Returns:
+        BandLikelihoodEngine: A :class:`FDBandLikelihoodEngine` or a
+        :class:`WDMBandLikelihoodEngine`.
+
+    Raises:
+        ValueError: The comp needed by the basis is missing, or ``df`` is missing on FD.
+        NotImplementedError: Any other basis-settings type.
+
+    Example:
+        .. code-block:: python
+
+            from gbgpu.gb_likelihood import make_band_likelihood_engine
+
+            # wdm_settings: the run's WDMSettings; sighet: GBSignalHetComputations
+            engine = make_band_likelihood_engine(
+                wdm_settings, gb_wdm_comp=sighet, nchannels=3, tdi_channel_setup="XYZ")
+            ll = engine.get_ll(buffer, params_phys, data_index=slots, noise_index=walkers,
+                               N_vals=None, waveform_kwargs={})
     """
     if isinstance(basis_settings, FDSettings):
         if gb_fd_comp is None:

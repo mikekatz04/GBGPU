@@ -7,33 +7,42 @@ the centered-slice convention -- see
 ``<d|h>`` and ``<h|h>`` via the same polyphase fold + bin-fold formula as
 the C++ kernel.
 
-This sits between two future pieces:
-  * ``gb_signal_het_fd_jax`` (TBD) -- JAX FD generation equivalent of
-    ``gb_run_fd_wave_tdi``, would feed X_het into this consumer.
-  * ``gb_signal_het_get_ll_jax`` (TBD) -- end-to-end (params -> logL)
-    wrapper, supports ``jax.grad`` through the whole pipeline.
+Entry points:
 
-The forward path validates bit-for-bit against C++
-``gb_signal_het_get_ll_sparse_wrap``; ``jax.grad`` through this consumer
+* :func:`gb_signal_het_get_ll_sparse_jax` -- the consumer (``X_het`` -> ``<d|h>``,
+  ``<h|h>``).
+* :func:`gb_signal_het_fd_centered_jax` -- JAX FD generation equivalent of
+  ``gb_run_fd_wave_tdi`` (params -> centred ``X_het``).
+* :func:`gb_signal_het_get_ll_in_kernel_jax` -- the end-to-end (params -> ``<d|h>``,
+  ``<h|h>``) composition of the two, differentiable with ``jax.grad`` through the
+  whole pipeline (mirror of the C++ ``gb_signal_het_get_ll_in_kernel``).
+
+The forward path was written to validate bit-for-bit against the C++
+sparse scorer (bound today as ``GBComputationGroupWrap.gb_signal_het_get_ll_sparse``);
+``jax.grad`` through this consumer
 validates against C++ central-difference grad (the C++ grad pulls
 through the FD generation too, so for now we can only compare the
 "polyphase + bin-fold" piece -- a partial-chain-rule comparison).
 
-The ``max_r`` clip mirrors the C++ ``max_r`` parameter: it caps |r| per
+This is the v2 scorer only: it takes the conjugate bin-fold moments (``A0``, ``A1``,
+``B0``, ``B1``) and no non-conjugate ones (``B0nc`` / ``B1nc``), and returns
+``0.5 * Re`` of the folded sums. The production GB likelihood is the C++ v5 scorer of
+:class:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations`; nothing on the global
+fit imports this module (callers: LAT ``scripts/gb_chunked_het``; GBGPU
+``examples/fast_likelihood_tutorial.ipynb`` names the sparse scorer).
+
+The ``max_r`` clip mirrors the C++ ``max_r`` parameter: it caps ``|r|`` per
 channel-cell to prevent the positive-logL blowup at angle excursions
 where the channel covariance matrix is rank-degenerate. See
 ``[signal-het-amp-phase-redesign]`` memory.
 
-References
-----------
-- C++:  ``lisa-on-gpu/src/fastlisaresponse/cutils/TDIonTheFly.cu``
-        ``GBComputationGroup::gb_signal_het_get_ll_sparse_wrap`` and
-        ``gb_signal_het_get_ll_wrap``.
-- Python mirror: ``LISAanalysistools/scripts/gb_chunked_het/
-                  gb_signal_het_v2_sparse_mirror.py``.
-- Stage 2b in-kernel conversion (fftshift + 1/dt): memory
+References:
+
+* C++: GBGPU ``cutils/gb_tdi_on_the_fly.cu`` (``GBComputationGroup`` sig-het family;
+  formerly ``lisa-on-gpu/src/fastlisaresponse/cutils/TDIonTheFly.cu``).
+* Python mirror: ``LISAanalysistools/scripts/gb_chunked_het/gb_signal_het_v2_sparse_mirror.py``.
+* Stage 2b in-kernel conversion (fftshift + 1/dt): development note
   ``project_stage2b_in_kernel_conversion.md``.
-- V2 plan: ``~/.claude/plans/yes-find-and-read-sprightly-garden.md``.
 """
 
 from __future__ import annotations
@@ -57,12 +66,14 @@ from .fast_inner_heterodyne import _tukey_window, _resolve_alpha
 def _safe_divide_with_clip(c1: jnp.ndarray, c0: jnp.ndarray,
                             floor_eps: float, max_r: float
                             ) -> jnp.ndarray:
-    """Compute r = c1 / c0 with the C++ safe-divide floor AND |r| clip.
+    """Compute r = c1 / c0 with the C++ safe-divide floor AND ``|r|`` clip.
 
     Matches the C++ behaviour:
-      * floor_th = max(floor_eps * max|c0| per (c, m_active), 1e-300)
-      * cells with |c0| <= floor_th -> r = 0
-      * cells with |c0| > floor_th  -> r = c1 / c0, then clip |r| <= max_r
+
+    * ``floor_th = max(floor_eps * max|c0| per (c, m_active), 1e-300)``
+    * cells with ``|c0| <= floor_th`` -> ``r = 0``
+    * cells with ``|c0| > floor_th`` -> ``r = c1 / c0``, then clip ``|r| <= max_r``
+
     All operations are JAX-friendly (no booleans, only jnp.where).
     """
     abs_c0 = jnp.abs(c0)
@@ -198,8 +209,55 @@ def gb_signal_het_get_ll_sparse_jax(
     layers which has dynamic indexing (m_active depends on params_cand
     through f0). We unroll the M=5 layers via a Python loop (M is static).
 
-    max_r > 0 caps |r| per channel-cell; max_r <= 0 disables the clip
+    max_r > 0 caps ``|r|`` per channel-cell; max_r <= 0 disables the clip
     (matches C++ semantics).
+
+    Per binary: the candidate's active layers are the ``2 * m_active_half_width + 1``
+    layers around ``floor(f0 / layer_df)`` (clipped to the active band); its sparse WDM
+    coefficients come from the polyphase fold of ``X_het``; ``r = c1 / c0`` against the
+    reference row ``data_index_all[i]`` (floored where ``|c0|`` is tiny); ``dr`` is a
+    finite difference over the sparse grid; and ``<d|h> = 0.5 Re sum(A0 r + A1 dr)``,
+    ``<h|h> = 0.5 Re sum(B0 |r|^2 + B1 (r* dr + dr* r))`` (channel-pair outer products for
+    XYZ).
+
+    Args:
+        X_het_all: ``(num_bin, nch, N_sparse_fd)`` complex centred heterodyne FD
+            (:func:`gb_signal_het_fd_centered_jax`).
+        k_f0_all: ``(num_bin,)`` int dense-rfft carrier bins.
+        c0_sparse_all: ``(num_data, nch, Nf_active, N_sparse_t)`` complex reference
+            coefficients.
+        A0_all: Bin-fold data moments, same shape as ``c0_sparse_all``.
+        A1_all: Same.
+        B0_all: ``(num_data, nch, nch, Nf_active, N_sparse_t)`` for XYZ
+            (``(num_data, nch, Nf_active, N_sparse_t)`` otherwise).
+        B1_all: Same as ``B0_all``.
+        wdm_window: ``(Nt,)`` WDM window.
+        n_sparse_local_arr: ``(N_sparse_t,)`` sparse time pixels (active-local).
+        params_cand_all: ``(num_bin, nparams)`` candidate parameters (``f0`` read at
+            ``f0_idx``).
+        data_index_all: ``(num_bin,)`` reference row of each candidate.
+        nparams: Unused.
+        f0_idx: Column of ``f0``.
+        Nf: WDM frequency layers.
+        Nt: WDM time pixels.
+        Nf_active: Active frequency layers.
+        Nt_layer: Polyphase fold length (``nt_layer``).
+        N_sparse_t: Sparse time points.
+        stride: ``Nt // Nt_layer``.
+        ind_min_t: First active time pixel.
+        ind_min_f: First active frequency layer.
+        m_active_half_width: Active layers each side of the carrier layer.
+        layer_df: WDM layer bandwidth [Hz].
+        dt: Sampling cadence [s].
+        nchannels: Unused (taken from ``X_het_all``).
+        tdi_type: ``0`` = XYZ full cross-channel (the sig-het C++ convention, unlike the
+            chunked-het ``TDI_XYZ = 1``); anything else = diagonal.
+        N_sparse_fd: FD samples per binary.
+        max_r: ``|r|`` clip; ``<= 0`` disables it. Default ``0.0``.
+        floor_eps: Relative ``|c0|`` floor per (channel, layer) row. Default ``1e-12``.
+
+    Returns:
+        tuple[jnp.ndarray, jnp.ndarray]: ``(d_h, h_h)``, each ``(num_bin,)`` real.
     """
     M = 2 * m_active_half_width + 1
 
@@ -321,18 +379,34 @@ def gb_signal_het_fd_centered_jax(
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """JAX FD generation for one binary, centered-slice convention.
 
-    Returns:
-        X_het: complex (nchannels, N_sparse_fd) -- centered slice ready
-               for the polyphase consumer. Bin i corresponds to absolute
-               dense-rfft bin k_f0 + (i - N_sparse_fd/2).
-        k_f0:  scalar int32 -- absolute dense-rfft bin index of the
-               snapped carrier f0_grid = round(f0/df_abs) * df_abs.
-
     Time origin: ``t_start``, matching the C++ kernel. Both this output
     and the dense rfft of (Tukey * td) sliced around k_f0 use the same
     time origin, so no extra linear-phase factor is needed (the (1/dt)
     scale absorbs the sparse-to-dense Riemann conversion -- see memory
     project_stage2b_in_kernel_conversion.md).
+
+    Args:
+        params: ``(9,)`` physical parameters of one binary.
+        t_start: Observation start [s].
+        T_obs: Observation duration [s] (``df_abs = 1 / T_obs``).
+        source: The amp / phase source.
+        orbits: JAX orbits.
+        tdi_config: JAX TDI configuration.
+        k_sky: Sky unit vector ``(3,)``.
+        u_sky: Polarization basis vector ``(3,)``.
+        v_sky: Polarization basis vector ``(3,)``.
+        N_sparse_fd: Sparse samples over the observation (= FD bins returned).
+        nchannels: Unused (the channel count comes from ``tdi_config``).
+        dt: Dense sampling cadence [s] (the ``1 / dt`` scale).
+        tukey_alpha: Whole-observation Tukey alpha; ``ALPHA_AUTO`` (-1) picks by
+            ``N_sparse_fd``.
+
+    Returns:
+        tuple[jnp.ndarray, jnp.ndarray]: ``(X_het, k_f0)``. ``X_het``: complex
+        ``(nchannels, N_sparse_fd)`` centred slice ready for the polyphase consumer; bin
+        ``i`` corresponds to absolute dense-rfft bin ``k_f0 + (i - N_sparse_fd/2)``.
+        ``k_f0``: scalar int32, the absolute dense-rfft bin index of the snapped carrier
+        ``f0_grid = round(f0/df_abs) * df_abs``.
     """
     f0 = params[1]
     dt_sparse = T_obs / N_sparse_fd
@@ -401,11 +475,23 @@ def gb_signal_het_get_ll_in_kernel_jax(
     binary in a vmap-friendly form. With ``jax.grad`` this gives the
     analytic gradient of logL = d_h - 0.5 h_h w.r.t. params, in ~1-2x
     the cost of one forward call (vs 17x for central-difference).
+    Caller computes logL = -0.5 d_d + d_h - 0.5 h_h.
+
+    It runs :func:`gb_signal_het_fd_centered_jax` per binary and feeds the result to
+    :func:`gb_signal_het_get_ll_sparse_jax`; the shared arguments have the meaning they
+    have there. ``params_ref_all`` and ``Nt_active`` are accepted and not used.
+
+    Args:
+        params_batch: ``(num_bin, 9)`` candidate parameters.
+        source: The amp / phase source.
+        orbits: JAX orbits.
+        tdi_config: JAX TDI configuration.
+        T_obs: Observation duration [s].
+        t_start: Observation start [s].
+        tukey_alpha: Whole-observation Tukey alpha of the FD generation.
 
     Returns:
-        d_h: (num_bin,) float
-        h_h: (num_bin,) float
-    Caller computes logL = -0.5 d_d + d_h - 0.5 h_h.
+        tuple[jnp.ndarray, jnp.ndarray]: ``(d_h, h_h)``, each ``(num_bin,)`` float.
     """
     # Per-binary FD generation.
     k_sky_b, u_sky_b, v_sky_b = jax.vmap(

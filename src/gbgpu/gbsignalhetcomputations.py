@@ -1,28 +1,89 @@
-"""GBSignalHetComputations -- installed GB signal-heterodyne WDM likelihood.
+"""GB signal-heterodyne (sig-het) WDM likelihood: :class:`GBSignalHetComputations`.
 
-The GB signal-het frontend, living in GBGPU (the GB-physics owner) alongside the
-chunked-het ``GBWDMComputations``. Exposes the GBGPU backend
-(``FastLISAResponseParallelModule`` -> ``self.backend`` /
-``self.backend.GBComputationGroupWrap()``) and sets up ALL the reference
-coefficients in ``__init__``, taken from installed infrastructure only:
+This is the production in-model GB likelihood of the global fit. On the WDM path every GB
+and VGB in-model repeat proposal is scored here. Everything else (RJ births and removals,
+template fills, swaps, scores outside an in-model block) goes to the exact
+chunked-heterodyne delegate this object wraps, a :class:`gbgpu.gbcomps.GBWDMComputations`
+(a :class:`lisatools.chunked_het.WDMComputationsBase` subclass).
 
-* WDM data + inverse-sensitivity: ``lisatools`` (``TDSignal.transform`` +
-  ``XYZ2SensitivityMatrix``).
-* WDM analysis window: ``lisatools.domains.WDMSettings.window`` (NO re-implemented
-  ``phitilde``).
-* sparse-time grid + bin-fold coefficients: ``lisatools.signal_het``.
-* reference carrier ``c0`` (sparse + dense complex WDM): the GBGPU backend producer
-  ``gb_signal_het_make_reference`` (the chunked-het FD-gen + polyphase on the
-  reference params) -- NOT a Python polyphase.
+Two construction modes:
 
-``get_ll(params, data_index)`` calls the backend ``gb_signal_het_get_ll_in_kernel``.
+* :meth:`GBSignalHetComputations.for_band_engine` (production): a data-less wrapper around
+  the chunked delegate, on the delegate's WDM grid, orbits, TDI configuration, ``t_ref``
+  and backend (CPU or CUDA). LAT builds it in
+  :func:`lisatools.globalfit.stock.erebor.gb.build_sighet_engine` for the GB and VGB
+  branches, and the band engine :class:`gbgpu.gb_likelihood.WDMBandLikelihoodEngine`
+  drives it. The per-source heterodyne references are built against the buffer's
+  residual slabs by :meth:`~GBSignalHetComputations.setup_in_model` (block start and
+  mid-block refresh) and released by :meth:`~GBSignalHetComputations.clear_in_model`.
+* ``GBSignalHetComputations(data_td, ref_params, ...)``: a CPU-only offline / validation
+  object. It transforms time-domain data itself (``lisatools`` ``TDSignal.transform`` and
+  ``XYZ2SensitivityMatrix``), builds ONE reference with the backend producer
+  ``gb_signal_het_make_reference`` and folds it with :func:`lisatools.signal_het.bin_fold_real`.
+  It scores through the v2 in-kernel scorer only.
 
-Backends: the in-model band-engine path (``for_band_engine`` ->
-``setup_in_model`` / ``get_ll``) runs on CPU and CUDA -- the fused
-``gb_signal_het_get_ll_in_kernel`` kernel evaluates each candidate entirely in
-per-block shared memory, and ``gb_signal_het_make_reference`` builds the
-per-source reference coefficients on-device. The full data-loading constructor
-below stays CPU-only (offline/validation use).
+Scorer selection in :meth:`~GBSignalHetComputations.get_ll` (each knob tested for
+non-zero): v5 (``v4_knots`` and ``v5``), else v4 (``v4_knots``), else v3 (``v3_n_nodes``;
+a negative value takes its node count from ``_NR_TIERS``), else the v2 in-kernel scorer.
+Production runs v5 mode 1 with the carrier-only reference
+(``cp_repr="carrier"``), the channel-pair-symmetric ``sym`` carrier fold with the packet
+first moment (c1), the compact per-reference stash and the per-reference anchor offset.
+
+With a GB WDM lookup table attached (``for_band_engine(lookup_table=...)``), an internal
+:class:`gbgpu.gblookupcomputations.GBLookupComputations` builds the carrier reference
+(``SIGHET_REF_BUILD``), scores the anchor (``SIGHET_ANCHOR_ENGINE``) and computes the
+information matrix (``SIGHET_INFOMAT_ENGINE``). The sig-het F-stat
+(:meth:`~GBSignalHetComputations.setup_fstat_references` /
+:meth:`~GBSignalHetComputations.get_fstat_ll_wdm`) scores F-statistic candidates against
+shared references (LAT ``FSTAT_USE_SIGHET``, default on).
+
+Parameters are the 9-column physical GB layout ``(amp, f0 [Hz], fdot [Hz/s],
+fddot [Hz/s^2], phi0, iota, psi, lam, beta)``; the sky angles are read in the frame of the
+delegate's orbits (ICRS right ascension / declination on the global fit, whose orbits are
+built with ``frame="icrs"``). The response is the delegate's: its orbits (on the global
+fit the unequal-arm ``L1Orbits`` of ``general_info.gpu_orbits``), its TDI configuration
+and XYZ channels.
+
+Environment knobs read in this module (default; value on the 9mo / 12mo launchers
+``scripts/fstat_proposal/submit_gf_9mo_v9.sh`` and ``scripts/flagship/submit_gf_12mo.sh``):
+
+* ``SIGHET_REF_BUILD``: ``auto`` (default: the lookup table when one is attached), ``fd``
+  or ``lookup`` (requires the table). Launchers: ``lookup``.
+* ``SIGHET_ANCHOR_ENGINE``: ``chunked`` or ``lookup``; overrides the ``anchor_engine``
+  argument when set. Launchers: ``lookup``.
+* ``SIGHET_ANCHOR_CORRECT``: ``1`` (default: always), ``0`` (never) or ``auto``. Not set.
+* ``SIGHET_INFOMAT_ENGINE``: unset / ``default`` or ``lookup``. Launchers: ``lookup``.
+* ``SIGHET_INFOMAT``: the in-model second-difference route of
+  :meth:`~GBSignalHetComputations.information_matrix` (default off). Launchers: ``1``,
+  inert while ``SIGHET_INFOMAT_ENGINE=lookup``. Its options ``SIGHET_INFOMAT_EPS_SCALE``
+  (1.0), ``SIGHET_INFOMAT_ONESIDED`` (off) and ``SIGHET_INFOMAT_VALIDATE`` (off) are not set.
+* ``SIGHET_CP_REPR``: ``carrier`` (v5 engines) / ``reim`` (others) by default; ``ampph``
+  is the rollback. Not set.
+* ``SIGHET_CARRIER_LAYOUT``: ``sym`` (default), ``collapsed`` (equal-arm noise only) or
+  ``full``; ``SIGHET_CARRIER_COLLAPSE=0`` is the legacy spelling of ``full``. Not set.
+* ``SIGHET_CARRIER_C1``: ``1`` (default) folds the packet first moment. Not set.
+* ``SIGHET_FSTAT_CARRIER``: ``1`` (default) carrier reference and sym fold for the
+  F-stat. Not set.
+* ``GB_SIGHET_FSTAT_MODE``: ``0`` (default, 2 node stages) or ``1`` (4 stages). Not set.
+* ``GB_SIGHET_INMODEL_WINDOWED``: unset = compact stash on v5 engines, ``0`` forces the
+  full-band stash, any other value requires v5. Launchers: ``1``.
+* ``GB_SIGHET_FOLD_MAX_BYTES``: byte budget of the chunked reference build + fold, default
+  ``1 << 30`` (read at import). Launchers: ``1073741824``.
+* ``GB_SIGHET_WINDOW_MARGIN``: extra layers per side of the carrier window on full-band
+  buffers, default 1 (read at import). Not set.
+* ``GB_PHASE_MAX_FUSED``: ``1`` (default) uses the fused quadrature in
+  ``get_ll(phase_maximize=True)``; ``0`` is the two-call rollback. Launchers: ``1``.
+* ``SIGHET_N_CP_SPACING`` (0.35 d; only with an AUTO ``n_cp_build``, e.g. ``-1``),
+  ``SIGHET_NT_AUTO_SPACING_H`` (35 h; only with ``nt_layer=-1``) and
+  ``SIGHET_SETUP_PROFILE`` (off). Not set.
+
+The :meth:`~GBSignalHetComputations.for_band_engine` arguments come from the LAT
+``GBSettings`` / ``VGBSettings`` ``sighet_*`` fields, which read the shared ``SIGHET_*``
+names (:func:`lisatools.globalfit.stock.erebor.gb.sighet_engine_kwargs`). The launchers set
+``SIGHET_NT_LAYER`` 180 (9mo) / 240 (12mo), ``SIGHET_N_CP=256`` and
+``SIGHET_TUKEY_ALPHA=0.01``. The field defaults supply ``SIGHET_V3_NODES=64``,
+``SIGHET_V4_KNOTS=128``, ``SIGHET_V4_BAND=16``, ``SIGHET_V5=1``, ``SIGHET_N_SPARSE_FD=1024``
+and ``SIGHET_MAX_R=0``.
 """
 from __future__ import annotations
 
@@ -72,10 +133,11 @@ def _resolve_n_cp(n_cp_build, Tobs):
     """Control-point count for the spline waveform build.
 
     ``n_cp_build`` semantics: 0 -> direct per-point evaluation (legacy
-    path); > 1 -> explicit count; < 0 -> AUTO: one node per
-    ``SIGHET_N_CP_SPACING`` seconds of Tobs, clamped to [32, 256]. The
-    upper clamp bounds the shared-memory arena (~253 B/node); the lower
-    keeps the fit far inside the chunked engine's validated density.
+    path); > 1 -> explicit count; any other value (negative, or 1) -> AUTO:
+    ``ceil(Tobs / SIGHET_N_CP_SPACING) + 1`` nodes (spacing in seconds), clamped
+    to [32, 256]. The upper clamp bounds the shared-memory arena (~253 B/node);
+    the lower keeps the fit far inside the chunked engine's validated density.
+    The 9mo / 12mo runs pass an explicit 256 (``SIGHET_N_CP=256``).
 
     SPACING DEFAULT 0.35 days (2026-08-19; was 4 days). The 4-day law was
     set by a PHASE criterion (~1e-4 rad spline error of the annual
@@ -91,12 +153,19 @@ def _resolve_n_cp(n_cp_build, Tobs):
     non-null subspace). Measured on the production 3-month grid
     (gb_sighet_bfold_gpu_probe.py, 64 low-f edge-on-heavy sources):
     null-direction excess 3e5x at 32 nodes -> 148x at 256; scored anchor
-    hh max |log ratio| 0.31 -> 1.5e-4; setup cost +2.6%. At 3 months AUTO
+    hh max ``|log ratio|`` 0.31 -> 1.5e-4; setup cost +2.6%. At 3 months AUTO
     now resolves to the 256 ceiling. NOTE for Tobs >~ 6 months the ceiling
     caps the density below this criterion again (23-month: 2.7-day
     effective spacing) -- longer runs need the arena raised or the
     B moments built from the exact task-b fill (see
     project_signal_het_amp_phase_redesign).
+
+    Args:
+        n_cp_build (int): Requested count (see above).
+        Tobs (float): Observation time [s], used only by AUTO.
+
+    Returns:
+        int: The resolved node count (0 for the direct path).
     """
     if n_cp_build == 0:
         return 0
@@ -137,6 +206,18 @@ _SIGHET_CARRIER = 1048576     # == GB_SIGHET_CARRIER in gb_tdi_on_the_fly.cu
 
 
 def _resolve_cp_repr(cp_repr):
+    """Resolve the control-point representation (one of ``_CP_REPRS``).
+
+    Args:
+        cp_repr (str or None): ``"ampph"``, ``"reim"`` or ``"carrier"`` (case-insensitive);
+            ``None`` reads ``SIGHET_CP_REPR`` (default ``"carrier"``).
+
+    Returns:
+        str: The lower-cased representation.
+
+    Raises:
+        ValueError: For any other value.
+    """
     if cp_repr is None:
         cp_repr = os.environ.get("SIGHET_CP_REPR", "carrier")
     cp_repr = str(cp_repr).lower()
@@ -347,7 +428,7 @@ def _v5_nodes_arg(g, nodes):
 
 
 def _c0_row_mask_bits(c0, xp):
-    """Bit-packed |c0| row-floor mask -- the v5 scorer's only view of c0.
+    """Bit-packed ``|c0|`` row-floor mask -- the v5 scorer's only view of c0.
 
     ``c0`` is the reference stash, ``(n, nch, L, N_sparse_t)`` -- ``L`` is
     ``Nf_active`` on the full-band layout and the compact window width
@@ -470,7 +551,18 @@ def _resolve_nt_layer(nt_layer, Nf, Nt, Nt_active, dt, *, v3_n_nodes,
       then CLAMPED to the largest divisor whose fstat-scorer shared budget
       (production ``fstat_mode=0``) fits ``device_shared_limit`` (pass
       ``None`` on CPU -- no clamp). The knob DEFAULT stays 64; auto is
-      opt-in via ``SIGHET_NT_LAYER=-1``.
+      opt-in via ``SIGHET_NT_LAYER=-1``. The 9mo / 12mo launchers pass explicit
+      values (180 / 240).
+
+    The sparse time grid then has ``N_sparse_t = Nt_active // (Nt // nt_layer)``
+    points (:func:`lisatools.signal_het.sparse_time_grid`).
+
+    Returns:
+        int: A divisor of ``Nt``.
+
+    Raises:
+        ValueError: ``nt_layer`` is 0 or negative other than -1, or AUTO finds no
+            divisor of ``Nt`` that fits ``device_shared_limit``.
     """
     nt_layer = int(nt_layer)
     auto = nt_layer == -1
@@ -520,16 +612,135 @@ def _resolve_nt_layer(nt_layer, Nf, Nt, Nt_active, dt, *, v3_n_nodes,
 
 
 class GBSignalHetComputations(FastLISAResponseParallelModule):
-    """Signal-het GB likelihood. ``__init__`` builds the heterodyne reference ``c0``
-    (from the backend) and the bin-fold coefficients (from lisatools); ``get_ll``
-    evaluates logL for candidate params.
+    """Signal-heterodyne GB likelihood on a WDM grid.
 
-    Args mirror the chunked-het / dev sig-het frontends; ``ref_params`` is the
-    length-9 heterodyne reference ``(amp, f0, fdot, fddot, phi0, inc, psi, lam, beta)``.
+    Each candidate is scored against a fixed heterodyne reference. The reference's complex
+    WDM coefficients ``c0`` (at the sparse time pixels of
+    :func:`lisatools.signal_het.sparse_time_grid`) are folded once with the data and the
+    inverse covariance into per-reference moments (``A0`` / ``A1`` for ``<d|h>``, ``B0`` /
+    ``B1`` / ``B0nc`` / ``B1nc`` for ``<h|h>``). A candidate then enters only through a
+    smooth ratio ``r`` to the reference (and its slope ``dr``), fitted from a few spline
+    nodes inside one fused kernel call. The returned value is
+    ``-0.5 * d_d + <d|h> - 0.5 * <h|h>`` (real projection, XYZ channels).
+
+    There are two ways to build one:
+
+    * :meth:`for_band_engine` (the production path, CPU or CUDA): a data-less wrapper
+      around a chunked-heterodyne :class:`gbgpu.gbcomps.GBWDMComputations`. References
+      are built per block by :meth:`setup_in_model`; :meth:`get_ll_wdm` scores through
+      the sig-het kernel while a reference is active and through the delegate otherwise.
+    * The constructor below (CPU only, offline / validation): loads time-domain data,
+      builds ONE reference from ``ref_params`` and scores with the v2 in-kernel scorer
+      through :meth:`get_ll`. It has no chunked delegate, so the band-engine methods
+      (:meth:`get_ll_wdm`, :meth:`fill_global_wdm`, ...) are not available on it.
+
+    Args:
+        data_td (np.ndarray): XYZ time-domain data, ``(3, Nf * Nt)``, sampled every ``dt``
+            from ``t0``. It is multiplied by a Tukey window of ``tukey_alpha`` before the
+            WDM transform.
+        ref_params (array-like): The heterodyne reference, 9 physical GB parameters
+            ``(amp, f0, fdot, fddot, phi0, iota, psi, lam, beta)``.
+        Nf (int): WDM frequency layers.
+        Nt (int): WDM time pixels.
+        dt (float): Sampling cadence [s].
+        t0 (float): Start time of the data [s].
+        t_ref (float): GB phase reference time [s] of the response generator.
+        orbits (Orbits): Orbits for :class:`lisatools.response.tdionfly.GBTDIonTheFly`;
+            the sky angles are read in their frame.
+        tdi_config (TDIConfig or str): TDI configuration; a string is built into a
+            :class:`lisatools.response.tdiconfig.TDIConfig`.
+        min_freq (float): Lower edge of the WDM active band [Hz].
+        max_freq (float): Upper edge of the WDM active band [Hz].
+        sens_model (str, optional): Noise model of
+            :class:`lisatools.sensitivity.XYZ2SensitivityMatrix`. Default ``"scirdv1"``.
+        edge_cut (int, optional): WDM time layers cropped from each end of the active
+            region. Default ``None``: ``max(20, ceil(0.5 * tukey_alpha * Nt) + 8)``.
+        nt_layer (int, optional): Sparse time-grid size; must divide ``Nt`` (not snapped
+            here, unlike :meth:`for_band_engine`). Default ``64``.
+        n_sparse_fd (int, optional): FD samples of the reference build. Default ``1024``.
+        m_active_half_width (int, optional): Active layers each side of a candidate's
+            carrier layer (2 -> 5 layers). Default ``2``.
+        max_r (float, optional): Heterodyne-ratio magnitude clip of the v2 kernel; 0 = off.
+            Default ``0.0``.
+        tukey_alpha (float, optional): Tukey alpha as a fraction of the whole observation,
+            for the data window and the reference build. Default ``0.05``.
+        n_cp_build (int, optional): Spline control points of the reference build; 0 =
+            direct evaluation, > 1 = explicit, otherwise AUTO (``_resolve_n_cp``).
+            Default ``-1``.
+        cp_repr (str, optional): Control-point representation (``_CP_REPRS``); ``None``
+            reads ``SIGHET_CP_REPR``. On this path ``"carrier"`` builds like ``"reim"``.
+            Default ``None``.
+        force_backend (str, optional): ``"cpu"``. Default ``"cpu"``. The guard also lets
+            ``"gbgpu_cpu"`` through, but that string is then handed to the lisatools
+            frontends (``TDSettings``, ``WDMSettings``, ...), which prefix it again to the
+            unregistered ``"lisatools_gbgpu_cpu"`` and raise ``ValueError``. Pass it
+            explicitly: ``None`` resolves the bare flavor names of
+            :meth:`supported_backends` to a ``gbt_*`` backend, which has no
+            ``GBComputationGroupWrap``.
+
+    Raises:
+        NotImplementedError: ``force_backend`` is any other string (the constructor is
+            CPU-only; use :meth:`for_band_engine` for CUDA).
+
+    Attributes:
+        cpp: The backend's ``GBComputationGroupWrap`` (the sig-het kernels).
+        tdi_wrap: The C++ response wrap (``GBTDIonTheFly.wave_gen``) the kernels read.
+        chunked (GBWDMComputations): The chunked delegate (:meth:`for_band_engine` only).
+        d_d (float): Constant of the returned ln L: ``<d|d>`` of the loaded data on the
+            constructor path; the delegate's ``d_d`` (0 on the global fit) on the
+            :meth:`for_band_engine` path.
+        m_half (int): ``m_active_half_width``.
+        window_full (xp.ndarray): The WDM analysis window, ``(Nt,)``.
+        n_sparse_local (xp.ndarray): Sparse time pixels (active-local), ``(N_sparse_t,)``.
+        params_ref_all (xp.ndarray): Reference parameters of the stash, ``(n_ref, 9)``;
+            ``None`` when no stash is held.
+        c0_sparse_all, A0_all, A1_all, B0_all, B1_all, B0nc_all, B1nc_all: The coefficient
+            stash, one row per reference (layout set by :meth:`setup_in_model`).
+        c0_mask_all (xp.ndarray): The v5 bit-packed ``|c0|`` row-floor mask.
+        d_h_out, h_h_out, d_h_im_out: ``<d|h>``, ``<h|h>`` and the phi0 + pi/2 quadrature
+            of the last :meth:`get_ll_wdm` call, ``(N,)``.
+        last_d_h, last_h_h, last_d_h_im: The same for the last :meth:`get_ll` call.
+        phase_angle: Maximising phi0 shift of ``get_ll(phase_maximize=True)``, else
+            ``None``.
+        N_arr, M_mat: The last F-stat outputs of :meth:`get_fstat_ll_wdm`.
+        analysis (AnalysisContainer): The loaded data and sensitivity (constructor only).
+
+    Example:
+        .. code-block:: python
+
+            from lisatools.detector import ESAOrbits
+            from lisatools.domains import WDMSettings
+            from gbgpu.gbcomps import GBWDMComputations
+            from gbgpu.gbsignalhetcomputations import GBSignalHetComputations
+
+            wdm = WDMSettings(256, 512, 10.0, t0=t_start, min_freq=1e-4, max_freq=2e-2,
+                              min_time=40 * 256 * 10.0, max_time=472 * 256 * 10.0,
+                              force_backend="cpu")
+            chunked = GBWDMComputations(wdm, t_ref=t_start, Nt_sub=128, n_pad=16,
+                                        N_sparse=256, orbits=ESAOrbits(force_backend="cpu"),
+                                        tdi_config="2nd generation", force_backend="cpu",
+                                        tdi_type="XYZ")
+            # the production v5 knobs (nt_layer is 180 / 240 on the 9mo / 12mo grids)
+            sighet = GBSignalHetComputations.for_band_engine(
+                chunked, nt_layer=64, tukey_alpha=0.01, n_cp_build=256,
+                v3_n_nodes=64, v4_knots=128, v4_band=16, v5=1)
+
+            # holder: exposes linear_data_arr[0] / linear_psd_arr[0] (one slab per slot)
+            sighet.setup_in_model(holder, params_ref, slots)   # params_ref: (n, 9)
+            ll = sighet.get_ll_wdm(params, holder, data_index=slots)
+            sighet.clear_in_model()                             # back to the delegate
     """
 
     @classmethod
     def supported_backends(cls):
+        """Backend flavors in preference order (bare names, no ``gbgpu_`` prefix).
+
+        Only used when ``force_backend=None``, which then resolves to a ``gbt_*`` backend
+        (see the class docstring); pass an explicit flavor instead.
+
+        Returns:
+            list[str]: ``["cpu", "cuda11x", "cuda12x", "cuda13x"]``.
+        """
         return ["cpu", "cuda11x", "cuda12x", "cuda13x"]
 
     def __init__(self, data_td, ref_params, *, Nf, Nt, dt, t0, t_ref,
@@ -558,7 +769,7 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         t_arr = np.arange(Nobs) * dt + t0
         # plain backend flavor for the lisatools frontends (TDIConfig / TDSettings /
         # WDMSettings / GBTDIonTheFly). self.backend is the GBGPU COMPOSITE backend
-        # (name "lisatools_gbgpu_cpu") whose GBComputationGroupWrap self.cpp uses; the
+        # (name "gbgpu_cpu") whose GBComputationGroupWrap self.cpp uses; the
         # lisatools objects want the plain flavor ("cpu").
         bname = force_backend if isinstance(force_backend, str) else "cpu"
         if isinstance(tdi_config, str):
@@ -639,6 +850,7 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
 
     @property
     def xp(self):
+        """module: The backend array module (``numpy`` or ``cupy``)."""
         return self.backend.xp
 
 
@@ -655,6 +867,15 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         ``v4_band = 0`` returns empty arrays and the kernel takes the
         cooperative spline-solve path instead (both live in one binary so the
         two are directly comparable).
+
+        Built lazily on the first v4 / v5 / F-stat call and cached on
+        ``_v4_band_arrays``.
+
+        Returns:
+            tuple: ``(weights, j0, W)``: ``weights`` float64 ``(N_sparse_t * W,)`` and
+            ``j0`` int32 ``(N_sparse_t,)`` (first knot of each pixel's window) on the
+            backend, ``W = 2 * v4_band``. With ``v4_band <= 0``: 1-element zero arrays
+            and ``W = 0``.
         """
         xp = self.xp
         g = self._g
@@ -733,8 +954,10 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
     def _resolve_v3_nodes(self, x, di):
         """Node count for the v3 ratio build.
 
-        ``v3_n_nodes > 0`` = fixed (the explicit ``SIGHET_V3_NODES`` knob);
-        ``-1`` = look the baseline up in :attr:`_NR_TIERS`.
+        ``v3_n_nodes > 0`` = fixed (the explicit ``SIGHET_V3_NODES`` knob; at least 4);
+        ``<= 0`` (e.g. ``-1``) = look the baseline up in :attr:`_NR_TIERS`. The 9mo /
+        12mo runs use the fixed 64. ``x`` and ``di`` are unused (kept for the call
+        signature). Used by the v3 / v4 / v5 scorers and the F-stat as the node count.
 
         The lookup keys on ``T_obs`` ALONE. Two reasons, both measured:
 
@@ -778,10 +1001,11 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
     # (fill_global_wdm / get_ll_wdm / get_swap_ll_wdm / grads) routes to
     # the chunked delegate, EXCEPT get_ll_wdm while an in-model reference
     # is active: setup_in_model() -- called by the move once per picked
-    # source batch, at the friends/info-matrix stage, AFTER the sources
-    # are removed from their cell residuals -- builds the heterodyne
-    # reference (backend c0 producer + lisatools bin-fold) against the
-    # source-free residual slabs, and every repeat proposal then scores
+    # source batch, at the friends/info-matrix stage, AFTER the sources'
+    # templates are removed from the model (so each slot's residual slab
+    # contains its own source's signal) -- builds the heterodyne
+    # reference (backend c0 producer + lisatools bin-fold) against those
+    # residual slabs, and every repeat proposal then scores
     # through the fast sig-het kernel against that CONSTANT reference.
     # clear_in_model() (after the repeat block) reverts get_ll_wdm to the
     # chunked delegate. Dispatch is purely by comp type: settings hand
@@ -796,20 +1020,40 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
                         v3_n_nodes=0, v4_knots=0, v4_band=0, v5=0,
                         tukey_alpha=None, cp_repr=None, lookup_table=None,
                         lookup_n_nodes=-1, lookup_k_coarse=True, anchor_engine=None):
-        """Build a data-less engine-mode instance around ``chunked_comp``.
+        """Build a data-less engine-mode instance around ``chunked_comp`` (production path).
+
+        This is how the global fit builds its GB / VGB in-model likelihood (LAT
+        :func:`lisatools.globalfit.stock.erebor.gb.build_sighet_engine`; for a non-primary
+        GPU of a multi-GPU rank, ``source_runtime._build_gb_comp_replica``). The instance is
+        created without ``__init__``: it re-initializes the GBGPU backend with the
+        delegate's flavor, builds its own ``GBComputationGroupWrap`` and a ``GBTDIonTheFly``
+        response wrap (XYZ, 16384 knots) on the delegate's orbits / TDI configuration /
+        ``t_ref``, and copies the delegate's grid. No reference is built here; call
+        :meth:`setup_in_model` (in-model scoring) or :meth:`setup_fstat_references`
+        (F-stat). One INFO line logs the resolved configuration.
+
+        ``nt_layer`` is resolved by ``_resolve_nt_layer``: snapped to the nearest divisor
+        of ``Nt``, and for AUTO (-1) clamped to the device's shared memory (read through
+        cupy on a CUDA backend). The Tukey alpha must satisfy the EC >= taper rule
+        ``ceil(0.5 * tukey_alpha * Nt) <= ind_min_t``: an explicit alpha that breaks it
+        raises, an inherited one (``tukey_alpha=None``) is clamped to
+        ``2 * ind_min_t / Nt`` with a warning.
 
         ``lookup_table`` (a ``WDMLookupTable`` or a path, built at the grid's layer
         duration): build the v5 CARRIER reference from the table instead of the FD
         transform (see :meth:`attach_lookup_reference`); ``lookup_n_nodes`` /
         ``lookup_k_coarse`` as in :class:`gbgpu.gblookupcomputations.GBLookupComputations`.
         ``anchor_engine``: ``"chunked"`` / ``"lookup"`` for the carrier anchor offset (see
-        ``_update_anchor_offsets``); the env ``SIGHET_ANCHOR_ENGINE`` wins when set.
+        ``_update_anchor_offsets``); the env ``SIGHET_ANCHOR_ENGINE`` wins when set. These
+        four are not recorded in ``_g`` (the attached scorer is kept on ``_ref_lookup``,
+        the engine name on ``_anchor_engine``), so an instance rebuilt from ``_g`` alone,
+        as LAT ``_build_gb_comp_replica`` does, has no table and no anchor engine.
 
         ``max_r=0`` disables the kernel's heterodyne-ratio magnitude clip.
         The clip SILENTLY saturates every candidate whose amplitude ratio
         vs the fixed reference exceeds it — at the old default 5.0 that
         corrupted the likelihood of any in-model proposal beyond
-        |dlnA| ~ 1.6 (measured: 62% delta error at +2, driving cold-chain
+        ``|dlnA| ~ 1.6`` (measured: 62% delta error at +2, driving cold-chain
         ll-bookkeeping runaways over long repeat blocks), while with the
         clip off the expansion is exact in amplitude to at least ratio
         e^8 (~3e-6). The FLOOR_EPS reference floor in the kernel already
@@ -822,8 +1066,8 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         default ``"carrier"`` for v5 engines and ``"reim"`` otherwise;
         ``"ampph"`` is the full rollback); see ``_CP_REPRS``.
 
-        ``v5`` selects the V5 occupancy experiment (opt-in, default OFF --
-        with ``v5=0`` nothing about the v2/v3/v4 paths changes). It only
+        ``v5`` selects the V5 scorer (default OFF here -- with ``v5=0`` nothing
+        about the v2/v3/v4 paths changes; the LAT settings pass ``v5=1``). It only
         applies when ``v4_knots`` is set, since v5 IS v4 with the
         per-candidate fold scratch eliminated: ``r_sparse``/``dr_sparse``
         are an M-fold replication of ``r_pix`` modulated by one
@@ -836,7 +1080,9 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         * ``v5 = 1`` -- v5 kernel with the phase-lifetime shared arena
           (regions with disjoint lifetimes overlaid). ~27.6 KB, constant in
           ``N_sparse_t`` up to N ~ 450, so an A100 should go 1 -> 5
-          blocks/SM and an H100 1 -> 7. The production candidate.
+          blocks/SM and an H100 1 -> 7. The production setting (9mo / 12mo).
+          With ``v4_band = 0`` the kernel falls back to the flat carve (LAT
+          ``check_sighet_build_config`` refuses that combination).
         * ``v5 = 2`` -- v5 kernel with a FLAT carve: same arithmetic, same
           traffic, ~3 blocks/SM. The A/B that isolates the occupancy change
           from everything else, which is the question the experiment exists
@@ -850,6 +1096,75 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         runs; on CUDA the reference coefficients live on-device and every
         repeat proposal scores through the fused shared-memory kernel with
         zero H2D traffic.
+
+        Args:
+            chunked_comp (GBWDMComputations): The chunked-het delegate
+                (:class:`gbgpu.gbcomps.GBWDMComputations`); its ``wdm_settings``,
+                ``orbits``, ``tdi_config``, ``t_ref``, ``d_d``, backend and Tukey alpha are
+                used.
+            nt_layer (int, optional): Sparse time-grid size (``N_sparse_t =
+                Nt_active // (Nt // nt_layer)``); snapped to a divisor of ``Nt``; -1 =
+                AUTO. Default ``64``; ``SIGHET_NT_LAYER`` 180 (9mo) / 240 (12mo).
+            n_sparse_fd (int, optional): FD samples of the reference build; clamped on
+                CUDA to the device's shared memory by every setup call. Default ``1024``
+                (production value).
+            m_active_half_width (int, optional): Active layers each side of a candidate's
+                carrier layer. Default ``2`` (5 layers).
+            max_r (float, optional): v2 heterodyne-ratio clip; 0 = off (see above).
+                Default ``0.0``.
+            n_cp_build (int, optional): Spline control points of the reference build (0 =
+                direct, > 1 = explicit, otherwise AUTO). Default ``-1``;
+                ``SIGHET_N_CP=256`` in production.
+            v3_n_nodes (int, optional): Ratio-spline nodes of the v3 / v4 / v5 fit; 0 =
+                off (v2 unless ``v4_knots``), > 0 fixed, < 0 from ``_NR_TIERS``. Default
+                ``0``; 64 in production.
+            v4_knots (int, optional): Fixed resample knots; > 0 selects v4 (or v5 with
+                ``v5``) and enables the F-stat path. Default ``0``; 128 in production.
+            v4_band (int, optional): Cardinal-weight half-band; 0 = cooperative spline
+                solve. Default ``0``; 16 in production.
+            v5 (int, optional): 0 = off, 1 = phase-aliased arena, 2 = flat carve (see
+                above). Default ``0``; 1 in production.
+            tukey_alpha (float, optional): Tukey alpha as a fraction of the whole
+                observation for the reference build. Default ``None`` inherits the
+                delegate's resolved alpha (and clamps it, see above); production passes
+                ``SIGHET_TUKEY_ALPHA=0.01``. Negative values become 0.
+            cp_repr (str, optional): ``"ampph"`` / ``"reim"`` / ``"carrier"``; ``None``
+                reads ``SIGHET_CP_REPR`` (default ``"carrier"``, which falls back to
+                ``"reim"`` on a non-v5 engine when neither the argument nor the env set it).
+                Default ``None``.
+            lookup_table (WDMLookupTable or str, optional): GB WDM lookup table (or its
+                path); attaches the lookup reference (:meth:`attach_lookup_reference`).
+                Default ``None``; production passes the table resolved by
+                :func:`lisatools.wdm_lookup_store.resolve_gb_lookup_table`.
+            lookup_n_nodes (int, optional): ``n_nodes`` of the lookup scorer; <= 0 = AUTO.
+                Default ``-1`` (``GB_LOOKUP_N_NODES``, not set by the launchers).
+            lookup_k_coarse (bool, optional): ``k_coarse`` of the lookup scorer. Default
+                ``True`` (``GB_LOOKUP_K_COARSE``).
+            anchor_engine (str, optional): ``"chunked"`` or ``"lookup"``; ``None`` means
+                ``"chunked"`` unless ``SIGHET_ANCHOR_ENGINE`` is set. Default ``None``;
+                production passes ``"lookup"``.
+
+        Returns:
+            GBSignalHetComputations: The engine-mode instance, with no reference active.
+
+        Raises:
+            NotImplementedError: ``max_r > 0`` with ``v3_n_nodes`` or ``v4_knots`` set
+                (those kernels take no clip).
+            ValueError: An invalid ``nt_layer``; an explicit ``tukey_alpha`` whose taper
+                exceeds the time crop ``ind_min_t``; ``cp_repr="carrier"`` on a non-v5
+                engine; an unknown ``cp_repr``; a lookup table at a different layer
+                duration (from :class:`~gbgpu.gblookupcomputations.GBLookupComputations`).
+
+        Example:
+            .. code-block:: python
+
+                from gbgpu.gbsignalhetcomputations import GBSignalHetComputations
+
+                # chunked: the run's GBWDMComputations (gb_info.gb_wdm_comp)
+                engine = GBSignalHetComputations.for_band_engine(
+                    chunked, nt_layer=180, n_sparse_fd=1024, max_r=0.0, n_cp_build=256,
+                    v3_n_nodes=64, v4_knots=128, v4_band=16, v5=1, tukey_alpha=0.01,
+                    lookup_table=table_path, anchor_engine="lookup")
         """
         # The |r| clip is a v2-ONLY kernel argument: gb_signal_het_v3_get_ll
         # and gb_signal_het_v4_get_ll (which v5 also routes through) take no
@@ -1152,11 +1467,29 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         first moment c1 is the same B-spline's f-derivative (the lookup scorer's K1
         read) -- no FD build, FFT or polyphase transform (measured against
         ``gb_signal_het_make_reference_carrier``: c0 to ~1e-6 relative, c1 to <= 3e-5 of
-        |c0|, the table's own accuracy). The stash fold, the scorer and the anchor are
+        ``|c0|``, the table's own accuracy). The stash fold, the scorer and the anchor are
         unchanged. ``SIGHET_REF_BUILD``: ``auto`` (default: the lookup when a table is
         attached), ``fd`` (force the FD transform), ``lookup`` (require the table).
         Carrier-fold layouts only (sym / collapsed); the ``full`` layout keeps the FD
         build.
+
+        The attached scorer also serves the anchor (``SIGHET_ANCHOR_ENGINE=lookup``) and
+        the information matrix (``SIGHET_INFOMAT_ENGINE=lookup``). Called by
+        :meth:`for_band_engine` when ``lookup_table`` is given; needs the chunked delegate
+        (not available on the standalone constructor path).
+
+        Args:
+            table (WDMLookupTable or str): The GB WDM lookup table, or a path to one, built
+                at the grid's layer duration.
+            n_nodes (int, optional): Response control points of the lookup scorer; <= 0 =
+                AUTO. Default ``-1``.
+            k_coarse (bool, optional): Coarse-in-time table reads. Default ``True``.
+
+        Returns:
+            GBLookupComputations: The attached scorer (also kept on ``_ref_lookup``).
+
+        Raises:
+            ValueError: The table's layer duration differs from the grid's.
         """
         from .gblookupcomputations import GBLookupComputations
 
@@ -1165,6 +1498,22 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         return self._ref_lookup
 
     def _ref_build_is_lookup(self, carrier_fold):
+        """Whether this setup call builds the reference from the lookup table.
+
+        Reads ``SIGHET_REF_BUILD`` per call (``auto`` default, ``fd``, ``lookup``).
+
+        Args:
+            carrier_fold (bool): The block's stash layout is a carrier fold
+                (``sym`` / ``collapsed``).
+
+        Returns:
+            bool: True for ``auto`` / ``lookup`` with a table attached and a carrier fold.
+
+        Raises:
+            ValueError: Unknown ``SIGHET_REF_BUILD`` value.
+            RuntimeError: ``SIGHET_REF_BUILD=lookup`` without an attached table or without
+                a carrier-fold layout.
+        """
         knob = os.environ.get("SIGHET_REF_BUILD", "auto").lower()
         if knob not in ("auto", "fd", "lookup"):
             raise ValueError(f"SIGHET_REF_BUILD={knob!r}: auto, fd or lookup.")
@@ -1242,7 +1591,56 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         patch rewrites both the (whole) coefficient rows and that
         reference's ``_stash_w_lo`` origin. Returns True so callers can
         tell an active sig-het setup from the no-op hooks (which return
-        None)."""
+        None).
+
+        Called through :meth:`gbgpu.gb_likelihood.WDMBandLikelihoodEngine.setup_in_model`
+        by LAT ``SubBandBuffer.setup_in_model_likelihood``: once per picked source batch
+        at the start of an in-model repeat block, and for the mid-block refresh (LAT
+        ``recipe.py`` reads ``GB_SIGHET_REFRESH_EVERY`` / ``GB_SIGHET_REFRESH_DPHASE`` into
+        the GB move; the 9mo / 12mo launchers set ``25`` / ``0`` with
+        ``GB_SIGHET_REFRESH_MIN_BETA=0``, i.e. every 25 repeats each source that has
+        drifted from its reference, on every rung, is re-anchored). The reference stays
+        fixed between those calls.
+
+        Per call: the stash layout (``_resolve_stash_layout``; compact windows on v5),
+        the carrier-fold layout (``SIGHET_CARRIER_LAYOUT``, default ``sym``; ``full``
+        when not a carrier v5 engine or when the inverse covariance is not
+        channel-pair symmetric), the reference source (``SIGHET_REF_BUILD``: lookup
+        table or FD transform) and the c1 term (``SIGHET_CARRIER_C1``) are resolved; a
+        patch keeps the block's layout and c1 choice. References are built and folded
+        in chunks under ``GB_SIGHET_FOLD_MAX_BYTES``. Then the anchor offsets are
+        measured (``_update_anchor_offsets``). In production: compact sym stash with
+        c1, reference from the lookup table, lookup anchor.
+
+        Args:
+            buffer_aca (AnalysisContainerArray): The band buffer (or a holder exposing the
+                same attributes). Reads
+                ``linear_data_arr[0]`` (flat, viewed as ``(n_slots, 3, Nf_data,
+                Nt_active)``) and ``linear_psd_arr[0]`` (XYZ inverse covariance, viewed as
+                ``(n_rows, 3, 3, Nf_psd, Nt_active)``). On narrow-slab buffers
+                ``band_slab_Nf`` / ``slab_min_f`` (per-slot absolute first layer) give the
+                slab window (``Nf_data = band_slab_Nf``); otherwise ``Nf_data =
+                Nf_active`` and a carrier-centred window is used. A shared-psd mirror
+                exposes ``psd_row_index`` (slot -> full-band psd row, ``Nf_psd =
+                Nf_active``).
+            params_ref_phys (xp.ndarray): ``(n, 9)`` physical parameters of the
+                references (copied; the caller's array is never aliased).
+            data_index (xp.ndarray): ``(n,)`` int buffer slots of the references (host or
+                device).
+            N_vals (xp.ndarray, optional): Ignored (band-engine hook signature).
+
+        Returns:
+            bool: Always ``True``.
+
+        Raises:
+            NotImplementedError: ``linear_psd_arr[0]`` is not an XYZ ``3 x 3`` layout.
+            ValueError: An unknown ``SIGHET_CARRIER_LAYOUT``, ``SIGHET_REF_BUILD`` or
+                ``SIGHET_ANCHOR_ENGINE`` value.
+            RuntimeError: ``GB_SIGHET_INMODEL_WINDOWED`` forces windowing on a non-v5
+                engine; ``SIGHET_REF_BUILD=lookup`` or ``SIGHET_ANCHOR_ENGINE=lookup``
+                without an attached table; a patch slot outside the block or without a
+                reference; a patch that would change the stash width or layout.
+        """
         g = self._g
         self._prof_tick(None)
         self._clamp_n_sparse_fd_for_device()
@@ -1711,7 +2109,22 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         the "0.1 s per 2048 references" large-batch figure does not apply), which
         is what grew the in-run setup (6mo jobs 717 -> 719, +12 s per propose).
         ``SIGHET_ANCHOR_ENGINE=lookup`` scores the anchor with the lookup instead
-        (~15x cheaper per call).
+        (~15x cheaper per call; the 9mo / 12mo setting).
+
+        Only for ``cp_repr == "carrier"``. Stores ``_anchor_off[ref] = ll_exact - ll_sighet``
+        (one entry per stash row; reset to ``None`` when skipped). :meth:`get_ll_wdm` adds
+        it to ln L and subtracts twice it from ``h_h``. Side effect: one :meth:`get_ll`
+        call (overwrites ``last_d_h`` / ``last_h_h``).
+
+        Args:
+            buffer_aca (AnalysisContainerArray): The holder passed to
+                :meth:`setup_in_model` (scored by the exact engine).
+            slots (np.ndarray): ``(k,)`` buffer slots of the (re)built references.
+            ref_idx (np.ndarray): ``(k,)`` their stash rows.
+
+        Raises:
+            ValueError: Unknown ``SIGHET_ANCHOR_ENGINE`` value.
+            RuntimeError: ``lookup`` anchor without an attached table.
         """
         g = self._g
         knob = os.environ.get("SIGHET_ANCHOR_CORRECT", "1").lower()
@@ -1747,9 +2160,13 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         self._anchor_off[ri] = ll_ex - ll_sig
 
     def clear_in_model(self) -> None:
-        """Deactivate the in-model reference: get_ll_wdm routes back to the
-        chunked delegate (RJ / removal / any out-of-block scoring), and the
-        block's coefficient stash is RELEASED.
+        """Deactivate the in-model reference and release the block's coefficient stash.
+
+        Afterwards :meth:`get_ll_wdm` routes back to the chunked delegate (RJ / removal /
+        any out-of-block scoring) and :meth:`get_ll` raises until the next
+        :meth:`setup_in_model`. Called after every repeat block (through
+        :meth:`gbgpu.gb_likelihood.WDMBandLikelihoodEngine.clear_in_model`). The F-stat
+        stash of :meth:`setup_fstat_references` is not touched.
 
         The release matters as much as the routing. The stash is the run's
         single largest transient (seven per-reference coefficient arrays,
@@ -1816,12 +2233,16 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         in dynamic shared memory on CUDA — an oversized ``n_sparse_fd``
         dies as a bare ``GPUassert: invalid argument`` at the launch.
         Mirrors the synthetic-injection guard
-        (``lisatools...injections._resolve_synth_n_sparse``): largest
-        power of two that fits ``MaxSharedMemoryPerBlockOptin`` via the
+        (``lisatools...injections._resolve_synth_n_sparse``): ``n_sparse_fd``
+        is halved (not below 64) until it fits ``MaxSharedMemoryPerBlockOptin`` via the
         wrap's own ``get_fd_buffer_size`` (direct-path size; the spline
-        arena is smaller at the build's ``n_cp`` in practice). CPU is
+        arena is smaller at the build's ``n_cp`` in practice), so a power-of-two
+        request stays a power of two. CPU is
         unbounded (heap). The clamped value is written back to ``self._g``
         so every consumer (window extents, make_reference calls) agrees.
+
+        Returns:
+            int: The (possibly clamped) ``n_sparse_fd``.
         """
         g = self._g
         n = int(g["n_sparse_fd"])
@@ -1897,6 +2318,14 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         invalidate the run's error budget. The C++ wrap re-validates with
         the exact static-shared size before every launch, so this check is
         the friendly front door, not the only guard. No-op on CPU (heap).
+
+        Args:
+            fstat_mode (int): 0 (2 node stages) or 1 (4 stages).
+
+        Raises:
+            ValueError: The request exceeds the device limit minus
+                ``_SIGHET_STATIC_SHARED_RESERVE``; the message names the largest
+                ``SIGHET_NT_LAYER`` that fits.
         """
         limit = self._device_shared_limit()
         if limit is None:
@@ -1971,14 +2400,40 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         candidate against one walker's residual). Only the REAL part of the
         residual enters the real-projection fold.
 
-        ``assert_max_df0``: optional hard cap on |f0_candidate - f0_ref|
+        ``assert_max_df0``: optional hard cap on ``|f0_candidate - f0_ref|``
         enforced by every subsequent :meth:`get_fstat_ll_wdm` call. The
         fixed-knot resample is violently non-monotonic past its knot-Nyquist
         envelope (measured), so grid-fit consumers must set this to the
         measured margin (see
         ``lisatools.sampling.fstat_gridfit.sighet_fstat_ref_margin_hz``).
 
-        Returns the number of references built.
+        The references are built with the carrier reference and the sym Gram fold when
+        ``SIGHET_FSTAT_CARRIER`` is on (default) and the inverse covariance is
+        channel-pair symmetric, else with the per-channel Re/Im build and the full fold.
+        The stash is compact (carrier-centred windows) and replaces any previous F-stat
+        stash; the in-model stash is not touched. Called by LAT
+        ``lisatools.sampling.fstat_gridfit.build_sighet_call_fstat`` (routed by ``gbbands``
+        ``route_sighet_fstat``; ``FSTAT_USE_SIGHET=1``, default on).
+
+        Args:
+            params_ref_phys (xp.ndarray): ``(n_refs, 9)`` reference rows (copied).
+            wdm_holder (AnalysisContainerArray): The holder described above.
+            data_index (int, optional): Residual slab. Default ``0``.
+            noise_index (int, optional): Inverse-covariance slab; ``None`` = ``data_index``.
+                With ``psd_row_index`` on the holder it is mapped through that array.
+                Default ``None``.
+            assert_max_df0 (float, optional): ``|f0 - f0_ref|`` cap [Hz]. Default ``None``
+                (no cap).
+
+        Returns:
+            int: The number of references built.
+
+        Raises:
+            RuntimeError: The engine has no ``v4_knots`` (the F-stat needs the fixed-knot
+                scorer).
+            ValueError: The F-stat kernel's shared memory does not fit the current CUDA
+                device at the resolved ``nt_layer`` (``GB_SIGHET_FSTAT_MODE`` mode).
+            NotImplementedError: ``linear_psd_arr[0]`` is not an XYZ ``3 x 3`` layout.
         """
         g = self._g
         self._clamp_n_sparse_fd_for_device()
@@ -2154,6 +2609,7 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         return n
 
     def clear_fstat_references(self) -> None:
+        """Release the F-stat reference stash of :meth:`setup_fstat_references`."""
         self._fstat = None
 
     def get_fstat_ll_wdm(self, params, wdm_holder=None, data_index=None,
@@ -2173,6 +2629,30 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         2 node stages (one per basis psi) and recovers all 4 filters by the
         exact phi0 phase rotation; 1 evaluates 4 independent stages (the
         recombination self-check / fallback).
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` (or one length-9 row) candidate
+                parameters; only the intrinsic columns matter to the F-statistic.
+            wdm_holder (object, optional): Ignored. Default ``None``.
+            data_index (array-like, optional): ``(num_bin,)`` stash reference of each
+                candidate. Default ``None`` = nearest reference in ``f0``.
+            noise_index (object, optional): Ignored. Default ``None``.
+            fstat_mode (int, optional): 0 or 1 (see above); ``None`` reads
+                ``GB_SIGHET_FSTAT_MODE`` (default 0). Default ``None``.
+            **kwargs: Ignored (signature parity with the chunked method).
+
+        Returns:
+            tuple[xp.ndarray, xp.ndarray]: ``(N, M_upper)``, float64 ``(num_bin, 4)`` and
+            ``(num_bin, 10)``: the four F-stat filter projections and the upper triangle of
+            their 4 x 4 Gram matrix, as consumed by
+            :func:`lisatools.sampling.fstat_proposal.compute_fstat` /
+            :func:`~lisatools.sampling.fstat_proposal.fstat_maximized_extrinsics`. Also
+            stored on ``N_arr`` / ``M_mat``.
+
+        Raises:
+            RuntimeError: No F-stat stash is active, or a candidate is farther than
+                ``assert_max_df0`` from its reference.
+            ValueError: The kernel's shared memory does not fit the device in this mode.
         """
         fs = self._fstat
         if fs is None:
@@ -2252,15 +2732,56 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
     # ---- band-engine surface (chunked delegate + in-model routing) -------
 
     def fill_global_wdm(self, *args, **kwargs):
+        """Add / remove templates through the chunked delegate (always exact).
+
+        The delegate writes into ``templates`` in place and returns ``None``.
+
+        Args:
+            *args: Forwarded to :meth:`gbgpu.gbcomps.GBWDMComputations.fill_global_wdm`
+                (``params, templates``).
+            **kwargs: Forwarded likewise (``data_index``, ``factors``, ``band_slab_Nf``,
+                ``slab_min_f``, ...).
+        """
         return self.chunked.fill_global_wdm(*args, **kwargs)
 
     def get_swap_ll_wdm(self, *args, **kwargs):
+        """Swap inner products through the chunked delegate.
+
+        Always the exact chunked score, also while an in-model reference is active (the
+        sig-het stash is not used for swaps). No caller on the 9mo / 12mo runs: the only
+        LAT path here is the ``GB_ORTHO_CHECK`` diagnostic (``0`` on the launchers); the
+        psd-mirror parity check scores the chunked delegate directly.
+
+        Args:
+            *args: Forwarded to :meth:`gbgpu.gbcomps.GBWDMComputations.get_swap_ll_wdm`
+                (``params_add, params_remove, wdm_holder``).
+            **kwargs: Forwarded likewise (``data_index``, ``noise_index``, ...).
+
+        Returns:
+            tuple: The delegate's seven outputs ``(like_add, like_remove, d_h_add,
+            d_h_remove, add_add, remove_remove, add_remove)``.
+        """
         return self.chunked.get_swap_ll_wdm(*args, **kwargs)
 
     def get_ll_grad_wdm(self, *args, **kwargs):
+        """Likelihood gradient through the chunked delegate.
+
+        :meth:`lisatools.chunked_het.WDMComputationsBase.get_ll_grad_wdm` dispatches to the
+        backend's ``gb_wdm_het_get_ll_grad``, which the GBGPU C++ backends do not bind, so
+        this raises on CPU / CUDA. No production caller.
+
+        Args:
+            *args: Forwarded to the delegate.
+            **kwargs: Forwarded to the delegate.
+
+        Returns:
+            xp.ndarray: ``(num_bin, nparams)`` gradient (where implemented).
+        """
         return self.chunked.get_ll_grad_wdm(*args, **kwargs)
 
+    # TODO check: keep/remove/document -- chunked delegate has no hessian_wdm; always AttributeError
     def hessian_wdm(self, *args, **kwargs):
+        """Forward to the delegate's ``hessian_wdm`` (which does not exist on the chunked comps)."""
         return self.chunked.hessian_wdm(*args, **kwargs)
 
     #: ``SIGHET_INFOMAT_ENGINE`` values: unset / empty / ``default`` (the routes below)
@@ -2272,8 +2793,9 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         """Per-source information matrix in raw physical parameters; three routes.
 
         1. ``SIGHET_INFOMAT_ENGINE=lookup``: the lookup Fisher / Gram matrix
-           ``<dh_a|dh_b>`` (:meth:`gbgpu.gblookupcomputations.GBLookupComputations.
-           information_matrix`: 2 lookup fills per parameter per source, Tobs-scaled
+           ``<dh_a|dh_b>``
+           (:meth:`gbgpu.gblookupcomputations.GBLookupComputations.information_matrix`:
+           2 lookup fills per parameter per source, Tobs-scaled
            steps, ~1e-4 of the exact-template Gram). Reference-free: no in-model block
            is needed and ``data_index`` is ignored, so it also serves slot-less callers
            (LAT ``GB_CHOL_CACHE`` refreshes every alive source in one batch). Needs the
@@ -2302,6 +2824,34 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         at 6 months). Route 1 does not use that table; for routes 2 / 3 pass
         ``param_eps`` (e.g. ``GBLookupComputations.info_matrix_param_eps()``, 2.5e-3 of
         the exact Gram on route 2 at 6 months).
+
+        The 9mo / 12mo runs take route 1 (``SIGHET_INFOMAT_ENGINE=lookup``,
+        ``GB_CHOL_CACHE=1``; ``SIGHET_INFOMAT=1`` is then inert). LAT calls this through
+        ``gbbands`` ``route_information_matrix``.
+
+        Args:
+            params (xp.ndarray): ``(n, 9)`` physical parameters.
+            wdm_holder (AnalysisContainerArray): The band buffer (forwarded to the route's
+                scorer).
+            inds (list[int], optional): Parameter columns to include; ``None`` = all.
+                Default ``None``.
+            param_eps (array-like, optional): Per-parameter finite-difference steps; ``None``
+                = the route's own table (see above). Default ``None``.
+            noise_index (array-like, optional): Inverse-covariance rows (routes 1 and 3).
+                Default ``None``.
+            data_index (array-like, optional): ``(n,)`` buffer slots, one per row of
+                ``params`` (route 2 only; required there). Default ``None``.
+            **kwargs: Forwarded to the route-1 / route-3 implementation.
+
+        Returns:
+            xp.ndarray: ``(n, k, k)`` information matrices (``k = len(inds)``, or 9), in
+            raw physical units, not projected to positive definite.
+
+        Raises:
+            ValueError: An unknown ``SIGHET_INFOMAT_ENGINE`` value, or (route 2)
+                ``data_index`` with a different row count than ``params``.
+            RuntimeError: Route 1 without an attached table; route 2 with a slot that has
+                no in-model reference, with no step table, or with a misaligned batch.
         """
         from lisatools.info_matrix_ll import (
             infomat_knob, information_matrix_from_ll,
@@ -2438,9 +2988,37 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
 
     def get_ll_wdm(self, params, wdm_holder, data_index=None,
                    noise_index=None, **kwargs):
-        """Chunked-het scoring, EXCEPT while an in-model reference is active:
-        then candidates score through the sig-het kernel against the fixed
-        reference of their buffer slot (``data_index`` maps slot -> ref)."""
+        """Chunked-het scoring, EXCEPT while an in-model reference is active.
+
+        While a reference is active (between :meth:`setup_in_model` and
+        :meth:`clear_in_model`) candidates score through the sig-het kernel
+        (:meth:`get_ll`) against the fixed reference of their buffer slot
+        (``data_index`` maps slot -> ref), plus the reference's anchor offset; the holder
+        and ``noise_index`` are not read (the data and noise are in the stash).
+        Otherwise the call goes to the chunked delegate's
+        :meth:`~gbgpu.gbcomps.GBWDMComputations.get_ll_wdm` unchanged. The band engine
+        (:meth:`gbgpu.gb_likelihood.WDMBandLikelihoodEngine.get_ll`) calls this for every
+        GB likelihood on the WDM path.
+
+        Args:
+            params (xp.ndarray): ``(N, 9)`` physical candidate parameters.
+            wdm_holder (AnalysisContainerArray): The band buffer (delegate path only).
+            data_index (xp.ndarray, optional): ``(N,)`` buffer slots. Required while a
+                reference is active; on the delegate path forwarded as is. Default ``None``.
+            noise_index (xp.ndarray, optional): ``(N,)`` inverse-covariance rows (delegate
+                path only). Default ``None``.
+            **kwargs: Forwarded to the delegate (delegate path only).
+
+        Returns:
+            xp.ndarray: ``(N,)`` float64 ``-0.5 * d_d + <d|h> - 0.5 * <h|h>``. Side effect:
+            ``d_h_out``, ``h_h_out`` and ``d_h_im_out`` (phi0 + pi/2 quadrature of
+            ``<d|h>``, or ``None`` from a delegate without it) are set; on the sig-het path
+            ``h_h_out`` includes the anchor correction (``-2 * offset``).
+
+        Raises:
+            RuntimeError: A slot has no reference in the active block (raised after the
+                kernel ran on a clamped index).
+        """
         if self._in_model is None:
             ll = self.chunked.get_ll_wdm(
                 params, wdm_holder, data_index=data_index,
@@ -2486,16 +3064,40 @@ class GBSignalHetComputations(FastLISAResponseParallelModule):
         return ll
 
     def get_ll(self, params, data_index=None, phase_maximize=False):
-        """logL for candidate ``params`` (length-9 or ``(N,9)``); ``data_index``
-        ``(N,)`` selects the reference (default all-zero -> single reference).
+        """Sig-het ln L of candidate ``params`` against the stash references.
+
+        ``params`` is length-9 or ``(N, 9)``; ``data_index`` ``(N,)`` selects the stash
+        reference of each row (default all-zero -> single reference). No anchor offset is
+        applied here (:meth:`get_ll_wdm` adds it). The scorer is v5 / v4 / v3 / v2 by the
+        engine's knobs (see the module docstring); the scorer actually taken is logged
+        once per instance. Arrays stay on the backend's device.
 
         ``phase_maximize=True`` analytically maximises over the initial
-        phase via the two-quadrature trick (second kernel call at
-        ``phi0 + pi/2``; physical column 4): ``d_h -> |d_h_0 + i d_h_90|``,
-        with the maximising PHYSICAL phi0 shift stashed on
+        phase via the two-quadrature trick: ``d_h -> |d_h_0 + i d_h_90|`` with ``d_h_90``
+        the ``<d|h>`` at ``phi0 + pi/2`` (physical column 4). By default (``GB_PHASE_MAX_FUSED``
+        unset or ``1``) ``d_h_90`` is the fused quadrature of the same kernel call; with
+        ``GB_PHASE_MAX_FUSED=0`` a second kernel call at the shifted phase supplies it.
+        The maximising PHYSICAL phi0 shift is stashed on
         ``self.phase_angle`` (``None`` otherwise) and the un-maximised d_h on
         ``self.non_marg_d_h``. Same convention as
-        ``gb_likelihood.TwoQuadraturePhaseMaxMixin``.
+        ``gb_likelihood.TwoQuadraturePhaseMaxMixin``. On the global fit the band engine's
+        mixin does the phase maximization, so this flag stays ``False`` there.
+
+        Args:
+            params (xp.ndarray): Candidate physical parameters, ``(9,)`` or ``(N, 9)``.
+            data_index (xp.ndarray, optional): ``(N,)`` int stash rows. Default ``None``
+                (all row 0).
+            phase_maximize (bool, optional): See above. Default ``False``.
+
+        Returns:
+            xp.ndarray: ``(N,)`` float64 ``-0.5 * d_d + d_h - 0.5 * h_h``. Side effect:
+            ``last_d_h``, ``last_h_h``, ``last_d_h_im`` (and ``phase_angle``,
+            ``non_marg_d_h``) are set.
+
+        Raises:
+            RuntimeError: No coefficient stash (released by :meth:`clear_in_model`, or
+                never built), or a v5 engine without the ``|c0|`` mask; a full-band-only
+                scorer reading a compact stash.
         """
         xp = self.xp
         if phase_maximize:

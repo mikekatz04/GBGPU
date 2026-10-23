@@ -1,10 +1,14 @@
 """``GBComputationGroupWrapJAX`` -- JAX-side mirror of the C++
 ``GBComputationGroupWrap`` class.
 
-Exposes the same method names that
-:class:`fastlisaresponse.gbcomps.GBWDMComputations` calls
-(``gb_wdm_get_ll``, ``gb_wdm_fill_global``, ``gb_wdm_swap_ll``), with
-signatures matching the C++ side. Because JAX arrays are immutable,
+Exposes C++-style method names with signatures matching the C++ side: the retired
+direct-WDM ``gb_wdm_get_ll`` / ``gb_wdm_fill_global`` / ``gb_wdm_swap_ll`` and the
+chunked-heterodyne ``gb_wdm_het_*`` methods that
+:class:`gbgpu.gbcomps.GBWDMComputations` (through
+:class:`lisatools.chunked_het.WDMComputationsBase`) calls on its backend. Not wired:
+GBGPU registers no ``gbgpu_jax`` backend that would hand this class out, so the only
+user is the LAT dev script ``scripts/gb_chunked_het/gb_wdm_het.py``, which builds it
+directly. Because JAX arrays are immutable,
 the in-place buffer mutation contract of the C++ kernels is
 replaced by a hybrid:
 
@@ -14,12 +18,12 @@ replaced by a hybrid:
   unmodified.
 * ``gb_wdm_fill_global`` does the same with the ``templates`` buffer.
 
-This compromise keeps the orchestration code in
-:mod:`fastlisaresponse.gbcomps` backend-agnostic; the JAX path
+This compromise keeps the orchestration code (:mod:`gbgpu.gbcomps`,
+:mod:`lisatools.chunked_het`) backend-agnostic; the JAX path
 internally runs the pure-functional kernels and copies results back.
 For autograd users who want to differentiate through, the underlying
-:mod:`fastlisaresponse.jax.wdm.kernels` functions are the proper
-entry point.
+:mod:`gbgpu.jax.wdm.kernels` / :mod:`gbgpu.jax.wdm.heterodyne_kernels` functions are the
+proper entry point.
 
 The source plug-in defaults to :class:`JaxUCBSource`; callers can
 override via the constructor (the C++ side hard-codes the source
@@ -57,12 +61,13 @@ def _copy_into(buf, value):
     buf[...] = arr
 
 
+# TODO check: keep/remove/document -- no gbgpu_jax backend; only user: LAT dev script gb_wdm_het.py
 class GBComputationGroupWrapJAX:
     """Pure-Python analog of the C++ ``GBComputationGroupWrap``.
 
     The C++ side instantiates this with no arguments and then calls
     methods on it. We mirror that. The JAX-specific source plugin
-    (default :class:`fastlisaresponse.jax.sources.JaxUCBSource`) is
+    (default :class:`gbgpu.jax.sources.ucb.JaxUCBSource`) is
     held on the instance and built lazily on first use because it
     needs ``t_ref`` -- which comes in via the method signatures.
     """
@@ -215,7 +220,7 @@ class GBComputationGroupWrapJAX:
     # Chunked-heterodyne JAX kernels (gb_wdm_het_*)
     #
     # Each method below accepts the C++-style argument list packed by
-    # :class:`fastlisaresponse.gbcomps.GBWDMComputations`, then adapts
+    # lisatools.chunked_het.WDMComputationsBase (GBWDMComputations), then adapts
     # internally to the pure-functional standalone JAX kernel:
     #
     # * flat ``params`` -> ``(num_bin, nparams)``.
@@ -231,8 +236,8 @@ class GBComputationGroupWrapJAX:
     # * ``cpp_orbits`` / ``cpp_tdi_config`` / ``cpp_wdm_settings`` are
     #   already the corresponding JAX wrap classes
     #   (:class:`OrbitsWrapJAX`, :class:`TDIConfigWrapJAX`,
-    #   :class:`WDMSettingsWrapJAX`) -- built by
-    #   :class:`FastLISAResponseJaxBackend`.
+    #   :class:`WDMSettingsWrapJAX`) -- built by a JAX backend (the former
+    #   FastLISAResponseJaxBackend; none is registered for GBGPU today).
     # * the per-binary :class:`JaxAmpPhaseSource` is resolved lazily
     #   from ``t_ref``.
     # * scratch integers the JAX path doesn't need (``log2_Nt_sub``,

@@ -8,6 +8,13 @@ can share them without introducing a BBHx -> GBGPU import dependency.
 GB-side imports continue to work because everything is re-exported
 from the new home below. New code should import directly from
 ``lisatools.wdm_het``.
+
+Everything public in :mod:`lisatools.wdm_het` is star-imported; the names listed
+explicitly (``USE_RECOMMENDED_TUKEY``, the ``RECOMMENDED_TUKEY_ALPHA_*`` constants,
+``recommended_tukey_alpha``, ``resolve_tukey_alpha``, ``compute_chunk_geometry``,
+``compute_wdm_window``, ``compute_layer_groups``, ``compute_swap_layer_groups``) keep
+``from gbgpu.wdm_het import X`` working for each of them. In the package itself only
+:mod:`gbgpu.gbcomps` imports from here (``USE_RECOMMENDED_TUKEY``, unused there).
 """
 from __future__ import annotations
 

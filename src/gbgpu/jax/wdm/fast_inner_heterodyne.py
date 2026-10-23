@@ -1,13 +1,13 @@
 """JAX port of the chunked-heterodyne WDM primitives.
 
-Parallels the C++ implementation in
-``../../cutils/TDIonthefly.cu`` (``fast_wdm_inner_heterodyne`` /
-``gb_chunk_fd_to_wdm``). Validated algorithm reference lives in
-``check_shortened_wdm.py`` (``Test K``: chunk-FD->chunk-WDM Python
-reference matches lisatools to ~5e-16).
+Parallels the C++ implementation (``fast_wdm_inner_heterodyne`` /
+``gb_chunk_fd_to_wdm``; LAT ``cutils/lat_tdi_on_the_fly.cu`` /
+``lat_chunked_het_kernels.hh`` and GBGPU ``cutils/gb_tdi_on_the_fly.cu``). Validated
+algorithm reference lives in LAT ``scripts/diagnostics/check_shortened_wdm.py``
+(``Test K``: chunk-FD->chunk-WDM Python reference matches lisatools to ~5e-16).
 
-Conventions match the Python prototype in
-``gb_heterodyne_fd.py:make_heterodyne_fd``:
+Conventions match the Python prototype in LAT
+``scripts/gb_chunked_het/gb_heterodyne_fd.py:make_heterodyne_fd``::
 
     s(tau) = tdi_amp(tau) * exp(+i (tdi_phase + phase_ref - 2 pi f0_grid * tau))
     X_het  = 0.5 * dt_sparse * FFT(s)
@@ -29,10 +29,10 @@ from lisatools.jax.response.projection import get_phase_ref, get_tdi_Xf_single
 from lisatools.jax.response.tdi_config import TDIConfigWrapJAX
 
 
-# Recommended Tukey alphas mirror the C++ #defines in TDIonthefly.cu and
-# the Python module ``check_shortened_wdm.py``. Use ``ALPHA_AUTO`` to
-# trigger the auto-pick (HET_WIDE for N_sparse >= 512, HET_NARROW
-# otherwise).
+#: Recommended Tukey alphas; they mirror the C++ #defines of the chunked-het kernels
+#: and the Python module ``check_shortened_wdm.py``. Use ``ALPHA_AUTO`` to
+#: trigger the auto-pick (HET_WIDE for N_sparse >= 512, HET_NARROW
+#: otherwise).
 ALPHA_TD          = 0.02
 ALPHA_HET_WIDE    = 0.01
 ALPHA_HET_NARROW  = 0.05
@@ -40,6 +40,11 @@ ALPHA_AUTO        = -1.0
 
 
 def _resolve_alpha(alpha: float, N_sparse: int) -> float:
+    """Resolve a Tukey alpha: ``ALPHA_AUTO`` picks by ``N_sparse``, anything else passes.
+
+    ``ALPHA_AUTO`` gives ``ALPHA_HET_WIDE`` (0.01) for ``N_sparse >= 512`` and
+    ``ALPHA_HET_NARROW`` (0.05) otherwise.
+    """
     if alpha == ALPHA_AUTO:
         return ALPHA_HET_WIDE if N_sparse >= 512 else ALPHA_HET_NARROW
     return float(alpha)
@@ -83,10 +88,31 @@ def fast_wdm_inner_heterodyne_jax(
 ):
     """Build one chunk's dense rfft via the heterodyne path.
 
+    Samples the TDI response at ``N_sparse`` times across the chunk, demodulates it by
+    the carrier snapped to the chunk's FD grid (``k_f0 = round(f0 * T_chunk)``), applies
+    the Tukey window, FFTs, and places the ``N_sparse`` bins around ``k_f0`` on the
+    chunk's dense rfft grid (bins outside ``[0, N_chunk_td // 2]`` are dropped).
+
+    Args:
+        chunk_t_start: Chunk start time [s].
+        T_chunk: Chunk duration [s].
+        N_sparse: Sparse samples (and FD bins) per chunk.
+        N_chunk_td: Dense time samples of the chunk (``Nf * Nt_sub``).
+        params: One source's parameters (``params[1]`` is ``f0``).
+        source: The amp / phase source.
+        orbits: JAX orbits.
+        tdi_config: JAX TDI configuration.
+        k_sky: Sky unit vector ``(3,)`` from
+            :func:`lisatools.jax.response.projection.get_sky_vectors`.
+        u_sky: Polarization basis vector ``(3,)``.
+        v_sky: Polarization basis vector ``(3,)``.
+        tukey_alpha: Tukey alpha over the chunk; ``ALPHA_AUTO`` picks by ``N_sparse``.
+            Default ``ALPHA_AUTO``.
+
     Returns:
-        chunk_fd: complex ``(nchannels, N_chunk_td // 2 + 1)`` array with
-            ``N_sparse`` non-zero bins around ``k_f0``.
-        k_f0: int (the chunk-df bin index of the snapped carrier).
+        tuple[jnp.ndarray, jnp.ndarray]: ``(chunk_fd, k_f0)``: ``chunk_fd`` complex
+        ``(nchannels, N_chunk_td // 2 + 1)`` with ``N_sparse`` non-zero bins around
+        ``k_f0``; ``k_f0`` int32 scalar, the chunk-df bin index of the snapped carrier.
     """
     f0 = params[1]
     dt_sparse = T_chunk / N_sparse
@@ -137,6 +163,7 @@ def fast_wdm_inner_heterodyne_jax(
     return chunk_fd, k_f0
 
 
+# TODO check: keep/remove/document -- stub with no callers; always raises NotImplementedError
 def _phitilde_window(Nf: int, Nt_sub: int) -> jnp.ndarray:
     """Build the WDM analysis window (length Nt_sub) -- precompute on host.
 
@@ -144,8 +171,8 @@ def _phitilde_window(Nf: int, Nt_sub: int) -> jnp.ndarray:
     A = dOmega_s/4, B = dOmega_s - 2A, phitilde(omega) is a regularised
     incomplete beta function. Because scipy's betainc isn't easily
     available in JAX we delegate the window precompute to the Python
-    host (``gb_wdm_het.compute_wdm_window``) and accept it as input to
-    :func:`gb_chunk_fd_to_wdm_jax`.
+    host (:func:`lisatools.wdm_het.compute_wdm_window`) and accept it as input to
+    :func:`gb_chunk_fd_to_wdm_jax`. This stub only raises ``NotImplementedError``.
     """
     raise NotImplementedError(
         "Precompute the window on the host (e.g. with "
@@ -163,12 +190,24 @@ def gb_chunk_fd_to_wdm_jax(
 ) -> jnp.ndarray:
     """JAX port of the chunk FD -> chunk WDM transform.
 
-    Mirrors :func:`check_shortened_wdm.gb_chunk_fd_to_wdm_python_reference`
+    Mirrors ``gb_chunk_fd_to_wdm_python_reference`` of LAT
+    ``scripts/diagnostics/check_shortened_wdm.py``
     (which is bit-identical to lisatools' ``FDSignal.wdmtransform`` at
-    Nt_sub-length chunk scale).
+    Nt_sub-length chunk scale). Per layer ``m`` it gathers the ``Nt_sub`` FD bins centred
+    on ``m * Nt_sub / 2`` (Hermitian-wrapped at the edges), windows them, inverse-FFTs,
+    applies the WDM parity / sign pattern and folds the ``m = 0`` / ``m = Nf`` rows.
+
+    Args:
+        chunk_fd: ``(nch, N_chunk_td // 2 + 1)`` complex chunk rfft
+            (:func:`fast_wdm_inner_heterodyne_jax`).
+        wdm_window: ``(Nt_sub,)`` real window, host-precomputed
+            (:func:`lisatools.wdm_het.compute_wdm_window`).
+        Nf: WDM frequency layers.
+        Nt_sub: Time pixels per chunk.
+        data_dt: Sampling cadence [s].
 
     Returns:
-        w_mn: ``(nch, Nf, Nt_sub)`` real WDM coefficients for the chunk.
+        jnp.ndarray: ``(nch, Nf, Nt_sub)`` real WDM coefficients for the chunk.
     """
     N_chunk_td = Nf * Nt_sub
     half_Nt_sub = Nt_sub // 2

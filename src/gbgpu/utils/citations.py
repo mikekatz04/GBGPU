@@ -1,11 +1,18 @@
+# TODO check: keep/remove/document -- imported by nothing; CITATION.cff/schema not shipped
 # Collection of citations for modules in GBGPU package
 
 """
 :code:`gbgpu.utils.citations`:
 
-This module is used to collect citations for all modules in the package. This
-module is then imported to add citations to module classes using their :code:`citation`
-attribute.
+This module was meant to collect citations for all modules in the package and add
+them to module classes through their :code:`citation` attribute.
+
+Warning:
+    Not used: nothing imports this module (the live ``citation`` properties return the
+    BibTeX strings of :mod:`gbgpu.utils.citation`). :func:`build_citation_registry` needs
+    a ``CITATION.cff`` and a ``cff_1_2_0.schema.json`` that GBGPU does not ship, and
+    :meth:`Citable._get_registry` imports ``get_logger`` from :mod:`gbgpu`, which does
+    not define it. A copy of the FastEMRIWaveforms citation pattern.
 """
 
 import abc
@@ -235,7 +242,10 @@ class SoftwareReference(ReferenceABC):
 Reference = Union[ArticleReference, SoftwareReference]
 
 
+# TODO check: keep/remove/document -- dead module (imported by nothing)
 class REFERENCE(enum.Enum):
+    """Keys of the known references (values are ``CITATION.cff`` abbreviations)."""
+
     FAST_GB = "Cornish:2007if"
     TRIPLES_1 = "Robson:2018svj"
     GBGPU_SOFTWARE = "michael_l_katz_2022_6500434"
@@ -244,7 +254,10 @@ class REFERENCE(enum.Enum):
         return str(self.value)
 
 
+# TODO check: keep/remove/document -- dead module (imported by nothing)
 class CitationRegistry:
+    """Mapping from reference key to :data:`Reference` object."""
+
     __slots__ = "registry"
 
     registry: dict[str, Reference]
@@ -260,6 +273,7 @@ class CitationRegistry:
         return self.registry.values()
 
 
+# TODO check: keep/remove/document -- dead module; CITATION.cff and schema file not shipped
 def build_citation_registry() -> CitationRegistry:
     """Read the package CITATION.cff and build the corresponding registry."""
     import json
@@ -318,6 +332,7 @@ COMMON_REFERENCES = [
 ]
 
 
+# TODO check: keep/remove/document -- no subclasses in GBGPU; gbgpu.get_logger does not exist
 class Citable:
     """Base class for classes associated with specific citations."""
 

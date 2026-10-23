@@ -14,12 +14,34 @@ then per active pixel ONE table read per layer at the common carrier
 design notes: LAT ``scripts/gb/gb_lookup_scorer.py``.
 
 The table must be built at the run's layer duration (the GB recipe:
-``scripts/gb/_gb_testbox.py::GB_TABLE_RECIPE``, a 128-layer build record and a
-narrow fdot axis -- the shared 32-layer EMRI table carries a ~2e-5 norm bias).
+``lisatools.wdm_lookup_store.GB_TABLE_RECIPE``, used by LAT
+``scripts/gb/_gb_testbox.py`` and :func:`lisatools.wdm_lookup_store.resolve_gb_lookup_table`:
+a 128-layer build record and a narrow fdot axis -- the shared 32-layer EMRI table carries a
+~2e-5 norm bias).
 
 The same fill also gives the reference-free Fisher / Gram information matrix
 (:meth:`GBLookupComputations.information_matrix`, the sig-het
 ``SIGHET_INFOMAT_ENGINE=lookup`` route and LAT's ``GB_CHOL_CACHE`` factors).
+
+Classes:
+
+* :class:`GBLookupComputations`: the scorer object around a chunked
+  :class:`gbgpu.gbcomps.GBWDMComputations`. In the 9-month / 12-month global fits it lives
+  INSIDE :class:`gbgpu.gbsignalhetcomputations.GBSignalHetComputations` (built by
+  ``attach_lookup_reference`` when ``for_band_engine`` gets a ``lookup_table``), which uses
+  it for the v5 carrier reference (``SIGHET_REF_BUILD=lookup``), the anchor offsets
+  (``SIGHET_ANCHOR_ENGINE=lookup``) and the information matrix
+  (``SIGHET_INFOMAT_ENGINE=lookup``, ``GB_CHOL_CACHE=1``).
+* :class:`GBLookupWDMComputations`: a chunked ``GBWDMComputations`` whose per-row
+  ``get_ll_wdm`` is the lookup scorer; the documented alternative behind
+  ``GB_LIKELIHOOD=lookup`` (``lisatools.globalfit.stock.erebor.variants.gb_no_fg``), not
+  set by the production launchers.
+
+Knob read here: ``GB_LOOKUP_NODE_SPACING_DAYS`` (default ``2.8``; the automatic control-point
+spacing, see :class:`GBLookupComputations`). Parameters are the physical ICRS rows
+``(amp, f0 [Hz], fdot [Hz/s], fddot [Hz/s^2], phi0, inc, psi, lam, beta)``; the
+:class:`GBLookupComputations` methods refuse ``convert_to_ra_dec=True``
+(:class:`GBLookupWDMComputations` converts the sky columns ecliptic -> ICRS first).
 """
 
 from __future__ import annotations
@@ -41,24 +63,59 @@ def _host(a):
 class GBLookupComputations(GBGPUParallelModule):
     """Lookup scorer around a chunked ``GBWDMComputations`` (grid, orbits, TDI, t_ref).
 
+    The backend flavor is taken from the chunked delegate (``gbgpu_<flavor>``); there is no
+    ``force_backend`` argument. Builds a :class:`lisatools.wdm_lookup_eval.WDMLookupEvaluator`
+    on the table (spline interpolation), the ``GBComputationGroupWrap`` and a
+    :class:`lisatools.response.tdionfly.GBTDIonTheFly` response wrap (XYZ, 16384 knots over
+    the observation) on the delegate's orbits / TDI configuration. Attributes not defined
+    here are looked up on the chunked delegate (``__getattr__``), so the object can stand
+    in for it in the band-engine contract.
+
     Args:
-        chunked_comp: the chunked delegate (``gbgpu.gbcomps.GBWDMComputations``); its
-            backend, WDM grid, orbits, TDI configuration and ``t_ref`` are used.
-        table: a ``lisatools.domains.WDMLookupTable`` (or a path to one) built at the
-            grid's layer duration.
-        n_nodes: response control points per row over the active span; <= 0 = AUTO, a
-            constant node spacing of ``GB_LOOKUP_NODE_SPACING_DAYS`` (default 2.8 d, i.e.
-            64 nodes at 6 months; never fewer than 64). A fixed count loses accuracy
-            with the span: at 540 d, 64 nodes left 1e-5 relative h_h error vs chunked,
-            192 nodes 3e-7 (the 6-month floor).
-        num_m_layers: layers each side of the carrier layer (2 -> 5 layers).
-        k1: include the amplitude-slope term.
-        fill: ``fill_global_wdm`` writes the lookup template (``fill_lookup``) instead of
-            delegating to the chunked fill.
-        k_coarse: read the table only at the control points and interpolate each layer's
-            (smooth) table value in time at the pixels (Mike, 10-04: "lookup computed over
-            large steps in pixels ... spline the rotated representation"); a layer whose
-            table support starts or ends inside the span keeps per-pixel reads.
+        chunked_comp (GBWDMComputations): The chunked delegate
+            (:class:`gbgpu.gbcomps.GBWDMComputations`); its backend, WDM grid, orbits, TDI
+            configuration, ``t_ref`` and ``d_d`` are used.
+        table (WDMLookupTable or str): A ``lisatools.domains.WDMLookupTable`` (or a path to
+            one) built at the grid's layer duration.
+        n_nodes (int, optional): Response control points per row over the active span;
+            <= 0 = AUTO, a constant node spacing of ``GB_LOOKUP_NODE_SPACING_DAYS``
+            (default 2.8 d, i.e. 64 nodes at 6 months; never fewer than 64). A fixed count
+            loses accuracy with the span: at 540 d, 64 nodes left 1e-5 relative h_h error
+            vs chunked, 192 nodes 3e-7 (the 6-month floor). Default ``-1`` (AUTO).
+        num_m_layers (int, optional): Layers each side of the carrier layer (2 -> 5
+            layers). Default ``2``.
+        k1 (bool, optional): Include the amplitude-slope term. Default ``True``.
+        k_coarse (bool, optional): Read the table only at the control points and
+            interpolate each layer's (smooth) table value in time at the pixels (Mike,
+            10-04: "lookup computed over large steps in pixels ... spline the rotated
+            representation"); a layer whose table support starts or ends inside the span
+            keeps per-pixel reads. Default ``True``.
+        fill (bool, optional): ``fill_global_wdm`` writes the lookup template
+            (``fill_lookup``) instead of delegating to the chunked fill. Default ``False``.
+
+    Raises:
+        ValueError: If the table's ``layer_dt`` differs from the grid's (relative 1e-6).
+
+    Attributes:
+        chunked (GBWDMComputations): The chunked delegate.
+        wdm (WDMSettings): Its ``WDMSettings``.
+        ev (WDMLookupEvaluator): The table evaluator.
+        n_nodes (int): Resolved control-point count; ``t_node0`` / ``dt_node`` [s] place
+            the nodes from one layer before the first analysed pixel to one layer after the
+            last.
+        d_d (float): Constant of :meth:`get_ll_wdm` (copied from the delegate).
+        Tobs (float): Observation time [s] (scales the information-matrix steps).
+        d_h_out, h_h_out, d_h_im_out: Raw products of the last :meth:`get_ll_wdm`.
+
+    Example:
+        .. code-block:: python
+
+            from gbgpu.gblookupcomputations import GBLookupComputations
+
+            # chunked: a GBWDMComputations on the run's grid; table: path or WDMLookupTable
+            lookup = GBLookupComputations(chunked, table)
+            ll = lookup.get_ll_wdm(params, holder, noise_index=walker_rows)
+            gram = lookup.information_matrix(params, holder, noise_index=walker_rows)
     """
 
     def __init__(self, chunked_comp, table, *, n_nodes=-1, num_m_layers=2, k1=True,
@@ -126,10 +183,11 @@ class GBLookupComputations(GBGPUParallelModule):
 
     # ---- the band-engine contract --------------------------------------------------
     def setup_in_model(self, *args, **kwargs):
-        """No reference to build: the lookup is exact at every point."""
+        """No reference to build: the lookup is exact at every point. Returns ``False``."""
         return False
 
     def clear_in_model(self):
+        """No-op in-model teardown hook (band-engine contract)."""
         return None
 
     def fill_global_wdm(self, *args, **kwargs):
@@ -140,10 +198,29 @@ class GBLookupComputations(GBGPUParallelModule):
 
     def fill_lookup(self, params, templates, convert_to_ra_dec=None, data_index=None,
                     factors=None, band_slab_Nf=None, slab_min_f=None, **kwargs):
-        """Add ``factors[row] * h_row`` (the lookup template) into ``templates`` -- the flat
-        buffer of slabs ``(n_slots, 3, W, Nt_active)`` (``band_slab_Nf`` + ``slab_min_f``)
-        or the full active band. The chunked ``fill_global_wdm`` signature; its
-        ``grid_dim`` / ``m_band_half_width`` do not apply (the band is ``num_m_layers``)."""
+        """Add ``factors[row] * h_row`` (lookup template) into ``templates`` (``gb_lookup_fill``).
+
+        ``templates`` is the flat buffer of slabs ``(n_slots, 3, W, Nt_active)`` (with
+        ``band_slab_Nf`` + ``slab_min_f``) or of full-active-band rows ``(n_slots, 3,
+        Nf_active, Nt_active)``. The chunked ``fill_global_wdm`` signature; its
+        ``grid_dim`` / ``m_band_half_width`` do not apply (the band is ``num_m_layers``).
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical ICRS parameters.
+            templates (xp.ndarray): Flat float64 buffer on the backend, updated in place.
+            convert_to_ra_dec (bool, optional): Must be falsy.
+            data_index (xp.ndarray, optional): ``(num_bin,)`` slot per row. Default zeros.
+            factors (xp.ndarray, optional): ``(num_bin,)`` multipliers. Default ones.
+            band_slab_Nf (int, optional): Slab width ``W`` in layers. Default ``None``
+                (full active band).
+            slab_min_f (array-like, optional): ``(n_slots,)`` first (absolute) frequency
+                layer of each slab; :meth:`information_matrix` passes values in
+                ``[ind_min_f, ind_max_f - W + 1]``.
+            **kwargs: Ignored.
+
+        Raises:
+            NotImplementedError: If ``convert_to_ra_dec`` is truthy.
+        """
         if convert_to_ra_dec:
             raise NotImplementedError("the lookup fill takes ICRS params")
         xp = self.xp
@@ -179,6 +256,20 @@ class GBLookupComputations(GBGPUParallelModule):
         window width. Fills / returns ``c0_dense`` and ``c1_dense`` (n, W, Nt_active)
         complex -- c1 already carries the ``_c1_scale`` normalization of the FD path.
         Only the ``num_m_layers`` band around the carrier is written; the rest is zero.
+        Called by ``GBSignalHetComputations.setup_in_model`` (``SIGHET_REF_BUILD=lookup``).
+
+        Args:
+            params (xp.ndarray): ``(n, 9)`` physical ICRS parameters of the references.
+            w_lo (array-like): ``(n,)`` int32 active-local first layer of each window.
+            W (int): Window width in layers.
+            c0_dense (xp.ndarray, optional): ``(n, W, Nt_active)`` complex128 output buffer.
+                Default ``None`` allocates zeros.
+            c1_dense (xp.ndarray, optional): Same for c1.
+            with_c1 (bool, optional): Also compute c1. Default ``True``.
+
+        Returns:
+            tuple: ``(c0_dense, c1_dense)``; ``c1_dense`` is ``None`` when ``with_c1`` is
+            ``False``.
         """
         xp = self.xp
         x = xp.ascontiguousarray(xp.atleast_2d(xp.asarray(params, dtype=float)))
@@ -237,6 +328,9 @@ class GBLookupComputations(GBGPUParallelModule):
         months; its fddot step is off by ~6e2 at 30 d; with only f0 / fdot rescaled
         (the first version of this matrix) the 1e-6 rad angle steps left 7.5e-3 at
         30 d and 2.9e-2 at 6 months.
+
+        Returns:
+            np.ndarray: ``(9,)`` float64 host steps in the order above.
         """
         s, T = float(self.INFOMAT_PHASE_STEP), float(self.Tobs)
         return np.array([self.INFOMAT_AMP_STEP, s / T, s / T**2, s / T**3, s, s, s, s, s])
@@ -297,26 +391,39 @@ class GBLookupComputations(GBGPUParallelModule):
         ``.get()``; ``np.asarray`` refuses a cupy array).
 
         Args:
-            params: ``(n, 9)`` (or ``(9,)``) physical ICRS parameters ``(amp, f0 [Hz],
-                fdot [Hz/s], fddot [Hz/s^2], phi0, inc, psi, lam, beta)``, angles in rad,
-                ``lam`` / ``beta`` = ICRS right ascension / declination.
-            wdm_holder: the full-active-band holder (an ``AnalysisContainerArray``, or a
-                single ``AnalysisContainer``, wrapped as the chunked comp does) whose
-                ``linear_psd_arr[0]`` is ``(rows, 3, 3, Nf_active, Nt_active)`` XYZ invC.
-                A shared-psd mirror (``psd_row_index``) maps ``noise_index`` to its
-                rows; per-slot narrow invC slabs are refused.
-            inds: parameter columns to differentiate, in output order (default all).
-            param_eps: ``(nparams,)`` steps (host or device); default above.
-            noise_index: ``(n,)`` invC row (walker) per source; default row 0.
-            max_bytes: working-set budget per batch of sources (stepped fills,
-                derivatives and the gathered invC rows).
-            **kwargs: the chunked delegate's swap-kernel knobs (``grid_dim``,
+            params (xp.ndarray): ``(n, 9)`` (or ``(9,)``) physical ICRS parameters ``(amp,
+                f0 [Hz], fdot [Hz/s], fddot [Hz/s^2], phi0, inc, psi, lam, beta)``, angles in
+                rad, ``lam`` / ``beta`` = ICRS right ascension / declination.
+            wdm_holder (AnalysisContainerArray or AnalysisContainer): The full-active-band
+                holder (an ``AnalysisContainerArray``, or a single ``AnalysisContainer``,
+                wrapped as the chunked comp does) whose ``linear_psd_arr[0]`` is
+                ``(rows, 3, 3, Nf_active, Nt_active)`` XYZ invC. A shared-psd mirror
+                (``psd_row_index``) maps ``noise_index`` to its rows; per-slot narrow invC
+                slabs are refused.
+            inds (array-like, optional): Parameter columns to differentiate, in output
+                order. Default ``None`` (all).
+            param_eps (array-like, optional): ``(nparams,)`` steps (host or device).
+                Default ``None``: :meth:`info_matrix_param_eps`.
+            noise_index (array-like, optional): ``(n,)`` invC row (walker) per source.
+                Default ``None`` (row 0).
+            max_bytes (int, optional): Working-set budget per batch of sources (stepped
+                fills, derivatives and the gathered invC rows). Default ``256 * 2**20``.
+            **kwargs: The chunked delegate's swap-kernel knobs (``grid_dim``,
                 ``m_band_half_width``, ...), accepted for signature parity and ignored;
                 ``convert_to_ra_dec=True`` is refused (ICRS only).
 
         Returns:
-            ``(n, len(inds), len(inds))`` float64, symmetric, on the backend's device;
-            entry ``(a, b)`` in ``1 / (unit_a * unit_b)``.
+            xp.ndarray: ``(n, len(inds), len(inds))`` float64, symmetric, on the backend's
+            device; entry ``(a, b)`` in ``1 / (unit_a * unit_b)``.
+
+        Raises:
+            NotImplementedError: For ``convert_to_ra_dec=True``, or a holder with per-slot
+                narrow invC slabs (``band_slab_Nf`` set, no ``psd_row_index``).
+            ValueError: For a zero / non-finite step, a ``param_eps`` or default-step length
+                that does not match the parameter count, an invC buffer that is not a
+                whole number of ``(3, 3, Nf_active, Nt_active)`` planes, or a
+                ``noise_index`` length different from ``n``.
+            IndexError: If a resolved invC row is outside the holder's rows.
         """
         if kwargs.get("convert_to_ra_dec"):
             raise NotImplementedError("the lookup information matrix takes ICRS params")
@@ -401,11 +508,36 @@ class GBLookupComputations(GBGPUParallelModule):
 
     def get_ll_wdm(self, params, wdm_holder, data_index=None, noise_index=None,
                    convert_to_ra_dec=False, **kwargs):
-        """``ll = -d_d / 2 + d_h - h_h / 2`` per row (kernel convention, plain sums);
-        stores ``d_h_out`` / ``h_h_out`` / ``d_h_im_out``. ``wdm_holder`` exposes
-        ``linear_data_arr[0]`` / ``linear_psd_arr[0]`` (XYZ 3x3 invC), with optional
-        ``band_slab_Nf`` + ``slab_min_f`` (narrow per-slot slabs) and
-        ``psd_row_index`` (shared-psd mirror)."""
+        """Per-row lookup log-likelihood ``-d_d / 2 + d_h - h_h / 2`` (``gb_lookup_get_ll``).
+
+        Kernel convention, plain pixel sums against the XYZ inverse covariance; stores
+        ``d_h_out`` / ``h_h_out`` / ``d_h_im_out`` (and ``last_d_h`` / ``last_h_h`` /
+        ``last_d_h_im``). In the global fit this is the sig-het anchor
+        (``SIGHET_ANCHOR_ENGINE=lookup``) and, through :class:`GBLookupWDMComputations`,
+        the per-row GB likelihood under ``GB_LIKELIHOOD=lookup``.
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical ICRS parameters.
+            wdm_holder (AnalysisContainerArray): Any holder exposing ``linear_data_arr[0]``
+                (WDM data, 3 channels) and ``linear_psd_arr[0]`` (XYZ 3x3 invC), with
+                optional ``band_slab_Nf`` + ``slab_min_f`` (narrow per-slot slabs) and
+                ``psd_row_index`` (shared-psd mirror: invC rows on the full active band,
+                indexed through it). Not normalized here (a bare ``AnalysisContainer`` has
+                no ``linear_data_arr``).
+            data_index (xp.ndarray, optional): ``(num_bin,)`` data slot per row. Default
+                zeros.
+            noise_index (xp.ndarray, optional): ``(num_bin,)`` invC slot per row. Default
+                ``None`` uses ``data_index`` (not zeros).
+            convert_to_ra_dec (bool, optional): Must be falsy. Default ``False``.
+            **kwargs: Chunked-kernel knobs (``grid_dim``, ``m_band_half_width``, ...),
+                ignored.
+
+        Returns:
+            xp.ndarray: ``(num_bin,)`` float log-likelihoods on the backend.
+
+        Raises:
+            NotImplementedError: If ``convert_to_ra_dec`` is truthy.
+        """
         if convert_to_ra_dec:
             raise NotImplementedError("the lookup scorer takes ICRS params")
         xp = self.xp
@@ -451,6 +583,7 @@ class GBLookupComputations(GBGPUParallelModule):
 
 
 def _gbwdm_base():
+    """Return :class:`gbgpu.gbcomps.GBWDMComputations` (imported lazily; the class base below)."""
     from .gbcomps import GBWDMComputations
 
     return GBWDMComputations
@@ -464,10 +597,34 @@ class GBLookupWDMComputations(_gbwdm_base()):
     delegate), so nothing that type-dispatches on or writes attributes to the GB comp
     changes; only the per-row likelihood switches to the lookup.
 
-    Args: those of ``GBWDMComputations`` plus ``lookup_table`` (a ``WDMLookupTable`` or
-    a path, built at the grid's layer duration), ``lookup_n_nodes`` /
-    ``lookup_num_m_layers`` / ``lookup_k_coarse`` (see :class:`GBLookupComputations`) and
-    ``lookup_fill`` (default off: fills stay chunked-het).
+    Selected by ``GB_LIKELIHOOD=lookup`` in ``lisatools.globalfit.stock.erebor.variants.gb_no_fg``
+    (default ``chunked``; the production launchers do not set it). The amplitude-slope term
+    is always on (``k1=True``).
+
+    Args:
+        *args: Positional arguments of :class:`gbgpu.gbcomps.GBWDMComputations`
+            (``wdm_settings``, ``t_ref``).
+        lookup_table (WDMLookupTable or str): The lookup table, or a path to one, built at
+            the grid's layer duration. Keyword-only, required.
+        lookup_n_nodes (int, optional): ``n_nodes`` of :class:`GBLookupComputations`.
+            Default ``-1`` (AUTO).
+        lookup_num_m_layers (int, optional): ``num_m_layers``. Default ``2``.
+        lookup_k_coarse (bool, optional): ``k_coarse``. Default ``True``.
+        lookup_fill (bool, optional): Write the lookup template in :meth:`fill_global_wdm`
+            too. Default ``False`` (fills stay chunked-het).
+        **kwargs: Keyword arguments of :class:`gbgpu.gbcomps.GBWDMComputations`.
+
+    Example:
+        .. code-block:: python
+
+            from gbgpu.gblookupcomputations import GBLookupWDMComputations
+            from lisatools.wdm_lookup_store import resolve_gb_lookup_table
+
+            comp = GBLookupWDMComputations(
+                wdm, t_ref=t_ref, orbits=orbits, tdi_config="2nd generation",
+                tdi_type="XYZ", force_backend="cuda13x",
+                lookup_table=resolve_gb_lookup_table(None, table_dir),
+            )
     """
 
     def __init__(self, *args, lookup_table, lookup_n_nodes=-1, lookup_num_m_layers=2,
@@ -480,7 +637,16 @@ class GBLookupWDMComputations(_gbwdm_base()):
 
     def fill_global_wdm(self, params, templates, *args, **kwargs):
         """The chunked fill, or (``lookup_fill``) the lookup template -- then every GB
-        template the fit writes is the same model its likelihood scores."""
+        template the fit writes is the same model its likelihood scores.
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical parameters.
+            templates (xp.ndarray): Flat WDM template buffer, updated in place.
+            *args: Forwarded to the chosen fill.
+            **kwargs: Forwarded; with ``lookup_fill``, ``convert_to_ra_dec`` (default the
+                instance's ``convert_to_ra_dec`` attribute, else ``False``) converts the sky
+                columns ecliptic -> ICRS before :meth:`GBLookupComputations.fill_lookup`.
+        """
         if not self.lookup_fill:
             return super().fill_global_wdm(params, templates, *args, **kwargs)
         if kwargs.get("convert_to_ra_dec") is None:
@@ -497,8 +663,26 @@ class GBLookupWDMComputations(_gbwdm_base()):
 
     def get_ll_wdm(self, params, wdm_holder, data_index=None, noise_index=None,
                    convert_to_ra_dec=None, **kwargs):
-        """The chunked signature; ``grid_dim`` / layer-group / ``m_band_half_width`` knobs
-        of the chunked kernel do not apply (the lookup band is ``lookup_num_m_layers``)."""
+        """Per-row log-likelihood through the lookup scorer (the chunked signature).
+
+        ``grid_dim`` / layer-group / ``m_band_half_width`` knobs of the chunked kernel do
+        not apply (the lookup band is ``lookup_num_m_layers``).
+
+        Args:
+            params (xp.ndarray): ``(num_bin, 9)`` physical parameters.
+            wdm_holder (AnalysisContainerArray or AnalysisContainer): Holder normalized by
+                ``_as_wdm_holder`` (see :meth:`GBLookupComputations.get_ll_wdm`).
+            data_index, noise_index (xp.ndarray, optional): Per-row slots; ``noise_index``
+                defaults to ``data_index``.
+            convert_to_ra_dec (bool, optional): Ecliptic -> ICRS conversion of the sky
+                columns first. Default ``None``: the instance's ``convert_to_ra_dec``
+                attribute, else ``False``.
+            **kwargs: Ignored.
+
+        Returns:
+            xp.ndarray: ``(num_bin,)`` values of ``-d_d / 2 + d_h - h_h / 2`` (``d_d`` from
+            this object); ``d_h_out`` / ``h_h_out`` / ``d_h_im_out`` are copied here.
+        """
         if convert_to_ra_dec is None:
             convert_to_ra_dec = bool(getattr(self, "convert_to_ra_dec", False))
         x = self.xp.asarray(self.xp.atleast_2d(params), dtype=float).copy()
