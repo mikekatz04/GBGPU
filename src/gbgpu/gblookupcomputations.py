@@ -34,7 +34,8 @@ Classes:
   (``SIGHET_INFOMAT_ENGINE=lookup``, ``GB_CHOL_CACHE=1``).
 * :class:`GBLookupWDMComputations`: a chunked ``GBWDMComputations`` whose per-row
   ``get_ll_wdm`` is the lookup scorer: the production per-row GB and VGB likelihood
-  (``GB_LIKELIHOOD=lookup``, exported by the 9-month and flagship launchers; built by
+  (``GB_LIKELIHOOD=lookup``, the default of the LAT settings blocks and of the flagship
+  launcher template; the 9-month launcher exports ``chunked``; built by
   ``lisatools.globalfit.stock.erebor.gb.build_gb_wdm_comp``). RJ births and removals and
   every score outside an in-model block go through it; fills, swaps and the F-stat stay
   on the chunked computation.
@@ -600,8 +601,8 @@ class GBLookupWDMComputations(_gbwdm_base()):
     changes; only the per-row likelihood switches to the lookup.
 
     Selected by ``GB_LIKELIHOOD=lookup`` (``lisatools.globalfit.stock.erebor.gb.build_gb_wdm_comp``,
-    the GB and VGB branches; the code default is ``chunked``, the production launchers export
-    ``lookup``). The amplitude-slope term is always on (``k1=True``).
+    the GB and VGB branches; ``lookup`` is the default, the 9-month launcher exports
+    ``chunked``). The amplitude-slope term is always on (``k1=True``).
 
     Args:
         *args: Positional arguments of :class:`gbgpu.gbcomps.GBWDMComputations`
