@@ -204,9 +204,12 @@ class GBLookupComputations(GBGPUParallelModule):
                     factors=None, band_slab_Nf=None, slab_min_f=None, **kwargs):
         """Add ``factors[row] * h_row`` (lookup template) into ``templates`` (``gb_lookup_fill``).
 
-        ``templates`` is the flat buffer of slabs ``(n_slots, 3, W, Nt_active)`` (with
+        ``templates`` is the buffer of slabs ``(n_slots, 3, W, Nt_active)`` (with
         ``band_slab_Nf`` + ``slab_min_f``) or of full-active-band rows ``(n_slots, 3,
-        Nf_active, Nt_active)``. The chunked ``fill_global_wdm`` signature; its
+        Nf_active, Nt_active)``: flat or shaped (C-contiguous, written in place), or
+        wrapped as the chunked fill accepts it (a single-shard holder with
+        ``linear_data_arr``, a lisatools ``DomainBase`` such as a ``WDMSignal``, an
+        ``AnalysisContainer``). The chunked ``fill_global_wdm`` signature; its
         ``grid_dim`` / ``m_band_half_width`` do not apply (the band is ``num_m_layers``).
 
         Args:
@@ -231,6 +234,21 @@ class GBLookupComputations(GBGPUParallelModule):
         x = xp.ascontiguousarray(xp.atleast_2d(xp.asarray(params, dtype=float)))
         num_bin, nparams = x.shape
         W = self.Nf_active if (band_slab_Nf is None or slab_min_f is None) else int(band_slab_Nf)
+        # the chunked fill's buffer contract: a single-shard holder, a lisatools
+        # DomainBase (e.g. a WDMSignal), an AnalysisContainer or the array itself,
+        # flat or shaped; written in place, so a shaped array is viewed flat
+        if hasattr(templates, "linear_data_arr"):
+            if len(templates.linear_data_arr) != 1:
+                raise NotImplementedError("fill_lookup writes into linear_data_arr[0]: single shard only")
+            templates = templates.linear_data_arr[0]
+        elif hasattr(templates, "arr") and hasattr(templates, "settings"):
+            templates = templates.arr
+        elif hasattr(templates, "data_res_arr"):
+            templates = self.chunked._as_wdm_holder(templates).linear_data_arr[0]
+        if templates.ndim != 1:
+            if not templates.flags.c_contiguous:
+                raise ValueError("fill_lookup needs a C-contiguous template buffer (it writes in place)")
+            templates = templates.reshape(-1)
         buf = templates
         n_slots = int(buf.size // (3 * W * self.Nt_active))
         di = xp.zeros(num_bin, dtype=xp.int32) if data_index is None else \

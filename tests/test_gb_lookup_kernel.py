@@ -195,6 +195,31 @@ class GBLookupKernelTest(unittest.TestCase):
                            band_slab_Nf=W, slab_min_f=self.slab_lo)
         self.assertLess(np.abs(buf).max(), 1e-12 * np.abs(ref).max())
 
+    def test_subclass_lookup_fill_takes_a_shaped_buffer_and_a_signal(self):
+        """``GBLookupWDMComputations(lookup_fill=True).fill_global_wdm`` writes the same
+        template into a flat buffer, a ``(3, Nf_active, Nt_active)`` array and a
+        ``WDMSignal`` (the chunked fill's buffer contract; the LATW 09 notebook passes
+        a signal)."""
+        from lisatools.domains import WDMSignal
+        from gbgpu.gblookupcomputations import GBLookupWDMComputations
+        ch = self.chunked
+        sub = GBLookupWDMComputations(
+            self.wdm, t_ref=ch.t_ref, Nt_sub=256, n_pad=32, N_sparse=256, N_cp_sig=48,
+            N_cp_orbit=32, orbits=ch.orbits, tdi_config="2nd generation", force_backend="cpu",
+            d_d=0.0, tdi_type="XYZ", lookup_table=self.table, lookup_fill=True)
+        sub.convert_to_ra_dec = False
+        T, Nfa = int(self.wdm.Nt_active), int(self.wdm.ind_max_f - self.wdm.ind_min_f + 1)
+        p1, one = self.p[:1], np.ones(1)
+        flat = np.zeros(3 * Nfa * T)
+        sub.fill_global_wdm(p1, flat, factors=one)
+        shaped = np.zeros((3, Nfa, T))
+        sub.fill_global_wdm(p1, shaped, factors=one)
+        sig = WDMSignal(np.zeros((3, Nfa, T)), self.wdm)
+        sub.fill_global_wdm(p1, sig, factors=one)
+        self.assertGreater(np.abs(flat).max(), 0.0)
+        np.testing.assert_array_equal(shaped.reshape(-1), flat)
+        np.testing.assert_array_equal(np.asarray(sig.arr).reshape(-1), flat)
+
     def test_k1_term_is_load_bearing(self):
         with_k1 = self._rel(self._lk())["h_h"]
         without = self._rel(self._lk(k1=False))["h_h"]
