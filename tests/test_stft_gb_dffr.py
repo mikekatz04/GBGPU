@@ -149,6 +149,7 @@ class _DFFRCase:
             tdi_config=TDIConfig(tdi, force_backend=backend_name),
             force_backend=backend_name,
             n_side_bins=n_side_bins,
+            linear_envelope=linear_envelope,
             response="dffr",
             first_order_delays=first_order_delays,
         )
@@ -807,6 +808,8 @@ class DFFRAgainstExistingResponseTest(unittest.TestCase):
                     tdi_config=TDIConfig(tdi, force_backend="cpu"),
                     force_backend="cpu",
                     n_side_bins=N_SIDE_BINS,
+                    linear_envelope=False,
+                    response="tdi_on_the_fly",
                 )
                 dffr = _host(case.fill_global(GB_PARAMS)).ravel()
                 column = case.xp.zeros((1, 3, settings.NT, settings.NF_active), dtype=np.complex128)
@@ -1145,12 +1148,13 @@ class DFFRArgumentTest(unittest.TestCase):
         comp = self._comp(tdi_config="2nd generation")
         with self.assertRaises(ValueError):
             comp.tdi_config = TDIConfig(custom, force_backend="cpu")
-        # * The default response takes any combination, as before.
+        # * The TDI-on-the-fly response takes any combination, as before.
         STFTGBComputations(
             stft_comps=None,
             T=1.0,
             force_backend="cpu",
             tdi_config=TDIConfig(custom, force_backend="cpu"),
+            response="tdi_on_the_fly",
         )
 
     def test_group_without_kinematics_raises(self):

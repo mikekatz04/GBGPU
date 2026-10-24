@@ -1018,11 +1018,12 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
     typically exceeds the astrophysical fdot) is included; set ``False`` to
     recover the legacy astrophysical-``get_f``/``get_fdot`` behaviour.
 
-    ``response`` selects how the pixels are computed: ``"tdi_on_the_fly"`` (default), as above,
-    or ``"dffr"``, the Direct Fast Fresnel Response, through the ``gb_dffr_*`` kernels on the
-    kinematics table of the bound group (``cpp_kinematics``). DFFR takes ``first_order_delays``,
-    which the default response ignores. It computes the XYZ channels only, needs the 1st or 2nd
-    generation combinations of ``TDIConfig``, and does not read ``T``,
+    ``response`` selects how the pixels are computed: ``"dffr"`` (default), the Direct Fast
+    Fresnel Response, through the ``gb_dffr_*`` kernels on the kinematics table of the bound
+    group (``cpp_kinematics``), or ``"tdi_on_the_fly"``, the response described above. DFFR
+    takes ``first_order_delays``, which the TDI-on-the-fly response ignores. It computes the XYZ
+    channels only, needs the 1st or 2nd generation combinations of ``TDIConfig``, and does not
+    read ``T``,
     ``window_factor``, ``freq_from_tdi_phase``, ``use_midpoint`` or the Fisher's ``astro_track``.
     Usage and limits: ``docs/response/dffr/README.md`` in lisa-analysis-tools.
     """
@@ -1040,9 +1041,9 @@ class STFTGBComputations(_GBGradEpsMixin, FastLISAResponseParallelModule):
     _DFFR_FISHER_ROWS_PER_PASS = 4
 
     def __init__(self, stft_comps, T, t_ref=0.0, orbits=None, tdi_config=None,
-                 force_backend=None, n_side_bins=2, window_factor=1.0,
+                 force_backend=None, n_side_bins=12, window_factor=1.0,
                  freq_from_tdi_phase=True, window_alpha=None, use_midpoint=None,
-                 linear_envelope=None, response="tdi_on_the_fly", first_order_delays=True):
+                 linear_envelope=True, response="dffr", first_order_delays=False):
         super().__init__(force_backend=force_backend)
         if response not in STFT_RESPONSES:
             raise ValueError(f"response must be one of {STFT_RESPONSES}, got {response!r}.")

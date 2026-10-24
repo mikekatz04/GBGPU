@@ -121,7 +121,7 @@ class _STFTGBFixture(unittest.TestCase):
         return STFTGBComputations(
             stft_comps=shim, T=self.Tobs, t_ref=0.0, orbits=None, tdi_config=None,
             force_backend="cpu", n_side_bins=n_side_bins, window_factor=window_factor,
-            freq_from_tdi_phase=freq_from_tdi_phase,
+            freq_from_tdi_phase=freq_from_tdi_phase, response="tdi_on_the_fly",
         )
 
 
@@ -629,14 +629,14 @@ class _EnvelopeGroupShim(_StftCompsShim):
 
 
 class STFTGBResponseTest(_STFTGBFixture):
-    """The response flag on the default response: it stays the TDI-on-the-fly response, bit for
-    bit, whatever the DFFR setting, and its derivative envelope stays off by default. The DFFR
+    """The response flag on the TDI-on-the-fly response: it stays that response, bit for bit,
+    whatever the DFFR setting, and its derivative envelope stays off by default. The DFFR
     response is tested in test_stft_gb_dffr.py."""
 
     _fisher_case = STFTGBFisherKernelTest._fisher_case
 
     def _explicit(self, group):
-        """The default response named explicitly, with the DFFR setting it must ignore."""
+        """The TDI-on-the-fly response with the DFFR setting it must ignore."""
         return STFTGBComputations(
             stft_comps=group, T=self.Tobs, t_ref=0.0, orbits=None, tdi_config=None,
             force_backend="cpu", n_side_bins=3, response="tdi_on_the_fly",
