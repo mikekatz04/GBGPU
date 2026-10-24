@@ -37,8 +37,9 @@ Classes:
   (``GB_LIKELIHOOD=lookup``, the default of the LAT settings blocks and of the flagship
   launcher template; the 9-month launcher exports ``chunked``; built by
   ``lisatools.globalfit.stock.erebor.gb.build_gb_wdm_comp``). RJ births and removals and
-  every score outside an in-model block go through it; fills, swaps and the F-stat stay
-  on the chunked computation.
+  every score outside an in-model block go through it, and with ``lookup_fill`` (LAT's
+  default) the fills write the lookup template; swaps and the F-stat grid scoring stay on
+  the chunked computation.
 
 Knob read here: ``GB_LOOKUP_NODE_SPACING_DAYS`` (default ``2.8``; the automatic control-point
 spacing, see :class:`GBLookupComputations`). Parameters are the physical ICRS rows
@@ -614,7 +615,9 @@ class GBLookupWDMComputations(_gbwdm_base()):
         lookup_num_m_layers (int, optional): ``num_m_layers``. Default ``2``.
         lookup_k_coarse (bool, optional): ``k_coarse``. Default ``True``.
         lookup_fill (bool, optional): Write the lookup template in :meth:`fill_global_wdm`
-            too. Default ``False`` (fills stay chunked-het).
+            too. Default ``False`` here; LAT's ``build_gb_wdm_comp`` passes ``True`` by
+            default (``GB_LOOKUP_FILL``), so the fit's adds and removals write the template
+            its likelihood scored.
         **kwargs: Keyword arguments of :class:`gbgpu.gbcomps.GBWDMComputations`.
 
     Example:
