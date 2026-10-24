@@ -33,9 +33,11 @@ Classes:
   (``SIGHET_ANCHOR_ENGINE=lookup``) and the information matrix
   (``SIGHET_INFOMAT_ENGINE=lookup``, ``GB_CHOL_CACHE=1``).
 * :class:`GBLookupWDMComputations`: a chunked ``GBWDMComputations`` whose per-row
-  ``get_ll_wdm`` is the lookup scorer; the documented alternative behind
-  ``GB_LIKELIHOOD=lookup`` (``lisatools.globalfit.stock.erebor.variants.gb_no_fg``), not
-  set by the production launchers.
+  ``get_ll_wdm`` is the lookup scorer: the production per-row GB and VGB likelihood
+  (``GB_LIKELIHOOD=lookup``, exported by the 9-month and flagship launchers; built by
+  ``lisatools.globalfit.stock.erebor.gb.build_gb_wdm_comp``). RJ births and removals and
+  every score outside an in-model block go through it; fills, swaps and the F-stat stay
+  on the chunked computation.
 
 Knob read here: ``GB_LOOKUP_NODE_SPACING_DAYS`` (default ``2.8``; the automatic control-point
 spacing, see :class:`GBLookupComputations`). Parameters are the physical ICRS rows
@@ -597,9 +599,9 @@ class GBLookupWDMComputations(_gbwdm_base()):
     delegate), so nothing that type-dispatches on or writes attributes to the GB comp
     changes; only the per-row likelihood switches to the lookup.
 
-    Selected by ``GB_LIKELIHOOD=lookup`` in ``lisatools.globalfit.stock.erebor.variants.gb_no_fg``
-    (default ``chunked``; the production launchers do not set it). The amplitude-slope term
-    is always on (``k1=True``).
+    Selected by ``GB_LIKELIHOOD=lookup`` (``lisatools.globalfit.stock.erebor.gb.build_gb_wdm_comp``,
+    the GB and VGB branches; the code default is ``chunked``, the production launchers export
+    ``lookup``). The amplitude-slope term is always on (``k1=True``).
 
     Args:
         *args: Positional arguments of :class:`gbgpu.gbcomps.GBWDMComputations`
