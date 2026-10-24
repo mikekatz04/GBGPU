@@ -58,7 +58,6 @@ SAMPLE_DT = 10.0
 SEGMENT_DT = 6 * 3600.0
 NUM_SAMPLES = int(24 * SEGMENT_DT / SAMPLE_DT)
 N_SIDE_BINS = 3
-CHIRP_RATE_FLOOR = 1.0e-22
 # ? Bounds of the comparison with the existing response, set before measuring: a sign or a
 # ? conjugation gives an overlap near zero or negative, and the norm ratio catches a factor 2 (a
 # ? ratio of 4 or 1/4); the two responses' own approximations stay far inside both.
@@ -138,7 +137,6 @@ class _DFFRCase:
         n_side_bins=N_SIDE_BINS,
         linear_envelope=True,
         first_order_delays=True,
-        chirp_rate_floor=CHIRP_RATE_FLOOR,
         t_ref=0.0,
     ):
         self.settings = _settings(backend_name)
@@ -153,7 +151,6 @@ class _DFFRCase:
             n_side_bins=n_side_bins,
             response="dffr",
             first_order_delays=first_order_delays,
-            chirp_rate_floor=chirp_rate_floor,
         )
         self.xp = self.comp.xp
         self.table = self._table(first_midpoint)
@@ -166,7 +163,6 @@ class _DFFRCase:
             generation,
             linear_envelope,
             first_order_delays,
-            chirp_rate_floor,
         )
         self.n_side_bins = n_side_bins
         self.wrap = self.comp.backend.GBComputationGroupWrap()
@@ -505,15 +501,13 @@ class DFFRWiringTest(unittest.TestCase):
     backend_name = "cpu"
 
     # * Two settings that differ in every argument the comp passes: generation, envelope, delays,
-    # * floor, t_ref, window and window starts. A floor of 1e-15 Hz/s moves (d|h) and (h|h) of
-    # * these sources by 6e-9 of their peak (measured 2026-10-19), so a misplaced floor would show.
+    # * t_ref, window and window starts.
     SETTINGS = (
         dict(
             options=dict(
                 tdi="1st generation",
                 linear_envelope=False,
                 first_order_delays=False,
-                chirp_rate_floor=1.0e-15,
                 t_ref=1234.5,
                 window_alpha=0.0,
             ),
@@ -524,7 +518,6 @@ class DFFRWiringTest(unittest.TestCase):
                 tdi="2nd generation",
                 linear_envelope=True,
                 first_order_delays=True,
-                chirp_rate_floor=CHIRP_RATE_FLOOR,
                 t_ref=0.0,
                 window_alpha=0.5,
                 use_midpoint=True,
@@ -775,9 +768,7 @@ class DFFREnvelopeAndReplicaTest(unittest.TestCase):
         keeps the response and its settings and gives the same outputs bit for bit."""
         from lisatools.utils.devicereplicas import _build_gb_comp_replica
 
-        case = _DFFRCase(
-            "cpu", tdi="2nd generation", first_order_delays=False, chirp_rate_floor=1.0e-15
-        )
+        case = _DFFRCase("cpu", tdi="2nd generation", first_order_delays=False)
         reference = case.get_ll(GB_PARAMS)
         replicas = {
             "args and kwargs": type(case.comp)(*case.comp.args, **case.comp.kwargs),
@@ -790,7 +781,6 @@ class DFFREnvelopeAndReplicaTest(unittest.TestCase):
                 self.assertIsNot(replica, case.comp)
                 self.assertEqual(replica.response, "dffr")
                 self.assertFalse(replica.first_order_delays)
-                self.assertEqual(replica.chirp_rate_floor, 1.0e-15)
                 self.assertEqual(replica.tdi_config.generation, 2)
                 replica.stft_comps = case.shim
                 replica.get_ll_stft(GB_PARAMS)
@@ -1137,7 +1127,7 @@ class DFFRArgumentTest(unittest.TestCase):
             _DFFRCase("cpu").entry_swap(GB_PARAMS, GB_PARAMS_B, rows_per_pass=24)
         case = _DFFRCase("cpu")
         with self.assertRaises(ValueError):
-            case.entry_get_ll(GB_PARAMS, knobs=(0.0, N_SIDE_BINS, 3, True, True, CHIRP_RATE_FLOOR))
+            case.entry_get_ll(GB_PARAMS, knobs=(0.0, N_SIDE_BINS, 3, True, True))
         # ! A table of another grid would place every segment at the wrong time.
         settings = _settings("cpu")
         with self.assertRaises(ValueError):
@@ -1150,8 +1140,6 @@ class DFFRArgumentTest(unittest.TestCase):
         custom = TDIConfig("2nd generation", force_backend="cpu").tdi_combinations[:-1]
         with self.assertRaises(ValueError):
             self._comp(tdi_config=TDIConfig(custom, force_backend="cpu"))
-        with self.assertRaises(ValueError):
-            self._comp(chirp_rate_floor=0.0)
         with self.assertRaises(ValueError):
             self._comp(stft_comps=_AETGroup())
         comp = self._comp(tdi_config="2nd generation")

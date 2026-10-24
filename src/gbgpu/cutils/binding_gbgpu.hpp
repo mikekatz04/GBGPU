@@ -760,7 +760,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<double> params_all,
         array_type<int> data_index_all, array_type<int> noise_index_all,
         int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-        bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+        bool linear_envelope, bool first_order_delays,
         array_type<int> start_freq_inds);
 
     void gb_dffr_fill_global(
@@ -770,7 +770,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<double> params_all, array_type<int> data_index_all,
         array_type<double> factors_all,
         int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-        bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+        bool linear_envelope, bool first_order_delays,
         array_type<int> start_freq_inds);
 
     void gb_dffr_swap_ll(
@@ -782,7 +782,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<double> params_add_all, array_type<double> params_remove_all,
         array_type<int> data_index_all, array_type<int> noise_index_all,
         int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-        bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+        bool linear_envelope, bool first_order_delays,
         int rows_per_pass, array_type<int> start_freq_inds);
 
     void gb_dffr_get_fstat_ll(
@@ -793,7 +793,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<double> params_all,
         array_type<int> data_index_all, array_type<int> noise_index_all,
         int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-        bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+        bool linear_envelope, bool first_order_delays,
         int rows_per_pass, array_type<int> start_freq_inds);
 
     void gb_dffr_get_ll_grad(
@@ -804,7 +804,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<int> data_index_all, array_type<int> noise_index_all,
         array_type<double> param_eps,
         int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-        bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+        bool linear_envelope, bool first_order_delays,
         array_type<int> start_freq_inds);
 
     void gb_dffr_swap_ll_grad(
@@ -815,7 +815,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<int> data_index_all, array_type<int> noise_index_all,
         array_type<double> param_eps_add, array_type<double> param_eps_remove,
         int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-        bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+        bool linear_envelope, bool first_order_delays,
         int rows_per_pass, array_type<int> start_freq_inds);
 
     // info_out is num_bin * num_derivs^2, row-major, as for gb_stft_information_matrix.
@@ -827,7 +827,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         array_type<int> inds, array_type<double> param_eps,
         int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins,
         int tdi_generation, bool linear_envelope, bool first_order_delays,
-        double chirp_rate_floor, bool easy_central_difference, int rows_per_pass,
+        bool easy_central_difference, int rows_per_pass,
         array_type<int> start_freq_inds);
 
     // Diagnostics of the DFFR response: the compact template and the segment table.
@@ -837,7 +837,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         STFTDomainWrap *stft_wrap,
         array_type<double> params_all, int num_bin, int nparams, double t_ref,
         int n_side_bins, int tdi_generation, bool linear_envelope,
-        bool first_order_delays, double chirp_rate_floor);
+        bool first_order_delays);
 
     void gb_dffr_segment_table(
         array_type<double> effective_frequency, array_type<double> chirp_rate,
@@ -851,7 +851,7 @@ class GBComputationGroupWrap: public GBComputationGroup, public ReturnPointerBas
         STFTDomainWrap *stft_wrap,
         array_type<double> params_all, int num_bin, int nparams, double t_ref,
         int n_side_bins, int tdi_generation, bool linear_envelope,
-        bool first_order_delays, double chirp_rate_floor);
+        bool first_order_delays);
 
     void gb_wdm_het_swap_ll(
         array_type<double> d_h_add_out, array_type<double> d_h_remove_out,

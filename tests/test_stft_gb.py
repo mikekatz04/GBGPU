@@ -630,17 +630,17 @@ class _EnvelopeGroupShim(_StftCompsShim):
 
 class STFTGBResponseTest(_STFTGBFixture):
     """The response flag on the default response: it stays the TDI-on-the-fly response, bit for
-    bit, whatever the DFFR settings, and its derivative envelope stays off by default. The DFFR
+    bit, whatever the DFFR setting, and its derivative envelope stays off by default. The DFFR
     response is tested in test_stft_gb_dffr.py."""
 
     _fisher_case = STFTGBFisherKernelTest._fisher_case
 
     def _explicit(self, group):
-        """The default response named explicitly, with DFFR settings it must ignore."""
+        """The default response named explicitly, with the DFFR setting it must ignore."""
         return STFTGBComputations(
             stft_comps=group, T=self.Tobs, t_ref=0.0, orbits=None, tdi_config=None,
             force_backend="cpu", n_side_bins=3, response="tdi_on_the_fly",
-            first_order_delays=False, chirp_rate_floor=1.0e-15,
+            first_order_delays=False,
         )
 
     def _outputs(self, gb):

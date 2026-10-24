@@ -518,7 +518,7 @@ void GBComputationGroupWrap::gb_dffr_get_ll(
     array_type<double> params_all,
     array_type<int> data_index_all, array_type<int> noise_index_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     array_type<int> start_freq_inds)
 {
     gb_dffr_get_ll_wrap(
@@ -529,7 +529,7 @@ void GBComputationGroupWrap::gb_dffr_get_ll(
         return_pointer_and_check_length(data_index_all, "data_index_all", num_bin, 1),
         return_pointer_and_check_length(noise_index_all, "noise_index_all", num_bin, 1),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor,
+        linear_envelope, first_order_delays,
         stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -540,7 +540,7 @@ void GBComputationGroupWrap::gb_dffr_fill_global(
     array_type<double> params_all, array_type<int> data_index_all,
     array_type<double> factors_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     array_type<int> start_freq_inds)
 {
     gb_dffr_fill_global_wrap(
@@ -550,7 +550,7 @@ void GBComputationGroupWrap::gb_dffr_fill_global(
         return_pointer_and_check_length(data_index_all, "data_index_all", num_bin, 1),
         return_pointer_and_check_length(factors_all, "factors_all", num_bin, 1),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor,
+        linear_envelope, first_order_delays,
         stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -563,7 +563,7 @@ void GBComputationGroupWrap::gb_dffr_swap_ll(
     array_type<double> params_add_all, array_type<double> params_remove_all,
     array_type<int> data_index_all, array_type<int> noise_index_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int rows_per_pass, array_type<int> start_freq_inds)
 {
     gb_dffr_swap_ll_wrap(
@@ -578,7 +578,7 @@ void GBComputationGroupWrap::gb_dffr_swap_ll(
         return_pointer_and_check_length(data_index_all, "data_index_all", num_bin, 1),
         return_pointer_and_check_length(noise_index_all, "noise_index_all", num_bin, 1),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor,
+        linear_envelope, first_order_delays,
         rows_per_pass, stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -590,7 +590,7 @@ void GBComputationGroupWrap::gb_dffr_get_fstat_ll(
     array_type<double> params_all,
     array_type<int> data_index_all, array_type<int> noise_index_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int rows_per_pass, array_type<int> start_freq_inds)
 {
     gb_dffr_get_fstat_ll_wrap(
@@ -603,7 +603,7 @@ void GBComputationGroupWrap::gb_dffr_get_fstat_ll(
         return_pointer_and_check_length(data_index_all, "data_index_all", num_bin, 1),
         return_pointer_and_check_length(noise_index_all, "noise_index_all", num_bin, 1),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor,
+        linear_envelope, first_order_delays,
         rows_per_pass, stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -615,7 +615,7 @@ void GBComputationGroupWrap::gb_dffr_get_ll_grad(
     array_type<int> data_index_all, array_type<int> noise_index_all,
     array_type<double> param_eps,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     array_type<int> start_freq_inds)
 {
     gb_dffr_get_ll_grad_wrap(
@@ -626,7 +626,7 @@ void GBComputationGroupWrap::gb_dffr_get_ll_grad(
         return_pointer_and_check_length(noise_index_all, "noise_index_all", num_bin, 1),
         return_pointer_and_check_length(param_eps, "param_eps", nparams, 1),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor,
+        linear_envelope, first_order_delays,
         stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -638,7 +638,7 @@ void GBComputationGroupWrap::gb_dffr_swap_ll_grad(
     array_type<int> data_index_all, array_type<int> noise_index_all,
     array_type<double> param_eps_add, array_type<double> param_eps_remove,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int rows_per_pass, array_type<int> start_freq_inds)
 {
     gb_dffr_swap_ll_grad_wrap(
@@ -652,7 +652,7 @@ void GBComputationGroupWrap::gb_dffr_swap_ll_grad(
         return_pointer_and_check_length(param_eps_add,     "param_eps_add",     nparams, 1),
         return_pointer_and_check_length(param_eps_remove,  "param_eps_remove",  nparams, 1),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor,
+        linear_envelope, first_order_delays,
         rows_per_pass, stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -664,7 +664,7 @@ void GBComputationGroupWrap::gb_dffr_information_matrix(
     array_type<int> inds, array_type<double> param_eps,
     int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins,
     int tdi_generation, bool linear_envelope, bool first_order_delays,
-    double chirp_rate_floor, bool easy_central_difference, int rows_per_pass,
+    bool easy_central_difference, int rows_per_pass,
     array_type<int> start_freq_inds)
 {
     gb_dffr_information_matrix_wrap(
@@ -675,7 +675,7 @@ void GBComputationGroupWrap::gb_dffr_information_matrix(
         return_pointer_and_check_length(inds, "inds", num_derivs, 1),
         return_pointer_and_check_length(param_eps, "param_eps", nparams, 1),
         num_bin, nparams, num_derivs, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor, easy_central_difference,
+        linear_envelope, first_order_delays, easy_central_difference,
         rows_per_pass, stft_start_freq_pointer(start_freq_inds));
 }
 
@@ -685,7 +685,7 @@ void GBComputationGroupWrap::gb_dffr_fill_template(
     STFTDomainWrap *stft_wrap,
     array_type<double> params_all, int num_bin, int nparams, double t_ref,
     int n_side_bins, int tdi_generation, bool linear_envelope,
-    bool first_order_delays, double chirp_rate_floor)
+    bool first_order_delays)
 {
     const int num_times = fresnel_wrap->fresnel->num_times;
     gb_dffr_fill_template_wrap(
@@ -695,7 +695,7 @@ void GBComputationGroupWrap::gb_dffr_fill_template(
         &kinematics_wrap->table, fresnel_wrap->fresnel, stft_wrap->domain,
         return_pointer_and_check_length(params_all, "params_all", nparams, num_bin),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor);
+        linear_envelope, first_order_delays);
 }
 
 void GBComputationGroupWrap::gb_dffr_segment_table(
@@ -710,7 +710,7 @@ void GBComputationGroupWrap::gb_dffr_segment_table(
     STFTDomainWrap *stft_wrap,
     array_type<double> params_all, int num_bin, int nparams, double t_ref,
     int n_side_bins, int tdi_generation, bool linear_envelope,
-    bool first_order_delays, double chirp_rate_floor)
+    bool first_order_delays)
 {
     const int segments = num_bin * fresnel_wrap->fresnel->num_times;
     gb_dffr_segment_table_wrap(
@@ -726,7 +726,7 @@ void GBComputationGroupWrap::gb_dffr_segment_table(
         &kinematics_wrap->table, fresnel_wrap->fresnel, stft_wrap->domain,
         return_pointer_and_check_length(params_all, "params_all", nparams, num_bin),
         num_bin, nparams, t_ref, n_side_bins, tdi_generation,
-        linear_envelope, first_order_delays, chirp_rate_floor);
+        linear_envelope, first_order_delays);
 }
 
 void GBComputationGroupWrap::gb_wdm_het_swap_ll(
@@ -1469,7 +1469,7 @@ void gbgpu_part(nb::module_ &m) {
     .def("gb_dffr_get_ll", &GBComputationGroupWrap::gb_dffr_get_ll,
          "DFFR GB get_ll: (d|h),(h|h) per binary on the consumer of gb_stft_get_ll, with the DFFR "
          "response on the grid's kinematics table. tdi_generation is 1 or 2 (TDIConfig.generation); "
-         "linear_envelope, first_order_delays and chirp_rate_floor are the DFFR settings.")
+         "linear_envelope and first_order_delays are the DFFR settings.")
     .def("gb_dffr_fill_global", &GBComputationGroupWrap::gb_dffr_fill_global,
          "DFFR GB fill_global: adds factor times the DFFR pixel of every binary into the template "
          "grid (num_templates, nchannels, num_times, num_freqs), as gb_stft_fill_global does.")

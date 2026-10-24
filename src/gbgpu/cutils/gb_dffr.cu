@@ -1,10 +1,9 @@
 // gb_dffr.cu -- the DFFR response of galactic binaries: the gb_dffr_* entry points of gb_dffr.hh,
 // which instantiate LAT's DFFR tile (lat_dffr_kernels.hh) and the STFT consumers
-// (lat_stft_kernels.hh) with GBDFFRSource. A translation unit of its own, so that the unit of the
-// existing response, gb_tdi_on_the_fly.cu, compiles as before.
+// (lat_stft_kernels.hh) with GBDFFRSource of gb_dffr.hh. A translation unit of its own, so that
+// the unit of the existing response, gb_tdi_on_the_fly.cu, compiles as before.
 
 #include "gb_dffr.hh"
-#include "gb_dffr_source.hh"
 #include "lat_dffr_kernels.hh"
 
 #include <stdexcept>
@@ -21,7 +20,7 @@ DFFRTileInputs<GBDFFRSource> gb_dffr_inputs(KinematicsTable *kinematics, STFTFre
                                             STFTDomain *stft, int nparams, double t_ref,
                                             int n_side_bins, int tdi_generation,
                                             bool linear_envelope, bool first_order_delays,
-                                            double chirp_rate_floor, STFTDomain **stft_launch)
+                                            STFTDomain **stft_launch)
 {
     if (nparams != GBDFFRSource::num_params)
         throw std::invalid_argument("gb_dffr: a galactic binary has 9 parameters, got " +
@@ -30,7 +29,7 @@ DFFRTileInputs<GBDFFRSource> gb_dffr_inputs(KinematicsTable *kinematics, STFTFre
     model.t_ref = t_ref;
     return dffr_tile_inputs<GBDFFRSource>(fresnel, stft, kinematics, model, n_side_bins,
                                           tdi_generation, linear_envelope, first_order_delays,
-                                          chirp_rate_floor, stft_launch);
+                                          stft_launch);
 }
 
 // * True for the 16-row tile of the two-template consumers, whose default is 32 rows; on the CPU
@@ -62,13 +61,13 @@ void gb_dffr_get_ll_wrap(
     KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
     double *params_all, int *data_index_all, int *noise_index_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     if (num_bin < 1)
         return;
     stft_get_ll_launch<GBDFFRTile<DFFR_ROWS_PER_PASS>>(
@@ -81,13 +80,13 @@ void gb_dffr_fill_global_wrap(
     KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
     double *params_all, int *data_index_all, double *factors_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     if (num_bin < 1)
         return;
     // ? The STFT grid is the active band, so the fill writes the active-band layout.
@@ -103,13 +102,13 @@ void gb_dffr_swap_ll_wrap(
     double *params_add_all, double *params_remove_all,
     int *data_index_all, int *noise_index_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int rows_per_pass, int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     const bool half_rows = gb_dffr_half_rows(rows_per_pass);
     if (num_bin < 1)
         return;
@@ -131,13 +130,13 @@ void gb_dffr_get_fstat_ll_wrap(
     KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
     double *params_all, int *data_index_all, int *noise_index_all,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int rows_per_pass, int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     const bool half_rows = gb_dffr_half_rows(rows_per_pass);
     if (num_bin < 1)
         return;
@@ -157,13 +156,13 @@ void gb_dffr_get_ll_grad_wrap(
     double *params_all, int *data_index_all, int *noise_index_all,
     double *param_eps,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     if (num_bin < 1)
         return;
     stft_get_ll_grad_launch<GBDFFRTile<DFFR_ROWS_PER_PASS>>(
@@ -178,13 +177,13 @@ void gb_dffr_swap_ll_grad_wrap(
     int *data_index_all, int *noise_index_all,
     double *param_eps_add, double *param_eps_remove,
     int num_bin, int nparams, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     int rows_per_pass, int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     const bool half_rows = gb_dffr_half_rows(rows_per_pass);
     if (num_bin < 1)
         return;
@@ -205,13 +204,13 @@ void gb_dffr_information_matrix_wrap(
     KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
     double *params_all, int *noise_index_all, int *inds, double *param_eps,
     int num_bin, int nparams, int num_derivs, double t_ref, int n_side_bins, int tdi_generation,
-    bool linear_envelope, bool first_order_delays, double chirp_rate_floor,
+    bool linear_envelope, bool first_order_delays,
     bool easy_central_difference, int rows_per_pass, int *start_freq_inds)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     const bool double_rows = gb_dffr_fisher_double_rows(rows_per_pass);
     // ? The launcher checks inds and the counts before it returns on an empty batch.
     if (double_rows)
@@ -228,13 +227,12 @@ void gb_dffr_fill_template_wrap(
     cmplx *template_out, int *start_out,
     KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
     double *params_all, int num_bin, int nparams, double t_ref, int n_side_bins,
-    int tdi_generation, bool linear_envelope, bool first_order_delays,
-    double chirp_rate_floor)
+    int tdi_generation, bool linear_envelope, bool first_order_delays)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     dffr_fill_template<GBDFFRSource, DFFR_ROWS_PER_PASS>(template_out, start_out, inputs,
                                                          params_all, num_bin, nparams);
 }
@@ -245,13 +243,12 @@ void gb_dffr_segment_table_wrap(
     double *emission_frequency, cmplx *tdi_weights, int *start_freq_ind,
     KinematicsTable *kinematics, STFTFresnel *fresnel, STFTDomain *stft,
     double *params_all, int num_bin, int nparams, double t_ref, int n_side_bins,
-    int tdi_generation, bool linear_envelope, bool first_order_delays,
-    double chirp_rate_floor)
+    int tdi_generation, bool linear_envelope, bool first_order_delays)
 {
     STFTDomain *stft_launch = nullptr;
     const auto inputs = gb_dffr_inputs(kinematics, fresnel, stft, nparams, t_ref, n_side_bins,
                                        tdi_generation, linear_envelope, first_order_delays,
-                                       chirp_rate_floor, &stft_launch);
+                                       &stft_launch);
     DFFRSegmentTableOutput output;
     output.effective_frequency = effective_frequency;
     output.chirp_rate = chirp_rate;
